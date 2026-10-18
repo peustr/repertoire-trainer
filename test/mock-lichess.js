@@ -1,4 +1,3 @@
-// @ts-check
 // A stand-in for lichess.org and explorer.lichess.org, for offline testing.
 //
 //   node test/mock-lichess.js            (listens on :9099)

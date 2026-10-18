@@ -1,0 +1,12 @@
+{
+  "all": true,
+  "include": ["*.js", "*.cjs", "public/js/*.js"],
+  "exclude": ["public/js/{api,app,board,engine-client,nav,store,ui}.js"],
+  "reporter": ["text"],
+  "reports-dir": "coverage",
+  "check-coverage": true,
+  "lines": 85,
+  "statements": 85,
+  "branches": 72,
+  "functions": 84
+}

@@ -3,7 +3,7 @@
   // public/ is still exactly what the browser loads.
   "compilerOptions": {
     "allowJs": true,
-    "checkJs": false, // files opt in with // @ts-check at the top
+    "checkJs": true, // every file; a few older ones still opt out with // @ts-nocheck
     "noEmit": true,
     "target": "ES2023",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],

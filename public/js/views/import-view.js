@@ -5,6 +5,11 @@ import { getRep, putRep } from '../store.js';
 import { buildRepertoire } from '../repertoire.js';
 import { api } from '../api.js';
 
+/**
+ * New repertoire, or edit one when given its id.
+ * @param {HTMLElement} root
+ * @param {{ id?: string }} params
+ */
 export async function renderImport(root, { id }) {
   const editing = !!id;
   const rep = editing ? await getRep(id, { fresh: true }) : null;

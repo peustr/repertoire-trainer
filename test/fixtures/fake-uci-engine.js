@@ -1,4 +1,3 @@
-// @ts-check
 // A stand-in for Stockfish in tests:
 //
 //   node fake-uci-engine.js [mode] [--move=e2e4] [--delay=ms] [--start-delay=ms]

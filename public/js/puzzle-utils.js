@@ -1,4 +1,3 @@
-// @ts-check
 // Helpers for opponent-mistake puzzles and Lichess explorer data.
 
 import { Chess } from 'chess.js';

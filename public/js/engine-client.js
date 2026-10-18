@@ -1,4 +1,3 @@
-// @ts-check
 // Browser side of the Stockfish bridge (see server.js for the protocol).
 
 let ws = null;

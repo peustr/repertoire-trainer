@@ -1,4 +1,3 @@
-// @ts-check
 // The UCI engine wrapper, driven by a fake engine (test/fixtures/fake-uci-engine.js)
 // so failures can be staged in milliseconds.
 

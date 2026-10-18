@@ -1,4 +1,3 @@
-// @ts-check
 // Turns a stored repertoire (PGN text + colour) into trainable lines and cards.
 //
 // A *line* is one path from the start to a leaf of a chapter's move tree.

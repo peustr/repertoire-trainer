@@ -18,6 +18,7 @@ const main = document.getElementById('main');
 let cleanup = null;
 let navigation = 0;
 
+/** @type {Array<[RegExp, (m: RegExpMatchArray, q: URLSearchParams, root: HTMLElement) => any]>} */
 const routes = [
   [/^#?\/?$/, (m, q, root) => renderLibrary(root)],
   [/^#\/import$/, (m, q, root) => renderImport(root, {})],

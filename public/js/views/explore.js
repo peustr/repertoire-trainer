@@ -1,4 +1,3 @@
-// @ts-check
 // Explore: walk the repertoire tree with Stockfish alongside, and wander off-book.
 
 import { h, clear, fig, uciLineToSan, formatSanLine, plural, action } from '../ui.js';

@@ -1,4 +1,3 @@
-// @ts-check
 // Library: a one-move warm-up card, then every repertoire with its memory state.
 
 import { h, clear, levelBar, plural, toast, sound, fig, sanLabel, action } from '../ui.js';

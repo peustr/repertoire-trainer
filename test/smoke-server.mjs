@@ -1,4 +1,3 @@
-// @ts-check
 // End-to-end smoke test: boots the real server against a throwaway data
 // folder, checks the static files, the REST API and the Stockfish bridge.
 // Run with:  npm run test:smoke
@@ -148,7 +147,7 @@ try {
   console.error(`  FAIL ${err.message}`);
   process.exitCode = 1;
 } finally {
-  if (server) server.stop();
+  if (server) await server.stop();
 }
 
 if (process.exitCode && server) console.error(`\nServer output:\n${server.output()}`);

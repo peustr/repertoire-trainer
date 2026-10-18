@@ -1,4 +1,3 @@
-// @ts-check
 // Shared fixtures for the browser tests.
 //
 // `app` starts the real server for one test, on a free port with a throwaway data
@@ -60,7 +59,7 @@ export const test = base.extend({
     try {
       await use(app);
     } finally {
-      server.stop();
+      await server.stop();
     }
   },
 });

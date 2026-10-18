@@ -1,4 +1,3 @@
-// @ts-check
 // The training rules, without the board or the page: which of your moves a pass
 // over a line quizzes, how each answer is graded, and what the results do to the
 // memory schedule. The trainer, the puzzle page and the library's warm-up card use

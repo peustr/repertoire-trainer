@@ -1,4 +1,3 @@
-// @ts-check
 // Lint (npm run check). Catches what tests only find late, or never: names that
 // do not exist, unused code, redeclarations, and promises nobody awaits or catches.
 
@@ -7,7 +6,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default [
-  { ignores: ['node_modules/', 'data/', 'test-results/', 'playwright-report/', 'blob-report/'] },
+  { ignores: ['node_modules/', 'data/', 'coverage/', 'test-results/', 'playwright-report/', 'blob-report/'] },
   js.configs.recommended,
   {
     // Server, tests, config and the scripts around them: Node, ES modules.
@@ -54,6 +53,9 @@ export default [
         allowForKnownSafeCalls: [{ from: 'package', name: ['test', 'it', 'describe', 'suite'], package: 'node:test' }],
       }],
       '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
+      // TypeScript checks every file (checkJs). Keep it that way: no file or line may opt
+      // out, and a // @ts-check line would only suggest that checking is optional.
+      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-check': true, 'ts-nocheck': true, 'ts-ignore': true, 'ts-expect-error': true }],
     },
   },
 ];

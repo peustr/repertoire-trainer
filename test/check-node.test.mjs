@@ -1,4 +1,3 @@
-// @ts-check
 // The startup check that turns a too-old Node.js into a plain message.
 
 import { test } from 'node:test';

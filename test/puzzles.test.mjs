@@ -1,4 +1,3 @@
-// @ts-check
 // The opponent-mistake search (puzzles.js) end to end: real explorer client against
 // the mock Lichess, and a scripted engine that calls one reply a blunder.
 

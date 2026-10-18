@@ -1,4 +1,3 @@
-// @ts-check
 // The training rules (public/js/session.js), case by case.
 
 import { test } from 'node:test';

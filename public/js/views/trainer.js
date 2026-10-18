@@ -1,4 +1,3 @@
-// @ts-check
 // The move trainer: Learn, Review and Practise.
 //
 // Learn:    the line plays out with arrows and the author's notes for each new

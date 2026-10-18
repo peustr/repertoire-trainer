@@ -1,4 +1,3 @@
-// @ts-check
 // Repertoire Trainer — local server.
 // Serves the web app, stores repertoires as JSON files, and bridges the
 // browser to Stockfish over a WebSocket.
@@ -325,3 +324,6 @@ function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+// Started by another Node.js program with an IPC channel (the tests): stop when it lets
+// go. Unlike a signal, this works on Windows too.
+if (process.send) process.on('disconnect', shutdown);
