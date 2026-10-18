@@ -7,7 +7,7 @@
 // With goal=hold ("Play it out" after a line) you play a set number of moves, and you
 // pass if Stockfish's evaluation holds up (gradePlayout in session.js).
 
-import { h, clear, fig, toast, sound, sanLabel, uciLineToSan, formatSanLine } from '../ui.js';
+import { h, clear, fig, toast, sound, sanLabel, uciLineToSan, formatSanLine, panelSection } from '../ui.js';
 import { state, getRep, modelFor } from '../store.js';
 import { api } from '../api.js';
 import { START_FEN, positionKey, scoreToCp } from '../constants.js';
@@ -71,10 +71,12 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
   const eloInput = h('input', { type: 'range', min: 1320, max: 3190, step: 10, value: String(elo), 'aria-label': 'Stockfish strength' });
   const oppSelect = h('select', { 'aria-label': 'Opponent' },
     OPPONENTS.map(([k, label]) => h('option', { value: k, disabled: k === 'book' && !model, selected: k === opponent }, label)));
-  const evalToggle = h('input', { type: 'checkbox', checked: showEval });
-  const evalRow = h('label.check', evalToggle, h('span', 'Show evaluation'));
+  const evalToggle = h('input', { type: 'checkbox', role: 'switch', checked: showEval });
+  const evalRow = h('label.opt-row',
+    h('span.opt-label', 'Show evaluation', h('span.opt-help', 'Stockfish’s bar and best line while you play.')),
+    h('span.switch', evalToggle, h('span.switch-track', { 'aria-hidden': 'true' })));
   const takebackBtn = h('button.btn', { type: 'button', on: { click: takeback } }, 'Take back');
-  const restartBtn = h('button.btn.ghost', { type: 'button', on: { click: restart } }, 'Restart');
+  const restartBtn = h('button.btn', { type: 'button', on: { click: restart } }, 'Restart');
   const goalControls = h('div.controls');
 
   page.append(
@@ -82,17 +84,18 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     h('aside.panel',
       h('div.trainer-crumbs', h('a.backlink', { href: backHref }, 'Back'), modeTag),
       title,
-      status,
-      goalBox,
-      goalControls,
-      sourceNote,
-      bookNote,
-      h('label.field', h('span.field-label', 'Opponent'), oppSelect),
-      h('label.field', h('span.field-label', 'Stockfish’s strength'), h('div.elo-row', eloInput, eloLabel)),
-      evalRow,
-      evalText,
-      h('div.controls', takebackBtn, restartBtn, h('button.btn.ghost', { type: 'button', on: { click: () => board.flip() } }, 'Flip')),
-      h('div.sheet-wrap', moves)));
+      h('div.task', status, evalText, goalBox, goalControls),
+      h('div.game-notes', sourceNote, bookNote),
+      panelSection('Moves', null,
+        h('div.sheet-wrap', moves),
+        h('div.controls', takebackBtn, restartBtn, h('button.btn', { type: 'button', on: { click: () => board.flip() } }, 'Flip board'))),
+      panelSection('Opponent', null,
+        h('div.opt-card',
+          h('label.opt-row.stack', h('span.opt-label', 'Moves chosen by'), oppSelect),
+          h('div.opt-row.stack',
+            h('span.opt-label', 'Stockfish’s strength', h('span.opt-help', 'Whenever Stockfish plays: once Lichess players have no games, after your prepared lines, or throughout.')),
+            h('div.elo-row', eloInput, eloLabel)),
+          evalRow))));
   root.append(page);
 
   const board = createBoard(boardHost, { orientation: me, onMove });
@@ -130,7 +133,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     renderBook();
     renderSource();
     if (finished) { /* the goal box says how it went */ } else if (st.over) setStatus(st.text, '');
-    else if (thinking) setStatus(opponent === 'lichess' && !databaseEnded() ? 'Asking Lichess players…' : 'Stockfish is thinking…', '');
+    else if (thinking) setStatus(opponent === 'lichess' && !databaseEnded() ? 'Looking up Lichess games…' : 'Stockfish is thinking…', '');
     else if (myTurn()) setStatus('Your move', goal ? `Keep the position for ${goal.moves - myMoves().length} more of your moves.` : '');
     else setStatus('Waiting for your opponent', '');
     refreshEval();
@@ -362,7 +365,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     switch (verdict) {
       case 'won': return 'Checkmate: you won the game.';
       case 'lost': return 'Checkmate: you lost the game.';
-      case 'drawn': return startCp <= settings.playOutTolerance ? 'The game was drawn, from a position that was about level: fair enough.' : `The game was drawn, but you started at ${formatCp(startCp)}.`;
+      case 'drawn': return startCp <= settings.playOutTolerance ? 'The game was drawn from a roughly level position.' : `The game was drawn, but you started at ${formatCp(startCp)}.`;
       case 'improved': return `You improved the position: ${span}.`;
       case 'held': return `You kept the position: ${span}.`;
       default: return `You gave away ${pawns(drop)}: ${span}.`;

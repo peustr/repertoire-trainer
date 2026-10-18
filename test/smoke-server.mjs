@@ -55,10 +55,15 @@ try {
     const page = await api('GET', '/');
     assert.equal(page.status, 200);
     assert.match(page.text, /importmap/);
-    for (const url of ['/js/app.js', '/vendor/chess.js/dist/esm/chess.js', '/vendor/chessground/dist/chessground.js',
-      '/vendor/chessground/assets/chessground.cburnett.css']) {
+    // Everything the page links to (stylesheets, fonts, scripts, the import map's modules) is served.
+    const linked = [...page.text.matchAll(/(?:href|src)="(\/[^"]+)"|"(\/vendor\/[^"]+)"/g)].map((m) => m[1] || m[2]);
+    assert.ok(linked.includes('/vendor/fonts/inter/index.css'), 'the page loads its font');
+    for (const url of new Set(linked)) {
       assert.equal((await api('GET', url)).status, 200, url);
     }
+    const fontCss = (await api('GET', '/vendor/fonts/inter/index.css')).text;
+    const fontFile = fontCss.match(/url\(\.\/([^)]+\.woff2)\)/)[1];
+    assert.equal((await api('GET', `/vendor/fonts/inter/${fontFile}`)).status, 200, fontFile);
   });
 
   await test('settings: defaults, save and validation', async () => {

@@ -7,13 +7,14 @@
 // at your level reply in your lines, or, without a Lichess account, from sound
 // sidelines Stockfish finds.
 
-import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, action } from '../ui.js';
+import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, action, keyed, panelSection, toolList } from '../ui.js';
 import { state, getRep, putRep, modelFor, loadLichess } from '../store.js';
 import { api } from '../api.js';
 import { createBoard, isPromotion, choosePromotion, applyUci } from '../board.js';
 import { evaluate, analyseOnce, formatScore } from '../engine-client.js';
 import { surpriseQueue, surpriseFromGap, surpriseReplies, engineSurprises, surpriseToPgn } from '../opponent.js';
 import { gradeSurprise, surprisePassed } from '../session.js';
+import { exploreTool } from './tools.js';
 import { formatShare, formatGames, describeRatings, describeSpeeds, cpFor } from '../puzzle-utils.js';
 
 const LOOKUPS_PER_SURPRISE = 8; // positions tried before giving up on finding another surprise
@@ -39,9 +40,15 @@ export async function renderSurprise(root, { id }) {
   const feedback = h('div.feedback', { 'aria-live': 'polite' });
   const context = h('div.puzzle-context');
   const controls = h('div.controls');
+  const toolsSection = panelSection('From this position', null, toolList([]));
   page.append(
     h('div.board-col', h('div.board-row', boardHost)),
-    h('aside.panel', crumbs, head, prompt, feedback, controls, context));
+    h('aside.panel',
+      crumbs,
+      head,
+      h('div.task', prompt, feedback, controls),
+      panelSection('About this reply', null, context),
+      toolsSection));
   root.append(page);
 
   const board = createBoard(boardHost, { orientation: rep.color, onMove });
@@ -54,10 +61,11 @@ export async function renderSurprise(root, { id }) {
   function setCrumbs() {
     clear(crumbs,
       h('a.backlink', { href: `#/rep/${rep.id}` }, rep.name),
-      h('span.mode-tag', `Surprise · ${Math.min(tally.done + 1, batch)} of ${batch}`));
+      h('span.mode-tag', `Surprise drill · ${Math.min(tally.done + 1, batch)} of ${batch}`));
   }
   function setPrompt(text, sub) { clear(prompt, h('div.prompt-title', text), sub ? h('div.prompt-sub', sub) : null); }
   function setFeedback(kind, text, ...extra) { clear(feedback, h(`p.fb.fb-${kind}`, text), ...extra); }
+  function setTools(items) { toolsSection.lastChild.replaceWith(toolList(items)); }
 
   // ---- finding the next surprise ---------------------------------------------------------
   /** The next surprise in the queue, looking positions up as needed; null when none is left. */
@@ -75,7 +83,7 @@ export async function renderSurprise(root, { id }) {
       if (lookups >= LOOKUPS_PER_SURPRISE) { queue.unshift(item); return null; }
       lookups++;
       const turn = item.turn;
-      setPrompt('Looking for a surprise…', useLichess ? 'Asking what Lichess players at your level reply here.' : 'Asking Stockfish for sidelines your repertoire skips.');
+      setPrompt('Finding an unprepared reply…', useLichess ? 'Looking up what Lichess players at your level reply here.' : 'Asking Stockfish for sidelines your repertoire skips.');
       let candidates = [];
       if (useLichess) {
         try {
@@ -114,16 +122,17 @@ export async function renderSurprise(root, { id }) {
     clear(feedback);
     clear(controls);
     clear(context);
+    setTools([]);
     if (tally.done >= batch) { showDone(); return; }
     setCrumbs();
-    clear(head, h('h1.line-title', 'Surprise!'));
+    clear(head, h('h1.line-title', 'Unprepared reply'));
     board.setShapes([]);
     let s;
     try {
       s = await findSurprise(t);
     } catch (err) {
       if (!alive(t)) return;
-      setPrompt('No surprise this time', 'Stockfish is not available right now.');
+      setPrompt('No reply found', 'Stockfish is not available right now.');
       clear(controls, h('button.btn.primary', { type: 'button', on: { click: () => void next() } }, 'Try again'), backLink());
       return;
     }
@@ -136,7 +145,7 @@ export async function renderSurprise(root, { id }) {
   function present(s, t) {
     const res = applyUci(s.fen, s.uci);
     cur = { s, after: res.fen, waiting: false, tries: 0, answer: null, best: null, added: false };
-    clear(head, h('h1.line-title', 'Surprise!'), h('p.line-sub', sourceText(s)));
+    clear(head, h('h1.line-title', 'Unprepared reply'), h('p.line-sub', sourceText(s)));
     renderContext(s);
     const prev = s.moves[s.moves.length - 1];
     board.setPosition(s.fen, { lastMove: prev });
@@ -204,7 +213,7 @@ export async function renderSurprise(root, { id }) {
     cur.best = res.best;
     const label = sanLabel(fen, uci);
     const bestLabel = sanLabel(fen, res.best.move);
-    setPrompt(pass ? 'Well answered' : 'Not the answer you want', pass ? 'Keep it: add it to your repertoire.' : 'Try again, or see what Stockfish plays.');
+    setPrompt(pass ? 'Good answer' : 'Not good enough', pass ? 'Add it to your repertoire to learn it like any other line.' : 'Try again, or see what Stockfish plays.');
     if (pass) {
       sound.right();
       setFeedback('good', grade === 'best'
@@ -213,8 +222,8 @@ export async function renderSurprise(root, { id }) {
       clear(controls,
         nextButton(),
         addButton(uci, 'Add my answer to the repertoire'),
-        grade === 'best' ? null : addButton(res.best.move, 'Add Stockfish’s answer'),
-        exploreLink());
+        grade === 'best' ? null : addButton(res.best.move, 'Add Stockfish’s answer'));
+      setTools([exploreTool(exploreHref(), 'Explore the position')]);
     } else {
       sound.wrong();
       setFeedback('bad', grade === 'inaccuracy'
@@ -227,7 +236,7 @@ export async function renderSurprise(root, { id }) {
 
   // ---- buttons ---------------------------------------------------------------------------
   function nextButton() {
-    return h('button.btn.primary', { type: 'button', 'data-key': 'Enter', on: { click: () => void next() } }, tally.done >= batch ? 'Finish' : 'Next surprise');
+    return h('button.btn.primary', { type: 'button', 'data-key': 'Enter', 'aria-keyshortcuts': 'Enter', on: { click: () => void next() } }, keyed(tally.done >= batch ? 'Finish' : 'Next reply', '↵'));
   }
 
   function tryAgainButton() {
@@ -262,7 +271,8 @@ export async function renderSurprise(root, { id }) {
           board.setPosition(cur.after, { lastMove: cur.s.uci });
           board.setShapes([{ orig: best.move.slice(0, 2), dest: best.move.slice(2, 4), brush: 'flame' }]);
           setFeedback('neutral', `Stockfish answers ${sanLabel(cur.after, best.move)}${best.score ? ` (${formatScore(best.score)})` : ''}.`);
-          clear(controls, nextButton(), addButton(best.move, 'Add Stockfish’s answer'), exploreLink());
+          clear(controls, nextButton(), addButton(best.move, 'Add Stockfish’s answer'));
+          setTools([exploreTool(exploreHref(), 'Explore the position')]);
         }),
       },
     }, 'Show the answer');
@@ -294,10 +304,9 @@ export async function renderSurprise(root, { id }) {
     }, text);
   }
 
-  function exploreLink() {
-    if (!cur) return null;
+  function exploreHref() {
     const moves = [...cur.s.moves, cur.s.uci];
-    return h('a.btn.ghost', { href: `#/explore/${rep.id}?moves=${encodeURIComponent(moves.join(','))}` }, 'Explore');
+    return `#/explore/${rep.id}?moves=${encodeURIComponent(moves.join(','))}`;
   }
 
   function backLink() {
@@ -307,16 +316,17 @@ export async function renderSurprise(root, { id }) {
   function showDone() {
     cur = null;
     board.setShapes([]);
-    clear(head, h('h1.line-title', 'Surprises done'));
-    clear(crumbs, h('a.backlink', { href: `#/rep/${rep.id}` }, rep.name), h('span.mode-tag', 'Surprise'));
+    clear(head, h('h1.line-title', 'Session complete'));
+    clear(crumbs, h('a.backlink', { href: `#/rep/${rep.id}` }, rep.name), h('span.mode-tag', 'Surprise drill'));
     clear(feedback);
     clear(context);
+    setTools([]);
     if (!tally.done) {
-      setPrompt('No surprises found', model.lines.length
+      setPrompt('No unprepared replies found', model.lines.length
         ? 'Your repertoire already answers the replies we looked up. Search for opponent mistakes to find more gaps.'
         : 'Add some lines to your repertoire first.');
     } else {
-      setPrompt(`${tally.good} of ${plural(tally.done, 'surprise')} answered well`, tally.good === tally.done ? 'Nothing caught you out.' : 'Add the answers you want to keep, then learn them like any other line.');
+      setPrompt(`${tally.good} of ${plural(tally.done, 'surprise')} answered well`, tally.good === tally.done ? 'Every reply answered well.' : 'Add the answers you want to keep, then learn them like any other line.');
     }
     clear(controls,
       tally.done ? h('button.btn.primary', { type: 'button', 'data-key': 'Enter', on: { click: () => { tally.done = 0; tally.good = 0; if (!queue.length) queue.push(...surpriseQueue(rep, model)); void next(); } } }, 'Another round') : null,

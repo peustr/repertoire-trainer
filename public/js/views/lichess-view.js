@@ -37,7 +37,7 @@ export async function renderLichess(root, { connected, error }) {
     const tokenInput = h('input', { type: 'password', placeholder: 'lip_…', autocomplete: 'off', 'aria-label': 'Personal access token' });
     add(connection,
       h('h2.section-title', 'Connect your account'),
-      h('p.muted', 'Lichess now only lets signed-in apps read its opening explorer. The trainer needs no special permissions: it reads public game statistics and, if you allow it, your private studies. The token stays in this computer’s data folder.'),
+      h('p.muted', 'Lichess only lets signed-in apps read its opening explorer. The trainer asks for no special permissions: it reads public game statistics and, if you allow it, your private studies. The token stays in this computer’s data folder.'),
       h('div.tools-row', h('a.btn.primary', { href: '/auth/lichess/start' }, 'Sign in with Lichess')),
       h('details.lc-token',
         h('summary', 'Or paste a personal access token'),
@@ -92,7 +92,7 @@ export async function renderLichess(root, { connected, error }) {
   add(page,
     h('h1.page-title', 'Lichess'),
     error ? h('div.notice.warn', h('p', error)) : null,
-    h('div.lc-layout', h('div', connection, filters), studySection));
+    h('div.lc-layout', h('div.lc-col', connection, filters), h('div.lc-col', studySection)));
 
   if (lc.connected) {
     clear(studies, h('p.muted', 'Loading your studies…'));

@@ -18,8 +18,8 @@ export async function runAudit(box, rep, model, onDone) {
   const found = h('ul.audit-list');
   clear(box,
     h('div.audit-head',
-      h('div', h('h2.section-title', 'Stockfish is checking your moves'), h('div.audit-progress', progress, label)),
-      h('button.btn.ghost', { type: 'button', on: { click: () => { stopped = true; } } }, 'Stop')),
+      h('div', h('h3.section-title', 'Stockfish is checking your moves'), h('div.audit-progress', progress, label)),
+      h('button.btn', { type: 'button', on: { click: () => { stopped = true; } } }, 'Stop')),
     found);
 
   let checked = 0;

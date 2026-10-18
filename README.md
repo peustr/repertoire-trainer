@@ -28,6 +28,11 @@ the defaults are sized for your computer.
 
 ## Using it
 
+Each repertoire's page lists every way to train it as a card that says what the
+mode does and what is waiting (lines due, new lines, puzzles ready). Next to the
+board, **From this position** lists the tools you can use there (Play it out,
+Spar, Find opponent mistakes, Explore), each with a sentence about what it does.
+
 | Where | What it does |
 | --- | --- |
 | **Library** | Every repertoire with its memory bar, plus a one-move warm-up card from whatever is due. |
@@ -35,10 +40,10 @@ the defaults are sized for your computer.
 | **Learn** | New lines play out with arrows and the PGN's comments; you repeat each new move, then play the whole line again from memory. |
 | **Review** | Lines with due moves. Moves that are not due play themselves, so you only spend time on what you are about to forget. |
 | **Practise** | Any line or chapter, every move quizzed, schedule untouched. |
-| **Explore** | Browse the tree with Stockfish (3 lines, eval bar). Play off-book moves to analyse your own ideas. |
-| **Spar** | Play on from any position. The opponent plays like **Lichess players at your rating** (each move as often as they play it) until a position has no games, then Stockfish takes over at 1320–3190 Elo. It can also follow your prepared lines, or be Stockfish from the first move. |
+| **Explore** | Browse the tree with Stockfish (3 lines, eval bar), and switch to the Lichess opening explorer in the tab next to the moves. Play off-book moves to analyse your own ideas. |
+| **Spar** | Play from the first move, or on from any position. The opponent plays like **Lichess players at your rating** (each move as often as they play it) until a position has no games, then Stockfish takes over at 1320–3190 Elo. It can also follow your prepared lines, or be Stockfish from the first move. |
 | **Play it out** | At the end of a line: play 8 more moves against that opponent and keep the position. Stockfish judges where you started and where you finished, then points out your biggest slip. |
-| **Surprise me** | The opponent leaves your book with a reply you have not prepared: the gaps the mistake finder saved, popular Lichess replies in your lines, or Stockfish's sound sidelines when Lichess is not connected. Stockfish grades your answer, and a good one can be added to the repertoire as a new chapter. |
+| **Surprise drills** | The opponent leaves your book with a reply you have not prepared: the gaps the mistake finder saved, popular Lichess replies in your lines, or Stockfish's sound sidelines when Lichess is not connected. Stockfish grades your answer, and a good one can be added to the repertoire as a new chapter. |
 | **Audit** | Stockfish checks every move you play and flags ones that lose more than a threshold (default 0.70 pawns). |
 
 Keyboard: `H` hint, `Enter` next line, `Esc` back. In Explore: arrows to move
@@ -54,11 +59,11 @@ paste a personal access token instead. The token is stored in
 
 | Feature | Where |
 | --- | --- |
-| **Opening explorer** | Explore → "Opening explorer": what Lichess players at your chosen ratings and time controls play in the current position (or master games). Your repertoire moves are highlighted; click a row to play it. |
+| **Opening explorer** | The "Opening explorer" tab in Explore: what Lichess players at your chosen ratings and time controls play in the current position (or master games). Your repertoire moves are highlighted; click a row to play it. It asks Lichess only while the tab is open. |
 | **Find opponent mistakes** | Explore, the trainer, or "Find mistakes" on any chapter. See below. |
 | **Puzzles** | Every mistake found becomes a puzzle with its own review schedule. "Add line to repertoire" turns the punishment into a new chapter you can learn. |
 | **Gaps** | Popular replies your repertoire has no answer for, with Stockfish's suggestion. |
-| **Lichess players** | Spar and Surprise me ask the explorer what your opponents play: one queued, cached request per position. |
+| **Lichess players** | Spar and Surprise drills ask the explorer what your opponents play: one queued, cached request per position. |
 | **Study import** | Paste a study link on the Lichess page or the Add repertoire page, or pick from your own studies. |
 
 Set **who your opponents are** (rating bands, time controls, how recent) in
@@ -98,9 +103,11 @@ numbers. Point the trainer at it with the `LICHESS_URL` and
 ## Settings
 
 Open **Settings** in the top bar. It is a separate control panel, so nothing
-clutters the board while you train. Every option has a short explanation and its
-default, changes save as you go, and each section has **Restore defaults**. Use
-**Find a setting** to search across all of them.
+clutters the board while you train. Options are grouped in cards, every option
+has a short explanation and its default, and changes save as you go. A dot marks
+an option you have changed (with **Use default** next to it), the section list
+counts them, and each section has **Restore defaults**. Use **Find a setting** to
+search across all of them.
 
 | Section | What you can change |
 | --- | --- |
@@ -153,7 +160,7 @@ settings-schema.js   Every setting: default, range, help text (drives the Settin
 check-node.cjs       Stops with a plain message on a too-old Node.js
 public/
   index.html         App shell, import map
-  css/app.css        All styles
+  css/app.css        All styles (Inter, the palette, light and dark)
   js/constants.js    Start position, position keys, scores, Lichess speeds and ratings
   js/pgn.js          PGN tokenizer and move-tree builder
   js/repertoire.js   Lines and cards from a move tree
@@ -165,7 +172,8 @@ public/
   js/opponent.js     How opponents choose moves: Lichess players by popularity, surprises off your book
   js/session.js      The training rules: what a pass quizzes, how answers, surprises and play-outs are graded
   js/views/          Library, repertoire, import, trainer, explore, spar, surprise,
-                     audit, lichess, finder (search dialog), puzzles, settings
+                     audit, lichess, finder (search dialog), puzzles, settings,
+                     tools (the "From this position" list beside the board)
 samples/             Two sample repertoires
 test/*.test.mjs      Unit and integration tests: parser, scheduler, storage, engine,
                      server security, Lichess client, mistake search (npm test)
@@ -189,6 +197,6 @@ the previous version, and says so in its console window.
   [stockfish.js](https://github.com/nmrugg/stockfish.js) for the WebAssembly build.
 - [chessground](https://github.com/lichess-org/chessground) (GPLv3), lichess's board.
 - [chess.js](https://github.com/jhlywa/chess.js) for move legality.
-- Shantell Sans and Nunito via Fontsource.
+- [Inter](https://rsms.me/inter/) (SIL Open Font License) via Fontsource.
 
 Because Stockfish and chessground are GPLv3, this project is GPLv3 too.

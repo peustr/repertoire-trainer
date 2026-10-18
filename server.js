@@ -82,8 +82,7 @@ function packageDir(name) {
 app.use(express.static(path.join(import.meta.dirname, 'public'), { extensions: ['html'] }));
 app.use('/vendor/chessground', express.static(packageDir('@lichess-org/chessground')));
 app.use('/vendor/chess.js', express.static(packageDir('chess.js')));
-app.use('/vendor/fonts/shantell-sans', express.static(packageDir('@fontsource/shantell-sans')));
-app.use('/vendor/fonts/nunito', express.static(packageDir('@fontsource/nunito')));
+app.use('/vendor/fonts/inter', express.static(packageDir('@fontsource-variable/inter')));
 
 // --- REST API ----------------------------------------------------------------
 

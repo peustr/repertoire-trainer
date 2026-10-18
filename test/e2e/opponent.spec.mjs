@@ -196,7 +196,7 @@ test('Surprise without Lichess: Stockfish finds a sound sideline your repertoire
     ],
   });
   await app.open(`#/rep/${rep.id}`);
-  await page.getByRole('link', { name: 'Surprise me' }).click();
+  await page.getByRole('link', { name: /^Surprise drills/ }).click();
   await expect(page.locator('.prompt')).toHaveText(/1\.\.\.c5 is not in your repertoire/);
   await expect(page.locator('.surprise-facts')).toHaveText('Stockfish rates this move as sound, and your repertoire has no answer to it.');
 });

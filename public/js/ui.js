@@ -53,6 +53,63 @@ export function clear(el, ...children) {
   return el;
 }
 
+// --- page building blocks -----------------------------------------------------------
+
+// Line icons on a 24-unit grid, drawn in the current text colour.
+const ICONS = {
+  review: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  learn: '<path d="M3.5 5.5c2.8-1 5.6-1 8.5.8 2.9-1.8 5.7-1.8 8.5-.8v13c-2.8-1-5.6-1-8.5.8-2.9-1.8-5.7-1.8-8.5-.8z"/><path d="M12 6.3v13"/>',
+  practise: '<path d="M4.5 12a7.5 7.5 0 0 1 13-5.1L19.5 9"/><path d="M19.5 4.5V9H15"/><path d="M19.5 12a7.5 7.5 0 0 1-13 5.1L4.5 15"/><path d="M4.5 19.5V15H9"/>',
+  puzzle: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.8"/>',
+  surprise: '<path d="M13 3 5.5 13.5H11L10 21l7.5-10.5H12z"/>',
+  spar: '<path d="M4 4l10.5 10.5M12 17l5-5M15.5 15.5 19.5 19.5"/><path d="M20 4 9.5 14.5M7 12l5 5M8.5 15.5 4.5 19.5"/>',
+  playout: '<path d="M5.5 21V4"/><path d="M5.5 4.5h12l-2.5 4 2.5 4h-12"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>',
+  explore: '<circle cx="12" cy="12" r="8.5"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
+  add: '<path d="M12 5v14M5 12h14"/>',
+};
+
+/** A small line icon from the set above; decorative, so hidden from screen readers. */
+export function icon(name) {
+  return h('span.ico', {
+    'aria-hidden': 'true',
+    html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`,
+  });
+}
+
+/** A keyboard shortcut shown on a button. Give the button aria-keyshortcuts for screen readers. */
+export function kbd(key) {
+  return h('kbd', { 'aria-hidden': 'true' }, key);
+}
+
+/** Button content with its shortcut: the label sits in its own span so it can be relabelled. */
+export function keyed(label, key) {
+  return [h('span.btn-label', label), kbd(key)];
+}
+
+/** A titled block in a side panel: a small caption, an optional control on its right, then the content. */
+export function panelSection(title, aside, ...children) {
+  return h('section.psec', h('div.psec-head', h('h2.psec-title', title), aside || null), ...children);
+}
+
+/**
+ * Actions that each say what they do: a title and one sentence, as a link (href) or a
+ * button (onClick). Next to the board they list what you can do from the position, so
+ * no tool hides behind a bare label.
+ * @param {Array<{ title: string, desc: string, icon: string, href?: string, onClick?: (e: MouseEvent) => any } | null | false>} tools
+ */
+export function toolList(tools) {
+  const items = [];
+  for (const t of tools) {
+    if (!t) continue;
+    items.push(h('li', h(t.href ? 'a.tool' : 'button.tool', { href: t.href || null, type: t.href ? null : 'button', on: t.onClick ? { click: t.onClick } : null },
+      icon(t.icon),
+      h('span.tool-text', h('span.tool-title', t.title), h('span.tool-desc', t.desc)),
+      h('span.tool-go', { 'aria-hidden': 'true' }, '›'))));
+  }
+  return h('ul.tool-list', items);
+}
+
 // --- notation ------------------------------------------------------------------
 
 let figurines = true;
