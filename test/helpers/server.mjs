@@ -22,10 +22,15 @@ export function freePort() {
   });
 }
 
-/** Resolves to { port, base, dataDir, output(), stop() } once the server is listening. */
-export async function startServer({ env = {}, timeout = 30000 } = {}) {
+/**
+ * Resolves to { port, base, dataDir, output(), stop() } once the server is listening.
+ * @param {{ env?: Record<string, string>, settings?: Record<string, unknown>, timeout?: number }} [options]
+ *   settings: saved in the data folder before the server starts
+ */
+export async function startServer({ env = {}, settings = null, timeout = 30000 } = {}) {
   const port = await freePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-test-'));
+  if (settings) fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify(settings));
   const proc = spawn(process.execPath, ['server.js'], {
     cwd: root,
     env: {

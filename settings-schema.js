@@ -10,7 +10,7 @@ import { DEFAULT_SCHEDULE } from './public/js/srs.js';
 const WASM_HASH_MAX = 512; // the built-in WebAssembly engine fails to start above this
 
 function machine() {
-  const cores = Math.max(1, (os.cpus() || []).length);
+  const cores = Math.max(1, os.cpus().length);
   const memGB = Math.round(os.totalmem() / 2 ** 30);
   return { cores, memGB };
 }

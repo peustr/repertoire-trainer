@@ -28,14 +28,13 @@ function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function withRetry(fn) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return fn();
-    } catch (err) {
-      if (!TRANSIENT.has(err.code) || attempt >= RETRY_DELAYS.length) throw err;
-      sleepSync(RETRY_DELAYS[attempt]);
-    }
+function withRetry(fn, attempt = 0) {
+  try {
+    return fn();
+  } catch (err) {
+    if (!TRANSIENT.has(err.code) || attempt >= RETRY_DELAYS.length) throw err;
+    sleepSync(RETRY_DELAYS[attempt]);
+    return withRetry(fn, attempt + 1);
   }
 }
 
@@ -99,7 +98,7 @@ function sweepTempFiles() {
 }
 
 function slug(text) {
-  return String(text || 'repertoire')
+  return String(text)
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[^\w\s-]/g, '')
@@ -203,13 +202,11 @@ function patchProgress(id, patch) {
     rep.appliedSaves.push(saveId);
     if (rep.appliedSaves.length > APPLIED_SAVES_KEPT) rep.appliedSaves.splice(0, rep.appliedSaves.length - APPLIED_SAVES_KEPT);
   }
-  rep.cards = rep.cards || {};
   for (const [key, state] of Object.entries(cards || {})) {
     if (state === null) delete rep.cards[key];
     else rep.cards[key] = state;
   }
   if (tally && tally.date) {
-    rep.history = rep.history || [];
     let day = rep.history.find((d) => d.date === tally.date);
     if (!day) {
       day = { date: tally.date, correct: 0, wrong: 0, lines: 0 };

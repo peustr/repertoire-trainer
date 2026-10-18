@@ -12,7 +12,7 @@ import { startServer } from './helpers/server.mjs';
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-format-'));
 process.env.TRAINER_DATA_DIR = dataDir;
 const store = await import('../store.js'); // after the environment is set: it is read on load
-const { SCHEMA_VERSION } = await import('../repertoire-format.js');
+const { SCHEMA_VERSION, migrate, checkRepertoireInput, checkProgress } = await import('../repertoire-format.js');
 
 const REP_DIR = path.join(dataDir, 'repertoires');
 const PGN = '1. e4 e5 2. Nf3 Nc6 *';
@@ -168,4 +168,30 @@ test('the API answers 400 with the reason, for every kind of update', async (t) 
   assert.match((await added.json()).pgn, /Answer to 2\.\.\.d6/);
   assert.equal((await send('POST', '/api/repertoires/no-such-rep/lines', { pgn: CHAPTER })).status, 404);
   assert.equal((await send('POST', '/api/repertoires/Bad..Id/lines', { pgn: CHAPTER })).status, 400, 'ids are checked before they touch the disk');
+});
+
+test('a file with a version that makes no sense is refused', () => {
+  for (const schemaVersion of [0, -1, 1.5, 'one', null]) {
+    assert.throws(() => migrate({ id: 'odd', schemaVersion }, 'odd.json'), { status: 500, message: /^odd\.json has an unknown format version/ }, String(schemaVersion));
+  }
+});
+
+test('parts of an old file in the wrong shape are replaced by empty ones', () => {
+  const rep = migrate({ id: 'messy', notes: 5, cards: [], history: {}, audit: 'done' });
+  assert.deepEqual([rep.notes, rep.cards, rep.history, rep.audit], ['', {}, [], null]);
+});
+
+test('a new repertoire needs a name, a colour and some PGN', () => {
+  assert.throws(() => checkRepertoireInput({}), { status: 400, message: 'Give the repertoire a name. Choose White or Black. Paste or upload some PGN.' });
+  assert.throws(() => checkRepertoireInput({ name: '  ', color: 'red', pgn: ' ' }), { message: 'Give the repertoire a name. Choose White or Black. Paste or upload some PGN.' });
+  assert.throws(() => checkRepertoireInput({ name: '' }, true), { message: 'Give the repertoire a name.' }, 'a change may not clear the name');
+  for (const input of [null, [], 'name', 5]) {
+    assert.throws(() => checkRepertoireInput(input), { status: 400, message: 'Send the repertoire as a JSON object.' });
+    assert.throws(() => checkProgress(input), { status: 400, message: 'Send the progress as a JSON object.' });
+  }
+});
+
+test('a card whose last review time is not a time is refused', () => {
+  assert.throws(() => checkProgress({ cards: { k: { ...STATE, last: 'yesterday' } } }), { status: 400, message: 'The card k has a bad last.' });
+  assert.doesNotThrow(() => checkProgress({ cards: { k: { ...STATE, last: 0 } } }));
 });

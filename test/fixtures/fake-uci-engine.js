@@ -1,7 +1,7 @@
 // A stand-in for Stockfish in tests:
 //
 //   node fake-uci-engine.js [mode] [--move=e2e4] [--delay=ms] [--start-delay=ms]
-//                                  [--chatty] [--until-stop] [--stop-move=uci]
+//                                  [--chatty] [--until-stop] [--stop-move=uci] [--info=lines]
 //
 // Modes:
 //   ok     (default) handshakes and answers searches with --move (+0.30)
@@ -9,6 +9,7 @@
 //   hang   handshakes, then ignores "go" and "stop", like a stuck search
 //   refuse handshakes, then refuses the first "position" the way Stockfish refuses
 //          one with more than 32 pieces, and answers nothing after that
+//   crash  handshakes, then exits (code 1) when asked to search, like a crashed engine
 //
 // Flags for "ok":
 //   --delay=ms        answer a search after this long (default at once)
@@ -16,6 +17,8 @@
 //   --chatty          print an info line every 50 ms while searching
 //   --until-stop      only answer when told to stop, like "go infinite"
 //   --stop-move=uci   answer with this move when stopped early (default --move)
+//   --info=a|b        print these info lines before the answer instead of the usual
+//                     one (lines separated by |; empty for none)
 
 const args = process.argv.slice(2);
 const mode = args.find((a) => !a.startsWith('--')) || 'ok';
@@ -38,7 +41,8 @@ function finish(answer) {
   clearTimeout(search.timer);
   clearInterval(search.chatter);
   search = null;
-  say(`info depth 1 multipv 1 score cp 30 pv ${answer}`);
+  const info = flag('info', `info depth 1 multipv 1 score cp 30 pv ${answer}`);
+  for (const line of String(info).split('|').filter(Boolean)) say(line);
   say(`bestmove ${answer}`);
 }
 
@@ -67,6 +71,7 @@ process.stdin.on('data', (chunk) => {
       refused = true;
       say(`info string CRITICAL ERROR: Command \`${line}\` failed. Reason: Invalid FEN. More than 32 pieces on the board.`);
     }
+    else if (mode === 'crash' && line.startsWith('go')) process.exit(1);
     else if (line.startsWith('go')) go(line);
     else if (line === 'stop') finish(stopMove);
   }

@@ -155,8 +155,8 @@ const chess = new Chess();
 function tryMove(fen, san) {
   try {
     chess.load(fen, { skipValidation: true });
-    const mv = chess.move(san, { strict: false });
-    if (!mv) return null;
+    const mv = chess.move(san, { strict: false }); // throws on an illegal move
+    if (mv.san === '--') return null; // a null move (the side to move passes): nothing you could play
     return {
       san: mv.san,
       uci: mv.from + mv.to + (mv.promotion || ''),
@@ -180,10 +180,9 @@ export function moveNumber(node) {
   return +(before.split(/\s+/)[5] || 1);
 }
 
-export function moveLabel(node, figurines = false) {
+export function moveLabel(node) {
   const n = moveNumber(node);
-  const san = figurines ? toFigurine(node.san) : node.san;
-  return node.color === 'w' ? `${n}.${san}` : `${n}...${san}`;
+  return node.color === 'w' ? `${n}.${node.san}` : `${n}...${node.san}`;
 }
 
 /** "5.Nf3 Nc6 6.Bb5" — numbers only where a reader needs them. */

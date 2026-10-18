@@ -52,6 +52,7 @@ function play(fen, move) {
     const mv = typeof move === 'string' && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)
       ? c.move({ from: move.slice(0, 2), to: move.slice(2, 4), promotion: move[4] })
       : c.move(move, { strict: false });
+    if (mv.san === '--') return null; // chess.js reads null and "--" as a null move: no move at all
     return { fen: c.fen(), uci: mv.from + mv.to + (mv.promotion || ''), san: mv.san, color: mv.color };
   } catch (err) {
     return null;
@@ -266,7 +267,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
     }
     const bestForUs = scoreToCp(ev.best.score) * pov; // what the opponent's best move leaves us with
     // Did you prepare replies for the opponent here? Then a popular reply outside your lines is a gap.
-    const prepared = inTree(node.fen) && (model.nodesByPosition.get(positionKey(node.fen)) || []).some((n) => n.children.some((ch) => ch.color !== side));
+    const prepared = inTree(node.fen) && model.nodesByPosition.get(positionKey(node.fen)).some((n) => n.children.some((ch) => ch.color !== side));
 
     for (const c of candidates) {
       const scored = ev.moves.find((m) => m.move === c.uci);

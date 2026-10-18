@@ -57,7 +57,7 @@ function normaliseCastling(uci, san) {
 
 /** Suggest explorer rating groups around the player's most-played rating. */
 function ratingSuggestion(acc) {
-  const perfs = (acc && acc.perfs) || {};
+  const perfs = acc.perfs || {};
   const candidates = ['rapid', 'blitz', 'classical']
     .map((k) => ({ speed: k, ...(perfs[k] || {}) }))
     .filter((p) => p.rating && p.games);
@@ -86,10 +86,11 @@ function base64url(buf) {
 /**
  * A Lichess client. Its token lives in <dataDir>/lichess.json and its explorer answers
  * in <dataDir>/cache/explorer.
- * @param {{ dataDir: string, baseUrl?: string, explorerUrl?: string, rateLimitPauseMs?: number }} options
+ * @param {{ dataDir: string, baseUrl?: string, explorerUrl?: string, rateLimitPauseMs?: number, memoryCacheSize?: number }} options
  *   rateLimitPauseMs: how long to wait after a 429. Lichess asks for a full minute.
+ *   memoryCacheSize: explorer answers also kept in memory (the oldest go first).
  */
-function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explorerUrl = 'https://explorer.lichess.org', rateLimitPauseMs = 61000 }) {
+function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explorerUrl = 'https://explorer.lichess.org', rateLimitPauseMs = 61000, memoryCacheSize = 5000 }) {
   const CACHE_DIR = path.join(dataDir, 'cache', 'explorer');
   const TOKEN_FILE = path.join(dataDir, 'lichess.json');
   const events = new EventEmitter();
@@ -146,16 +147,16 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
 
   /**
    * @param {string} url
-   * @param {{ auth?: boolean, accept?: string, method?: string, body?: any, headers?: Record<string, string>, retries?: number }} [options]
+   * @param {{ accept?: string, method?: string, body?: any, headers?: Record<string, string>, retries?: number }} [options]
    */
-  async function request(url, { auth = true, accept = 'application/json', method = 'GET', body, headers = {}, retries = 2 } = {}) {
+  async function request(url, { accept = 'application/json', method = 'GET', body, headers = {}, retries = 2 } = {}) {
     return enqueue(async () => {
       for (let attempt = 0; ; attempt++) {
         const wait = pausedUntil - Date.now();
         if (wait > 0) await sleep(wait);
         /** @type {Record<string, string>} */
         const h = { 'User-Agent': USER_AGENT, Accept: accept, ...headers };
-        const t = auth ? token() : null;
+        const t = token();
         if (t) h.Authorization = `Bearer ${t}`;
         let res;
         try {
@@ -170,7 +171,7 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
           throw new LichessError('Lichess asked us to slow down. Try again in a minute.', 429);
         }
         if (res.status === 401) {
-          throw new LichessError(t ? 'Lichess rejected the saved token. Connect your account again.' : 'The Lichess opening explorer needs you to connect a Lichess account first.', 401);
+          throw new LichessError(t ? 'Lichess rejected the saved token. Connect your account again.' : 'Connect your Lichess account first.', 401);
         }
         if (!res.ok) {
           const text = await res.text().catch(() => '');
@@ -207,7 +208,7 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
   function cachePut(url, data) {
     const key = cacheKey(url);
     memCache.set(key, { at: Date.now(), data });
-    if (memCache.size > 5000) memCache.delete(memCache.keys().next().value);
+    if (memCache.size > memoryCacheSize) memCache.delete(memCache.keys().next().value);
     try {
       fs.mkdirSync(CACHE_DIR, { recursive: true });
       fs.writeFileSync(path.join(CACHE_DIR, `${key}.json`), JSON.stringify({ at: Date.now(), url, data }));
@@ -297,18 +298,15 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
 
   // --- account, studies -----------------------------------------------------------------
 
-  async function account(tokenOverride) {
-    if (tokenOverride) {
-      // Validate a token before saving it.
-      const res = await enqueue(() => fetch(`${baseUrl}/api/account`, {
-        headers: { Authorization: `Bearer ${tokenOverride}`, Accept: 'application/json', 'User-Agent': USER_AGENT },
-        signal: AbortSignal.timeout(20000),
-      })).catch((err) => { throw new LichessError(`Could not reach Lichess (${err.message}).`, 502); });
-      if (res.status === 401) throw new LichessError('Lichess did not accept that token.', 401);
-      if (!res.ok) throw new LichessError(`Lichess answered ${res.status}`, res.status);
-      return res.json();
-    }
-    return request(`${baseUrl}/api/account`);
+  /** The account a token belongs to: checks a token before it is saved. */
+  async function account(tok) {
+    const res = await enqueue(() => fetch(`${baseUrl}/api/account`, {
+      headers: { Authorization: `Bearer ${tok}`, Accept: 'application/json', 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(20000),
+    })).catch((err) => { throw new LichessError(`Could not reach Lichess (${err.message}).`, 502); });
+    if (res.status === 401) throw new LichessError('Lichess did not accept that token.', 401);
+    if (!res.ok) throw new LichessError(`Lichess answered ${res.status}`, res.status);
+    return res.json();
   }
 
   async function connectWithToken(tok, via = 'personal') {
@@ -407,7 +405,6 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
     status,
     explorer,
     pruneCache,
-    account,
     connectWithToken,
     disconnect,
     studyPgn,
