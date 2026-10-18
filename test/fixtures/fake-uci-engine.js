@@ -1,3 +1,4 @@
+// @ts-check
 // A stand-in for Stockfish in tests:
 //
 //   node fake-uci-engine.js [mode] [--move=e2e4] [--delay=ms] [--start-delay=ms]
@@ -15,8 +16,6 @@
 //   --until-stop      only answer when told to stop, like "go infinite"
 //   --stop-move=uci   answer with this move when stopped early (default --move)
 
-'use strict';
-
 const args = process.argv.slice(2);
 const mode = args.find((a) => !a.startsWith('--')) || 'ok';
 const flag = (name, fallback) => {
@@ -30,7 +29,8 @@ const delay = Number(flag('delay', 0));
 const startDelay = Number(flag('start-delay', 0));
 
 const say = (text) => process.stdout.write(`${text}\n`);
-let search = null; // { timer, chatter }
+/** @type {{ timer?: NodeJS.Timeout, chatter?: NodeJS.Timeout } | null} */
+let search = null;
 
 function finish(answer) {
   if (!search) return;

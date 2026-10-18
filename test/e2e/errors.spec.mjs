@@ -1,8 +1,9 @@
+// @ts-check
 // #10 and #23: an action that fails must say so, and no error may vanish silently.
 
 import { test, expect } from './fixtures.mjs';
+import { START_FEN as START } from '../../public/js/constants.js';
 
-const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const fail = (message) => ({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: message }) });
 
 test('a delete that fails says so and keeps the repertoire', async ({ page, app }) => {

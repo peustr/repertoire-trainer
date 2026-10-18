@@ -1,3 +1,4 @@
+// @ts-check
 // Starts test/mock-lichess.js on a free port for one test file.
 
 import { spawn } from 'node:child_process';

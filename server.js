@@ -3,31 +3,25 @@
 // Serves the web app, stores repertoires as JSON files, and bridges the
 // browser to Stockfish over a WebSocket.
 
-'use strict';
+import './check-node.cjs'; // first: a friendly message on a too-old Node.js
 
-require('./check-node'); // first: a friendly message on a too-old Node.js
-
-const express = require('express');
-const http = require('http');
-const path = require('path');
-const fs = require('fs');
-const { WebSocketServer } = require('ws');
-const store = require('./store');
-const { EngineManager } = require('./engine');
-const lichess = require('./lichess');
-const { searchMistakes } = require('./puzzles');
-
-// The repertoire parser is shared with the browser (ES module), so load it lazily.
-let repertoireModule = null;
-function loadRepertoireModule() {
-  if (!repertoireModule) repertoireModule = import('./public/js/repertoire.js');
-  return repertoireModule;
-}
+import express from 'express';
+import http from 'node:http';
+import { exec } from 'node:child_process';
+import path from 'node:path';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { WebSocketServer } from 'ws';
+import * as store from './store.js';
+import * as schema from './settings-schema.js';
+import { EngineManager } from './engine.js';
+import * as lichess from './lichess.js';
+import { searchMistakes } from './puzzles.js';
+import { buildRepertoire } from './public/js/repertoire.js'; // shared with the browser
 
 const PORT = Number(process.env.PORT) || 3210;
 const HOST = process.env.HOST || '127.0.0.1'; // only reachable from this computer
 
-const schema = require('./settings-schema');
 const engines = new EngineManager(() => store.getSettings());
 
 const app = express();
@@ -70,15 +64,16 @@ app.use(express.json({ limit: '20mb' }));
 // --- static files ----------------------------------------------------------
 
 function packageDir(name) {
-  // Some packages hide package.json behind an "exports" map, so look on disk.
-  for (const base of module.paths) {
+  // Some packages hide package.json behind an "exports" map, so look on disk, in the
+  // node_modules folders Node itself would search.
+  for (const base of createRequire(import.meta.url).resolve.paths(name) || []) {
     const dir = path.join(base, ...name.split('/'));
     if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
   }
   throw new Error(`Missing dependency ${name}. Run "npm install" first.`);
 }
 
-app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
+app.use(express.static(path.join(import.meta.dirname, 'public'), { extensions: ['html'] }));
 app.use('/vendor/chessground', express.static(packageDir('@lichess-org/chessground')));
 app.use('/vendor/chess.js', express.static(packageDir('chess.js')));
 app.use('/vendor/fonts/shantell-sans', express.static(packageDir('@fontsource/shantell-sans')));
@@ -120,7 +115,7 @@ app.get('/api/settings/schema', wrap(() => ({
   engine: engines.info(),
 })));
 
-const SAMPLES_DIR = path.join(__dirname, 'samples');
+const SAMPLES_DIR = path.join(import.meta.dirname, 'samples');
 app.get('/api/samples', wrap(() => {
   if (!fs.existsSync(SAMPLES_DIR)) return [];
   return fs.readdirSync(SAMPLES_DIR)
@@ -263,38 +258,15 @@ wss.on('connection', (ws) => {
       } else if (msg.type === 'puzzle-search') {
         const rep = store.getRepertoire(msg.repId);
         if (!rep) throw Object.assign(new Error('Repertoire not found'), { status: 404 });
-        const { buildRepertoire } = await loadRepertoireModule();
-        const model = buildRepertoire(rep);
-        const s = store.getSettings();
-        const o = msg.options || {};
         let stopped = false;
         runs.set(id, { kind: 'search', cancel: () => { stopped = true; } });
         const result = await searchMistakes({
           rep,
-          model,
+          model: buildRepertoire(rep),
           fen: msg.fen,
           prefix: msg.prefix,
           engines,
-          options: {
-            maxPositions: o.positions || s.puzzlePositions,
-            maxOppDepth: o.depthMoves || s.puzzleDepthMoves,
-            candidates: s.puzzleCandidates,
-            minShare: (o.minShare || s.puzzleMinShare) / 100,
-            minGames: o.minGames || s.puzzleMinGames,
-            threshold: o.threshold || s.puzzleThreshold,
-            minAdvantage: s.puzzleMinAdvantage,
-            depth: s.puzzleEngineDepth,
-            solveDepth: s.puzzleSolveDepth,
-            uniqueGap: s.puzzleUniqueGap,
-            maxLength: s.puzzleMaxLength,
-            maxPuzzles: s.puzzleMaxPerSearch,
-            beyondBook: s.puzzleBeyondBook,
-            gapShare: s.puzzleGapShare / 100,
-            speeds: o.speeds || s.lichessSpeeds,
-            ratings: o.ratings || s.lichessRatings,
-            since: s.lichessSince,
-            cacheDays: s.cacheDays,
-          },
+          options: schema.finderOptions(store.getSettings()),
           cancelled: () => stopped || ws.readyState !== ws.OPEN,
           onEvent: (ev) => {
             if (ev.kind === 'found') store.addPuzzles(rep.id, [ev.puzzle]);
@@ -343,7 +315,6 @@ server.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
 });
 
 function openBrowser(url) {
-  const { exec } = require('child_process');
   const cmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
   exec(cmd, () => {});
 }

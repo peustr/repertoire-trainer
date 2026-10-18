@@ -6,10 +6,10 @@
 // lichess/ChessBase [%cal …] / [%csl …] arrow and square markup.
 
 import { Chess } from 'chess.js';
+import { START_FEN } from './constants.js';
 
 const FIGURINE_TO_LETTER = { '♔': 'K', '♕': 'Q', '♖': 'R', '♗': 'B', '♘': 'N', '♚': 'K', '♛': 'Q', '♜': 'R', '♝': 'B', '♞': 'N' };
 const SUFFIX_NAGS = { '!': 1, '?': 2, '!!': 3, '??': 4, '!?': 5, '?!': 6 };
-export const DEFAULT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 // --- tokenizer ---------------------------------------------------------------
 
@@ -149,11 +149,6 @@ function appendComment(node, key, raw) {
   if (shapes.length) node.shapes = [...node.shapes, ...shapes];
 }
 
-/** Normalise a FEN to the parts that define a position (drop move counters). */
-export function positionKey(fen) {
-  return fen.split(/\s+/).slice(0, 4).join(' ');
-}
-
 const chess = new Chess();
 
 function tryMove(fen, san) {
@@ -208,7 +203,7 @@ export function toFigurine(san) {
 
 function buildGame(tokens, headers, chapterIndex) {
   const errors = [];
-  let startFen = DEFAULT_FEN;
+  let startFen = START_FEN;
   if (headers.FEN) {
     try {
       chess.load(headers.FEN);

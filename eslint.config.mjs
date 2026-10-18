@@ -1,3 +1,4 @@
+// @ts-check
 // Lint (npm run check). Catches what tests only find late, or never: names that
 // do not exist, unused code, redeclarations, and promises nobody awaits or catches.
 
@@ -9,14 +10,14 @@ export default [
   { ignores: ['node_modules/', 'data/', 'test-results/', 'playwright-report/', 'blob-report/'] },
   js.configs.recommended,
   {
-    // Server and the scripts around it: Node, CommonJS.
-    files: ['*.js', 'test/fixtures/*.js', 'test/mock-lichess.js'],
-    languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
+    // Server, tests, config and the scripts around them: Node, ES modules.
+    files: ['*.js', '**/*.mjs', 'test/**/*.js'],
+    languageOptions: { sourceType: 'module', globals: { ...globals.node } },
   },
   {
-    // Tests and config: Node, ES modules.
-    files: ['**/*.mjs'],
-    languageOptions: { sourceType: 'module', globals: { ...globals.node } },
+    // The Node.js version check stays CommonJS, so a Node too old for the rest can still run it.
+    files: ['*.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },
   {
     // The browser app. Shared modules also run in Node, so they must stick to what both have.
@@ -30,7 +31,7 @@ export default [
   },
   {
     rules: {
-      // Module-level names like `const crypto = require('crypto')` may share a global's name.
+      // Module-level names like `import crypto from 'node:crypto'` may share a global's name.
       'no-redeclare': ['error', { builtinGlobals: false }],
       'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
       'no-shadow-restricted-names': 'error',
@@ -40,7 +41,7 @@ export default [
   },
   {
     // Type-aware: a promise that is neither awaited, returned nor caught fails silently.
-    files: ['**/*.js', '**/*.mjs'],
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
     ignores: ['eslint.config.mjs'],
     languageOptions: {
       parser: tseslint.parser,

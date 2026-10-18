@@ -1,3 +1,4 @@
+// @ts-check
 // A stand-in for lichess.org and explorer.lichess.org, for offline testing.
 //
 //   node test/mock-lichess.js            (listens on :9099)
@@ -11,18 +12,16 @@
 //
 // Test controls (not part of the real API):
 //   MOCK_DELAY=ms                     answer explorer requests after this long
-//   GET  /__stats                     { explorerCalls, inFlight, maxInFlight, revoked }
+//   GET  /__stats                     { explorerCalls, inFlight, maxInFlight, revoked, userAgent }
 //   POST /__fail-next?status=429      the next explorer request answers with that status
 
-'use strict';
-
-const http = require('http');
-const crypto = require('crypto');
-const { Chess } = require('chess.js');
+import http from 'node:http';
+import crypto from 'node:crypto';
+import { Chess } from 'chess.js';
 
 const PORT = Number(process.env.MOCK_PORT) || 9099;
 const DELAY = Number(process.env.MOCK_DELAY) || 0;
-const stats = { explorerCalls: 0, inFlight: 0, maxInFlight: 0, revoked: 0 };
+const stats = { explorerCalls: 0, inFlight: 0, maxInFlight: 0, revoked: 0, userAgent: '' };
 let failNext = 0;
 const SHARES = [0.42, 0.21, 0.13, 0.09, 0.07, 0.05, 0.02, 0.01];
 
@@ -76,6 +75,7 @@ const server = http.createServer((req, res) => {
   console.log(req.method, url.pathname, auth ? '(auth)' : '');
 
   if (url.pathname === '/__stats') return json(200, stats);
+  stats.userAgent = req.headers['user-agent'] || '';
   if (url.pathname === '/__fail-next' && req.method === 'POST') {
     failNext = Number(url.searchParams.get('status')) || 500;
     return json(200, { failNext });

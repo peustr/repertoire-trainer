@@ -1,9 +1,11 @@
+// @ts-check
 // Explore: walk the repertoire tree with Stockfish alongside, and wander off-book.
 
 import { h, clear, fig, uciLineToSan, formatSanLine, plural, action } from '../ui.js';
 import { state, getRep, modelFor, loadLichess } from '../store.js';
 import { cardKey, movesTo } from '../repertoire.js';
-import { nagGlyphs, moveNumber, positionKey } from '../pgn.js';
+import { nagGlyphs, moveNumber } from '../pgn.js';
+import { positionKey } from '../constants.js';
 import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci, sanToUci } from '../board.js';
 import { analyse, formatScore, evalBarShare } from '../engine-client.js';
 import { api } from '../api.js';

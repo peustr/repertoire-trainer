@@ -1,3 +1,4 @@
+// @ts-check
 // Chessboard: lichess's chessground for the UI, chess.js for the rules.
 
 import { Chessground } from '@lichess-org/chessground';
@@ -31,6 +32,8 @@ export function turnColor(fen) {
  * createBoard(container, { orientation, onMove(from, to) })
  * Returns a controller. The board never changes position by itself: the
  * caller decides whether a move stands, via setPosition().
+ * @param {HTMLElement} container
+ * @param {{ orientation?: 'white' | 'black', onMove?: (from: string, to: string) => void }} [options]
  */
 export function createBoard(container, { orientation = 'white', onMove } = {}) {
   const wrap = h('div.board-frame', h('div.board-squares'));
@@ -52,16 +55,22 @@ export function createBoard(container, { orientation = 'white', onMove } = {}) {
       visible: true,
       defaultSnapToValidMove: true,
       // App arrows in the palette: flame for "play this", bark for hints. PGN arrows keep their own colours.
-      brushes: {
+      // Chessground adds these to its own brushes, so the rest need not be listed.
+      brushes: /** @type {any} */ ({
         flame: { key: 'fl', color: '#eb5e28', opacity: 0.9, lineWidth: 10 },
         bark: { key: 'bk', color: '#403d39', opacity: 0.7, lineWidth: 10 },
-      },
+      }),
     },
   });
 
   const ro = new ResizeObserver(() => cg.redrawAll());
   ro.observe(wrap);
 
+  /**
+   * @param {string} fen
+   * @param {{ lastMove?: string, movable?: boolean, check?: any, playSound?: boolean, captured?: boolean }} [options]
+   *   lastMove in UCI; check overrides the highlight (a colour, or false)
+   */
   function setPosition(fen, { lastMove, movable = false, check, playSound = false, captured = false } = {}) {
     chess.load(fen, { skipValidation: true });
     current = { fen, movable };
@@ -69,7 +78,7 @@ export function createBoard(container, { orientation = 'white', onMove } = {}) {
     cg.set({
       fen: fen.split(' ')[0],
       turnColor: color,
-      lastMove: lastMove ? [lastMove.slice(0, 2), lastMove.slice(2, 4)] : undefined,
+      lastMove: lastMove ? /** @type {import('@lichess-org/chessground/types').Key[]} */ ([lastMove.slice(0, 2), lastMove.slice(2, 4)]) : undefined,
       check: check !== undefined ? check : chess.inCheck() ? color : false,
       movable: movable
         ? { color, dests: legalDests(chess), free: false }

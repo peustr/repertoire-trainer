@@ -1,3 +1,4 @@
+// @ts-check
 // The opponent-mistake search (puzzles.js) end to end: real explorer client against
 // the mock Lichess, and a scripted engine that calls one reply a blunder.
 
@@ -6,17 +7,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { Chess } from 'chess.js';
 import { startMockLichess } from './helpers/mock-lichess.mjs';
 import { buildRepertoire } from '../public/js/repertoire.js';
+import { START_FEN as START, positionKey } from '../public/js/constants.js';
 
-const require = createRequire(import.meta.url);
 const mock = await startMockLichess();
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-puzzles-'));
 Object.assign(process.env, { TRAINER_DATA_DIR: dataDir, LICHESS_URL: mock.url, LICHESS_EXPLORER_URL: mock.url });
-const lichess = require('../lichess.js');
-const { searchMistakes, positionKey } = require('../puzzles.js');
+// Imported after the environment is set: the Lichess client reads it on load.
+const lichess = await import('../lichess.js');
+const { searchMistakes } = await import('../puzzles.js');
 await lichess.connectWithToken('lip_testToken123');
 
 after(() => {
@@ -24,7 +25,6 @@ after(() => {
   fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
-const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 const OPTIONS = {
   maxPositions: 3, maxOppDepth: 2, minShare: 0.05, minGames: 10, threshold: 150, minAdvantage: 120,
@@ -113,6 +113,6 @@ test('without a Lichess account the search stops with that message', async () =>
   const blackModel = buildRepertoire({ color: 'black', pgn: '1. e4 e5 *' });
   await assert.rejects(
     searchMistakes({ rep: black, model: blackModel, fen: START, engines: scriptedEngines(null), options: OPTIONS }),
-    (err) => err.status === 401,
+    { status: 401 },
   );
 });

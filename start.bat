@@ -13,7 +13,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-node check-node.js
+node check-node.cjs
 if errorlevel 1 (
   pause
   exit /b 1

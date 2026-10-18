@@ -7,15 +7,15 @@
 //   - the WebAssembly build that ships in the `stockfish` npm package, run
 //     under Node — zero setup, installed by `npm install`.
 
-'use strict';
+import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import stockfish from 'stockfish';
+import { WASM_HASH_MAX } from './settings-schema.js';
 
-const { spawn } = require('child_process');
-const { EventEmitter } = require('events');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-
-const ENGINE_DIR = path.join(__dirname, 'engine');
+const ENGINE_DIR = path.join(import.meta.dirname, 'engine');
 
 // ---------------------------------------------------------------------------
 // Locating an engine
@@ -48,19 +48,24 @@ function findNativeEngine(customPath) {
 
 function findBundledEngine(flavour) {
   try {
-    const findEngine = require('stockfish').findEngine;
-    return findEngine(flavour);
+    return stockfish.findEngine(flavour);
   } catch (err) {
     return null;
   }
 }
 
-const WASM_HASH_MAX = 512;
+/**
+ * How to launch an engine: the command, its UCI options and any warnings for the user.
+ * @typedef {{ kind: string, cmd: string, args: string[], label: string, options: Record<string, number | string>, warnings: string[] }} EngineSpec
+ */
 
 /**
  * Describe how to launch the engine for a role, from the user's settings.
  *  analysis: Explore and the eval bar
  *  tasks:    mistake verdicts, the mistake finder, audits, sparring
+ * @param {string} role
+ * @param {Record<string, any>} [cfg]
+ * @returns {EngineSpec | null}
  */
 function engineSpec(role, cfg = {}) {
   const cores = Math.max(1, os.cpus().length);
@@ -147,6 +152,10 @@ class UciEngine extends EventEmitter {
    * options.startTimeout: ms to wait for the engine's uciok/readyok.
    * options.stallTimeout: ms a search may stay silent before the engine is asked to stop.
    * options.stopGrace: ms to wait for an answer to that stop before replacing the engine.
+   * @param {string} role
+   * @param {() => Record<string, any>} [getConfig]
+   * @param {{ specFor?: (role: string, config: Record<string, any>) => EngineSpec | null, startTimeout?: number,
+   *   stallTimeout?: number, stopGrace?: number }} [options]
    */
   constructor(role, getConfig = () => ({}), { specFor = engineSpec, startTimeout = 60000, stallTimeout = 45000, stopGrace = 3000 } = {}) {
     super();
@@ -549,4 +558,4 @@ class EngineManager {
   }
 }
 
-module.exports = { EngineManager, UciEngine, parseInfo, toWhitePov, findNativeEngine, engineSpec, isNetworkPath };
+export { EngineManager, UciEngine, parseInfo, toWhitePov, findNativeEngine, engineSpec, isNetworkPath };

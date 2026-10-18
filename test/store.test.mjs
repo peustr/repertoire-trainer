@@ -1,3 +1,4 @@
+// @ts-check
 // Storage under stress: damaged files, files held open by other programs,
 // interrupted saves. Runs against a temp data folder, never ./data.
 
@@ -7,12 +8,10 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-store-'));
 process.env.TRAINER_DATA_DIR = dataDir;
-const store = require('../store.js');
+const store = await import('../store.js'); // after the environment is set: it is read on load
 
 const SETTINGS = path.join(dataDir, 'settings.json');
 const REP_DIR = path.join(dataDir, 'repertoires');
@@ -139,9 +138,9 @@ test("a puzzle's line is added to the repertoire in one save, and only once", (t
 test('adding the line of a missing puzzle, or without a chapter, is refused', () => {
   const rep = store.createRepertoire({ name: 'Refused', color: 'white', pgn: PGN });
   store.addPuzzles(rep.id, [{ id: 'pz1', fen: 'x' }]);
-  assert.throws(() => store.addPuzzleLine(rep.id, 'gone', '1. e4 *'), (err) => err.status === 404);
-  assert.throws(() => store.addPuzzleLine(rep.id, '__proto__', '1. e4 *'), (err) => err.status === 404);
-  assert.throws(() => store.addPuzzleLine(rep.id, 'pz1', '  '), (err) => err.status === 400);
+  assert.throws(() => store.addPuzzleLine(rep.id, 'gone', '1. e4 *'), { status: 404 });
+  assert.throws(() => store.addPuzzleLine(rep.id, '__proto__', '1. e4 *'), { status: 404 });
+  assert.throws(() => store.addPuzzleLine(rep.id, 'pz1', '  '), { status: 400 });
   assert.equal(store.addPuzzleLine('no-such-rep', 'pz1', '1. e4 *'), null);
   assert.equal(store.getRepertoire(rep.id).pgn, PGN);
 });

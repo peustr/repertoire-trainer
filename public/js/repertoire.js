@@ -7,7 +7,8 @@
 // single card — you are not drilled on it twenty times a day, and transpositions
 // between chapters are recognised.
 
-import { parsePgn, chapterName, positionKey } from './pgn.js';
+import { parsePgn, chapterName } from './pgn.js';
+import { positionKey } from './constants.js';
 
 export function cardKey(fenBefore, uci) {
   return `${positionKey(fenBefore)}|${uci}`;

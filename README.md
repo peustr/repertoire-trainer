@@ -145,9 +145,11 @@ lichess.js           Lichess client: OAuth, explorer (queued, cached), studies
 puzzles.js           Opponent-mistake tree search and puzzle builder
 store.js             JSON file storage in ./data
 settings-schema.js   Every setting: default, range, help text (drives the Settings page)
+check-node.cjs       Stops with a plain message on a too-old Node.js
 public/
   index.html         App shell, import map
   css/app.css        All styles
+  js/constants.js    Start position, position keys, scores, Lichess speeds and ratings
   js/pgn.js          PGN tokenizer and move-tree builder
   js/repertoire.js   Lines and cards from a move tree
   js/srs.js          Spaced-repetition scheduler

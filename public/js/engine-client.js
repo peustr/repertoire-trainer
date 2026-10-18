@@ -135,14 +135,14 @@ export function onLichessNotice(fn) {
 }
 
 /**
- * Run the opponent-mistake search on the server.
+ * Run the opponent-mistake search on the server, with the options in the user's settings.
  * onEvent receives { kind: 'progress' | 'found' | 'gap', ... } as the search goes.
  * Returns { promise, stop }.
  */
-export function searchMistakes({ repId, fen, prefix, options }, onEvent) {
+export function searchMistakes({ repId, fen, prefix }, onEvent) {
   let id = null;
   let stopRequested = false;
-  const promise = request({ type: 'puzzle-search', repId, fen, prefix, options }, (msg) => onEvent(msg))
+  const promise = request({ type: 'puzzle-search', repId, fen, prefix }, (msg) => onEvent(msg))
     .then((r) => {
       id = r.id;
       if (stopRequested) stop();
@@ -159,14 +159,7 @@ export function engineReady() {
   return connect().then(() => true, () => false);
 }
 
-// --- score helpers -------------------------------------------------------------
-
-/** Centipawns from White's view, with mates mapped to large numbers. */
-export function scoreToCp(score) {
-  if (!score) return 0;
-  if ('mate' in score) return score.mate === 0 ? 0 : Math.sign(score.mate) * (10000 - Math.abs(score.mate) * 10);
-  return score.cp;
-}
+// --- score helpers (scoreToCp is in constants.js) -------------------------------
 
 export function formatScore(score) {
   if (!score) return '…';

@@ -1,8 +1,9 @@
+// @ts-check
 // Opponent-mistake puzzles: solving one and adding its line to the repertoire.
 
 import { test, expect, playMove } from './fixtures.mjs';
+import { START_FEN as START } from '../../public/js/constants.js';
 
-const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 const AFTER_F6 = 'rnbqkbnr/ppppp1pp/5p2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
 

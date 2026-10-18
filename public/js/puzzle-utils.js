@@ -3,9 +3,7 @@
 
 import { Chess } from 'chess.js';
 import { isDue } from './srs.js';
-
-const RATING_GROUPS = [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
-const DEFAULT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+import { START_FEN, RATING_GROUPS, SPEED_NAMES, scoreToCp } from './constants.js';
 
 export const puzzleKey = (id) => `pz|${id}`;
 
@@ -71,8 +69,7 @@ export function describeRatings(ratings) {
 
 export function describeSpeeds(speeds) {
   const list = Array.isArray(speeds) ? speeds : String(speeds || '').split(',').filter(Boolean);
-  const names = { ultraBullet: 'ultrabullet', bullet: 'bullet', blitz: 'blitz', rapid: 'rapid', classical: 'classical', correspondence: 'correspondence' };
-  return list.map((s) => names[s] || s).join(', ') || 'all speeds';
+  return list.map((s) => (SPEED_NAMES[s] || s).toLowerCase()).join(', ') || 'all speeds';
 }
 
 /** "1 in 12 games" style frequency for how often you'd reach a position. */
@@ -85,8 +82,7 @@ export function describeReach(reach) {
 
 /** Score helper: centipawns from your point of view. */
 export function cpFor(score, side) {
-  if (!score) return 0;
-  const raw = 'mate' in score ? (score.mate === 0 ? 0 : Math.sign(score.mate) * (10000 - Math.abs(score.mate) * 10)) : score.cp;
+  const raw = scoreToCp(score);
   return side === 'w' ? raw : -raw;
 }
 
@@ -97,7 +93,7 @@ export function cpFor(score, side) {
  */
 export function puzzleToPgn(puzzle, { title } = {}) {
   const c = new Chess();
-  const start = puzzle.startFen || DEFAULT_FEN;
+  const start = puzzle.startFen || START_FEN;
   c.load(start);
   const moves = [...puzzle.lineMoves, ...puzzle.solution];
   const mistakeIndex = puzzle.lineMoves.length - 1;
@@ -122,6 +118,6 @@ export function puzzleToPgn(puzzle, { title } = {}) {
     `[Event "${(title || `Punish ${puzzle.pathSan[puzzle.pathSan.length - 1]}`).replace(/"/g, "'")}"]`,
     `[ChapterName "${(title || `Opponent mistake: ${puzzle.mistake.san}`).replace(/"/g, "'")}"]`,
   ];
-  if (start !== DEFAULT_FEN) headers.push('[SetUp "1"]', `[FEN "${start}"]`);
+  if (start !== START_FEN) headers.push('[SetUp "1"]', `[FEN "${start}"]`);
   return `${headers.join('\n')}\n\n${parts.join(' ')} *\n`;
 }

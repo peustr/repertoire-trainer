@@ -1,11 +1,11 @@
 // @ts-check
 // Every setting the app understands: its default, allowed range and the help
 // text shown in the Settings panel. The server validates against this, and the
-// browser builds the Settings page from it.
+// browser builds the Settings page from it. A field with `search` is also an option
+// of the mistake finder (puzzles.js), under that name; percentages become fractions.
 
-'use strict';
-
-const os = require('os');
+import os from 'node:os';
+import { SPEEDS as SPEED_KEYS, SPEED_NAMES, RATING_GROUPS, ratingGroupLabel } from './public/js/constants.js';
 
 const WASM_HASH_MAX = 512; // the built-in WebAssembly engine fails to start above this
 
@@ -26,14 +26,8 @@ function engineDefaults() {
   };
 }
 
-const SPEEDS = [
-  ['ultraBullet', 'UltraBullet'], ['bullet', 'Bullet'], ['blitz', 'Blitz'],
-  ['rapid', 'Rapid'], ['classical', 'Classical'], ['correspondence', 'Correspondence'],
-];
-const RATINGS = [
-  ['0', 'Under 1000'], ['1000', '1000–1199'], ['1200', '1200–1399'], ['1400', '1400–1599'], ['1600', '1600–1799'],
-  ['1800', '1800–1999'], ['2000', '2000–2199'], ['2200', '2200–2499'], ['2500', '2500+'],
-];
+const SPEEDS = SPEED_KEYS.map((s) => [s, SPEED_NAMES[s]]);
+const RATINGS = RATING_GROUPS.map((g) => [String(g), ratingGroupLabel(g)]);
 
 /** Keep each group's fields together, in the order the groups first appear. */
 function groupFields(sections) {
@@ -105,20 +99,20 @@ function buildSchema() {
       title: 'Mistake finder',
       intro: 'The finder walks forward from a position: it follows your repertoire moves, asks Lichess what opponents at your level play, and lets Stockfish judge each popular reply. Replies that give away a lot become puzzles.',
       fields: [
-        { key: 'puzzlePositions', group: 'How big a search', type: 'int', min: 5, max: 200, default: 30, unit: 'positions', label: 'Search budget', help: 'Opponent positions looked up per search. Each costs one Lichess request the first time (later ones come from the cache). 30 takes about a minute on a typical laptop.' },
-        { key: 'puzzleDepthMoves', group: 'How big a search', type: 'int', min: 1, max: 12, default: 5, unit: 'opponent moves', label: 'How deep to search', help: 'How many opponent moves ahead the search goes from where you start it.' },
-        { key: 'puzzleCandidates', group: 'How big a search', type: 'int', min: 2, max: 12, default: 8, unit: 'replies', label: 'Replies checked per position', help: 'The most popular replies Stockfish scores at each opponent turn.' },
-        { key: 'puzzleMinShare', group: 'Which replies count', type: 'number', min: 0.5, max: 50, step: 0.5, default: 5, unit: '%', label: 'Ignore replies played less often than', help: 'Rare replies are not worth preparing for. 5% means one game in twenty at that position.' },
-        { key: 'puzzleMinGames', group: 'Which replies count', type: 'int', min: 5, max: 100000, default: 40, unit: 'games', label: 'Ignore positions with fewer games than', help: 'Below this the statistics are too thin to trust.' },
-        { key: 'puzzleThreshold', group: 'What counts as a mistake', type: 'int', min: 50, max: 1000, step: 10, default: 150, unit: 'centipawns', label: 'A mistake gives away at least', help: '100 centipawns is one pawn. 150 means the reply must throw away a pawn and a half compared with the opponent’s best move.' },
-        { key: 'puzzleMinAdvantage', group: 'What counts as a mistake', type: 'int', min: 0, max: 1000, step: 10, default: 120, unit: 'centipawns', label: '…and leaves you better by at least', help: 'Keeps puzzles about winning, not about turning a bad position into a slightly less bad one.' },
-        { key: 'puzzleEngineDepth', group: 'What counts as a mistake', type: 'int', min: 8, max: 30, default: 14, unit: 'ply', label: 'Stockfish depth while searching', help: 'Used to score every popular reply. Raising it makes the search slower but more accurate.' },
-        { key: 'puzzleSolveDepth', group: 'Building the puzzle', type: 'int', min: 8, max: 30, default: 16, unit: 'ply', label: 'Stockfish depth for the punishment', help: 'Used to work out and double-check the winning answer once a mistake is found.' },
-        { key: 'puzzleUniqueGap', group: 'Building the puzzle', type: 'int', min: 30, max: 500, step: 10, default: 120, unit: 'centipawns', label: 'Only-move margin', help: 'A puzzle has a single answer when Stockfish’s best move beats its second choice by at least this much. Otherwise any clearly winning move is accepted.' },
-        { key: 'puzzleMaxLength', group: 'Building the puzzle', type: 'int', min: 1, max: 5, default: 3, unit: 'moves', label: 'Longest punishment', help: 'The most moves of yours a puzzle asks for. It stops earlier whenever the next move is not clearly the only good one.' },
-        { key: 'puzzleMaxPerSearch', group: 'How big a search', type: 'int', min: 1, max: 50, default: 15, unit: 'puzzles', label: 'Stop after finding', help: 'Ends the search early once this many puzzles are found.' },
-        { key: 'puzzleBeyondBook', group: 'How big a search', type: 'int', min: 0, max: 6, default: 2, unit: 'opponent moves', label: 'Keep going past the end of your lines for', help: 'Opponents keep making mistakes after your preparation ends. 0 stays strictly inside your repertoire.' },
-        { key: 'puzzleGapShare', group: 'Which replies count', type: 'number', min: 1, max: 100, step: 1, default: 10, unit: '%', label: 'Report unprepared replies played in at least', help: 'Popular replies your repertoire has no answer for are listed as gaps.' },
+        { key: 'puzzlePositions', search: 'maxPositions', group: 'How big a search', type: 'int', min: 5, max: 200, default: 30, unit: 'positions', label: 'Search budget', help: 'Opponent positions looked up per search. Each costs one Lichess request the first time (later ones come from the cache). 30 takes about a minute on a typical laptop.' },
+        { key: 'puzzleDepthMoves', search: 'maxOppDepth', group: 'How big a search', type: 'int', min: 1, max: 12, default: 5, unit: 'opponent moves', label: 'How deep to search', help: 'How many opponent moves ahead the search goes from where you start it.' },
+        { key: 'puzzleCandidates', search: 'candidates', group: 'How big a search', type: 'int', min: 2, max: 12, default: 8, unit: 'replies', label: 'Replies checked per position', help: 'The most popular replies Stockfish scores at each opponent turn.' },
+        { key: 'puzzleMinShare', search: 'minShare', group: 'Which replies count', type: 'number', min: 0.5, max: 50, step: 0.5, default: 5, unit: '%', label: 'Ignore replies played less often than', help: 'Rare replies are not worth preparing for. 5% means one game in twenty at that position.' },
+        { key: 'puzzleMinGames', search: 'minGames', group: 'Which replies count', type: 'int', min: 5, max: 100000, default: 40, unit: 'games', label: 'Ignore positions with fewer games than', help: 'Below this the statistics are too thin to trust.' },
+        { key: 'puzzleThreshold', search: 'threshold', group: 'What counts as a mistake', type: 'int', min: 50, max: 1000, step: 10, default: 150, unit: 'centipawns', label: 'A mistake gives away at least', help: '100 centipawns is one pawn. 150 means the reply must throw away a pawn and a half compared with the opponent’s best move.' },
+        { key: 'puzzleMinAdvantage', search: 'minAdvantage', group: 'What counts as a mistake', type: 'int', min: 0, max: 1000, step: 10, default: 120, unit: 'centipawns', label: '…and leaves you better by at least', help: 'Keeps puzzles about winning, not about turning a bad position into a slightly less bad one.' },
+        { key: 'puzzleEngineDepth', search: 'depth', group: 'What counts as a mistake', type: 'int', min: 8, max: 30, default: 14, unit: 'ply', label: 'Stockfish depth while searching', help: 'Used to score every popular reply. Raising it makes the search slower but more accurate.' },
+        { key: 'puzzleSolveDepth', search: 'solveDepth', group: 'Building the puzzle', type: 'int', min: 8, max: 30, default: 16, unit: 'ply', label: 'Stockfish depth for the punishment', help: 'Used to work out and double-check the winning answer once a mistake is found.' },
+        { key: 'puzzleUniqueGap', search: 'uniqueGap', group: 'Building the puzzle', type: 'int', min: 30, max: 500, step: 10, default: 120, unit: 'centipawns', label: 'Only-move margin', help: 'A puzzle has a single answer when Stockfish’s best move beats its second choice by at least this much. Otherwise any clearly winning move is accepted.' },
+        { key: 'puzzleMaxLength', search: 'maxLength', group: 'Building the puzzle', type: 'int', min: 1, max: 5, default: 3, unit: 'moves', label: 'Longest punishment', help: 'The most moves of yours a puzzle asks for. It stops earlier whenever the next move is not clearly the only good one.' },
+        { key: 'puzzleMaxPerSearch', search: 'maxPuzzles', group: 'How big a search', type: 'int', min: 1, max: 50, default: 15, unit: 'puzzles', label: 'Stop after finding', help: 'Ends the search early once this many puzzles are found.' },
+        { key: 'puzzleBeyondBook', search: 'beyondBook', group: 'How big a search', type: 'int', min: 0, max: 6, default: 2, unit: 'opponent moves', label: 'Keep going past the end of your lines for', help: 'Opponents keep making mistakes after your preparation ends. 0 stays strictly inside your repertoire.' },
+        { key: 'puzzleGapShare', search: 'gapShare', group: 'Which replies count', type: 'number', min: 1, max: 100, step: 1, default: 10, unit: '%', label: 'Report unprepared replies played in at least', help: 'Popular replies your repertoire has no answer for are listed as gaps.' },
         { key: 'puzzleBatch', group: 'Solving puzzles', type: 'int', min: 1, max: 100, default: 12, unit: 'puzzles', label: 'Puzzles per session', help: 'Due puzzles come first, then new ones, most likely to appear in your games first.' },
         { key: 'puzzleAltMin', group: 'Solving puzzles', type: 'int', min: 0, max: 1000, step: 10, default: 150, unit: 'centipawns', label: 'Accept a different move if it still wins by', help: 'When you find another way to punish the mistake, Stockfish checks it. It counts as solved if your move keeps at least this advantage…' },
         { key: 'puzzleAltMargin', group: 'Solving puzzles', type: 'int', min: 0, max: 500, step: 10, default: 80, unit: 'centipawns', label: '…and is within this much of Stockfish’s move', help: 'Set to 0 to only accept Stockfish’s exact answer.' },
@@ -129,11 +123,11 @@ function buildSchema() {
       title: 'Opponents on Lichess',
       intro: 'Which Lichess games count in the opening explorer and the mistake finder. Pick the time controls and ratings of the people you actually play.',
       fields: [
-        { key: 'lichessSpeeds', type: 'chips', default: 'blitz,rapid,classical', options: SPEEDS, label: 'Time controls', help: 'Bullet games are full of mistakes nobody makes in slower games, so leave them out unless you play bullet.' },
-        { key: 'lichessRatings', type: 'chips', default: '1600,1800,2000', options: RATINGS, label: 'Rating bands', help: 'Ratings of the games’ players. A band around your own rating gives the most realistic opponents; the Lichess page suggests one once you connect.' },
-        { key: 'lichessSince', type: 'month', default: '', label: 'Only games since', help: 'Leave empty for all games. Opening fashions change; the last two or three years reflect today’s opponents best.' },
+        { key: 'lichessSpeeds', search: 'speeds', type: 'chips', default: 'blitz,rapid,classical', options: SPEEDS, label: 'Time controls', help: 'Bullet games are full of mistakes nobody makes in slower games, so leave them out unless you play bullet.' },
+        { key: 'lichessRatings', search: 'ratings', type: 'chips', default: '1600,1800,2000', options: RATINGS, label: 'Rating bands', help: 'Ratings of the games’ players. A band around your own rating gives the most realistic opponents; the Lichess page suggests one once you connect.' },
+        { key: 'lichessSince', search: 'since', type: 'month', default: '', label: 'Only games since', help: 'Leave empty for all games. Opening fashions change; the last two or three years reflect today’s opponents best.' },
         { key: 'explorerSource', type: 'select', default: 'lichess', label: 'Explorer opens on', options: [['lichess', 'Lichess games'], ['masters', 'Master games']] },
-        { key: 'cacheDays', type: 'int', min: 1, max: 365, default: 30, unit: 'days', label: 'Keep explorer answers for', help: 'Answers are saved on this computer so repeat searches are instant and Lichess is asked less often.' },
+        { key: 'cacheDays', search: 'cacheDays', type: 'int', min: 1, max: 365, default: 30, unit: 'days', label: 'Keep explorer answers for', help: 'Answers are saved on this computer so repeat searches are instant and Lichess is asked less often.' },
       ],
     },
     {
@@ -213,4 +207,17 @@ function validate(current, patch) {
 
 const ENGINE_KEYS = allFields().filter((f) => f.restart).map((f) => f.key);
 
-module.exports = { buildSchema, defaults, validate, clean, machine, engineDefaults, ENGINE_KEYS, WASM_HASH_MAX };
+/**
+ * The mistake finder's options, from the settings tagged with `search`.
+ * @param {Record<string, any>} settings
+ * @returns {Record<string, any>}
+ */
+function finderOptions(settings) {
+  const out = {};
+  for (const f of allFields()) {
+    if (f.search) out[f.search] = f.unit === '%' ? settings[f.key] / 100 : settings[f.key];
+  }
+  return out;
+}
+
+export { buildSchema, defaults, validate, clean, machine, engineDefaults, finderOptions, ENGINE_KEYS, WASM_HASH_MAX };

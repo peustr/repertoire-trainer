@@ -1,3 +1,4 @@
+// @ts-check
 // Starts the real server for a test, on a free port with a throwaway data folder.
 // Never touches ./data or the network: TRAINER_DATA_DIR is a temp folder and the
 // Lichess URLs point at a closed local port.
@@ -16,7 +17,7 @@ export function freePort() {
     const srv = net.createServer();
     srv.once('error', reject);
     srv.listen(0, '127.0.0.1', () => {
-      const { port } = srv.address();
+      const { port } = /** @type {import('node:net').AddressInfo} */ (srv.address());
       srv.close(() => resolve(port));
     });
   });
