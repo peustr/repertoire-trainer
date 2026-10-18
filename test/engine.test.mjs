@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EngineManager, UciEngine, engineSpec, isNetworkPath } from '../engine.js';
+import { EngineManager, UciEngine, checkFen, engineSpec, isNetworkPath } from '../engine.js';
 import { START_FEN } from '../public/js/constants.js';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-uci-engine.js', import.meta.url));
@@ -163,12 +163,25 @@ test('an illegal position or a smuggled command is refused before it reaches the
     { fen: START_FEN, searchmoves: ['e2e4\nquit'] },
     { fen: START_FEN, moves: ['e2e4 e7e5'] },
     { fen: START_FEN, options: { MultiPV: '1\nquit' } },
+    { fen: START_FEN, options: { 'MultiPV value 1\nquit': 1 } },
   ];
   for (const job of refused) {
     assert.throws(() => engine.submit({ go: 'depth 1', ...job }), { status: 400 }, JSON.stringify(job));
   }
   assert.equal(engine.proc, null, 'no engine was started for them');
   assert.equal((await search(engine)).bestmove, 'e2e4', 'a good search still runs');
+});
+
+test('a position is refused in words a player can act on, and stray spaces are forgiven', () => {
+  assert.equal(checkFen(` ${START_FEN} \n`), START_FEN);
+  /** @type {Array<[string, RegExp]>} */
+  const refused = [
+    [`${START_FEN} extra`, /\(a FEN has six parts separated by spaces\)/],
+    ['rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP w KQkq - 0 1', /\(the board needs 8 ranks separated by \/\)/],
+    ['rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQ1BNR w kq - 0 1', /\(White has no king\)/],
+    ['4k3/8/8/8/8/8/8/4K2P w - - 0 1', /\(there is a pawn on the first or last rank\)/],
+  ];
+  for (const [fen, message] of refused) assert.throws(() => checkFen(fen), { status: 400, message }, fen);
 });
 
 test('a search Stockfish refuses fails at once, and the one behind it runs on a fresh engine', async (t) => {
@@ -213,6 +226,8 @@ test('numbers from the page are kept in range, and illegal moves are not searche
   assert.equal(sent[0].options.MultiPV, 3);
 
   sent.length = 0;
+  await assert.rejects(engines.evaluate({ fen: '8/8/8/8/8/8/8/8 w - - 0 1', moves: ['e2e4'] }), { status: 400 });
+  assert.equal(sent.length, 0, 'a bad position is refused before any search is queued');
   const res = await engines.evaluate({ fen: START_FEN, moves: ['e2e4', 'e2e5', 'zz', 7], depth: 99 });
   assert.deepEqual(sent.map((j) => j.go), ['depth 50', 'depth 50']);
   assert.deepEqual(sent[1].searchmoves, ['e2e4'], 'only the legal move is searched');

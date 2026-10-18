@@ -17,29 +17,57 @@ function newId() {
 
 /**
  * The outbox's storage in localStorage (or anything shaped like it), shared between tabs.
- * When the browser will not take a write (storage full, blocked, a private window), the
- * queue carries on in memory from then on: reading the older copy back from storage
- * would lose every save made since. Memory mode ends once a write succeeds again.
- * @param {() => { getItem(key: string): string | null, setItem(key: string, value: string): void } | null} backend
- *   a function, because merely touching localStorage can throw
+ * When the browser will not take a write (storage full, blocked, a private window), this
+ * tab remembers how its queue differs from the stored one: the saves it could not store,
+ * and the stored saves it has since sent. Reads lay those over the stored queue, so saves
+ * other tabs add or send still count, and the next write that succeeds stores the lot.
+ * @param {() => { getItem(key: string): string | null, setItem(key: string, value: string): void,
+ *   removeItem(key: string): void } | null} backend  a function, because merely touching localStorage can throw
  * @param {string} key
- * @returns {{ get(): any[], set(entries: any[]): void }}
+ * @param {{ onUnstored?: () => void }} [options]  onUnstored hears when this tab starts
+ *   holding saves that only it has, which a reload or closing the tab would lose
+ * @returns {{ get(): any[], set(entries: any[]): void, unstored(): number }}
  */
-export function webStorage(backend, key) {
-  let memory = null; // the queue, while storage will not take it
+export function webStorage(backend, key, { onUnstored = () => {} } = {}) {
+  let unstored = []; // saves this tab could not store
+  let sent = new Set(); // saveIds still stored only because the write that drops them failed
+
+  function stored() {
+    try {
+      const entries = JSON.parse(backend().getItem(key) || '[]');
+      return Array.isArray(entries) ? entries : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
   return {
     get() {
-      if (memory) return memory;
-      try { return JSON.parse(backend().getItem(key) || '[]'); } catch (err) { return []; }
+      const entries = stored();
+      if (!unstored.length && !sent.size) return entries;
+      const ids = new Set(entries.map((e) => e.saveId));
+      return [...entries.filter((e) => !sent.has(e.saveId)), ...unstored.filter((e) => !ids.has(e.saveId))];
     },
     set(entries) {
       try {
         backend().setItem(key, JSON.stringify(entries));
-        memory = null;
-      } catch (err) {
-        memory = entries;
+        unstored = [];
+        sent = new Set();
+        return;
+      } catch (err) { /* worked out below */ }
+      const before = stored();
+      const ids = new Set(before.map((e) => e.saveId));
+      const wanted = new Set(entries.map((e) => e.saveId));
+      const had = unstored.length;
+      unstored = entries.filter((e) => !ids.has(e.saveId));
+      sent = new Set(before.filter((e) => !wanted.has(e.saveId)).map((e) => e.saveId));
+      // Everything stored has been sent: clear it, so a reload cannot send it again.
+      if (before.length && sent.size === before.length) {
+        try { backend().removeItem(key); sent = new Set(); } catch (e) { /* still hidden from reads */ }
       }
+      if (!had && unstored.length) onUnstored();
     },
+    unstored: () => unstored.length,
   };
 }
 

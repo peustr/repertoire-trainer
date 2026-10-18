@@ -147,8 +147,11 @@ function fakeLocalStorage(initial = {}) {
       if (this.full) throw new Error('QuotaExceededError');
       items.set(key, value);
     },
+    removeItem: (key) => { items.delete(key); },
   };
 }
+
+const storedIds = (local) => JSON.parse(local.items.get('outbox') || '[]').map((e) => e.saveId);
 
 test('saves are kept, and sent, while the browser storage refuses writes', async () => {
   const older = [{ repId: 'r', cards: { a: 1 }, saveId: 'old' }];
@@ -172,6 +175,51 @@ test('saves are kept, and sent, while the browser storage refuses writes', async
   local.full = false;
   await outbox.add({ repId: 'r', cards: { c: 1 } });
   assert.equal(local.items.get('outbox'), '[]', 'back to storage once it takes writes again');
+});
+
+test('a tab that cannot store its saves still sees, and keeps, the ones other tabs store', () => {
+  const local = fakeLocalStorage();
+  const tabA = webStorage(() => local, 'outbox');
+  const tabB = webStorage(() => local, 'outbox');
+  local.full = true;
+  tabA.set([{ saveId: 'a1' }]); // A's save stays in A's memory
+  local.full = false; // space is freed, so B can store its save
+  tabB.set([...tabB.get(), { saveId: 'b1' }]);
+
+  assert.deepEqual(tabA.get().map((e) => e.saveId), ['b1', 'a1'], "A sees B's save");
+  tabA.set(tabA.get().filter((e) => e.saveId !== 'a1')); // A sent its save, and this write works
+  assert.deepEqual(storedIds(local), ['b1'], "B's save is still stored for B to send");
+});
+
+test('saves sent while storage refuses writes are not left there to be sent again after a reload', async () => {
+  const local = fakeLocalStorage({ outbox: JSON.stringify([{ repId: 'r', cards: { a: 1 }, saveId: 'old' }]) });
+  local.full = true;
+  const sent = [];
+  await createOutbox({ storage: webStorage(() => local, 'outbox'), send: (e) => Promise.resolve(sent.push(e.saveId)) }).flush();
+  assert.deepEqual(sent, ['old']);
+
+  const afterReload = [];
+  await createOutbox({ storage: webStorage(() => local, 'outbox'), send: (e) => Promise.resolve(afterReload.push(e.saveId)) }).flush();
+  assert.deepEqual(afterReload, [], 'nothing is sent twice');
+});
+
+test('a tab hears once when it starts holding saves that only it has', () => {
+  const local = fakeLocalStorage();
+  let heard = 0;
+  const storage = webStorage(() => local, 'outbox', { onUnstored: () => { heard++; } });
+  storage.set([{ saveId: 'a' }]);
+  assert.equal(storage.unstored(), 0);
+
+  local.full = true;
+  storage.set([...storage.get(), { saveId: 'b' }]);
+  storage.set([...storage.get(), { saveId: 'c' }]);
+  assert.equal(storage.unstored(), 2);
+  assert.equal(heard, 1, 'once, not for every save');
+
+  local.full = false;
+  storage.set(storage.get());
+  assert.equal(storage.unstored(), 0);
+  assert.deepEqual(storedIds(local), ['a', 'b', 'c'], 'all stored once the browser takes writes again');
 });
 
 test('blocked browser storage keeps the queue in memory', () => {

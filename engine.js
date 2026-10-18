@@ -155,24 +155,51 @@ const UCI_MOVE = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
 const GO = /^(depth \d+|movetime \d+|infinite)$/;
 const MAX_DEPTH = 50; // past every setting (the highest is 40); deeper would run for hours
 
+/** What chess.js finds wrong with a FEN, in words a player can act on. @type {Array<[RegExp, string]>} */
+const FEN_PROBLEMS = [
+  [/six space-delimited fields/, 'a FEN has six parts separated by spaces'],
+  [/move number/, 'the move number must be 1 or more'],
+  [/half move counter/, 'the half-move count must be 0 or more'],
+  [/en-passant/, 'the en passant square is wrong'],
+  [/castling/, 'the castling rights are wrong'],
+  [/side-to-move/, 'the side to move must be w or b'],
+  [/8 '\/'-delimited rows/, 'the board needs 8 ranks separated by /'],
+  [/piece data is invalid/, 'one of the ranks is not written correctly'],
+  [/missing white king/, 'White has no king'],
+  [/missing black king/, 'Black has no king'],
+  [/too many white kings/, 'White has more than one king'],
+  [/too many black kings/, 'Black has more than one king'],
+  [/pawns are on the edge rows/, 'there is a pawn on the first or last rank'],
+];
+
 /**
- * The position in a form Stockfish can search safely, or a 400 error.
+ * The position as a chess.js game, or a 400 error when Stockfish could not search it safely.
  * @param {unknown} fen
- * @returns {string}
+ * @returns {Chess}
  */
-function checkFen(fen) {
+function parsePosition(fen) {
   let chess;
   try {
-    chess = new Chess(String(fen || ''));
+    chess = new Chess(String(fen || '').trim()); // a pasted FEN often ends in a space
   } catch (err) {
-    throw badRequest(`That is not a legal chess position (${String(err.message).replace(/^Invalid FEN: /, '')}).`);
+    const known = FEN_PROBLEMS.find(([pattern]) => pattern.test(String(err.message)));
+    throw badRequest(known ? `That is not a legal chess position (${known[1]}).` : 'That is not a legal chess position.');
   }
   if (chess.board().flat().filter(Boolean).length > 32) throw badRequest('That is not a legal chess position (more than 32 pieces).');
   // The side that has just moved cannot be in check: that position never arises.
   const turn = chess.turn();
   const [king] = chess.findPiece({ type: 'k', color: turn === 'w' ? 'b' : 'w' });
   if (chess.isAttacked(king, turn)) throw badRequest('That is not a legal chess position (the side not to move is in check).');
-  return chess.fen();
+  return chess;
+}
+
+/**
+ * The position in a form Stockfish can search safely, or a 400 error.
+ * @param {unknown} fen
+ * @returns {string}
+ */
+function checkFen(fen) {
+  return parsePosition(fen).fen();
 }
 
 /** A whole number from min to max, or the fallback when it is not a number. */
@@ -186,8 +213,8 @@ function checkJob(job) {
   const moves = [...(job.moves || []), ...(job.searchmoves || [])];
   if (moves.some((m) => !UCI_MOVE.test(m))) throw badRequest('Moves must be in UCI form, like e2e4.');
   if (job.go !== undefined && !GO.test(job.go)) throw badRequest(`Unknown search "${job.go}".`);
-  for (const value of Object.values(job.options || {})) {
-    if (!/^[\w .-]*$/.test(String(value))) throw badRequest('Engine options must be plain values.');
+  for (const [name, value] of Object.entries(job.options || {})) {
+    if (!/^[\w ]+$/.test(name) || !/^[\w .-]*$/.test(String(value))) throw badRequest('Engine options must be plain names and values.');
   }
   return { ...job, fen: checkFen(job.fen) };
 }
@@ -573,12 +600,11 @@ class EngineManager {
    */
   async evaluate({ fen, moves, depth }) {
     const d = clampInt(depth, 1, MAX_DEPTH, 14);
+    const legal = new Set(parsePosition(fen).moves({ verbose: true }).map((m) => m.from + m.to + (m.promotion || '')));
+    const unique = [...new Set(Array.isArray(moves) ? moves.map(String) : [])];
+    const searched = unique.filter((m) => legal.has(m));
     const bestRun = this.tasks.submit({ fen, go: `depth ${d}`, options: { MultiPV: 1 } });
     const best = await bestRun.promise;
-    const unique = [...new Set(Array.isArray(moves) ? moves.map(String) : [])];
-    const position = new Chess(checkFen(fen));
-    const legal = new Set(position.moves({ verbose: true }).map((m) => m.from + m.to + (m.promotion || '')));
-    const searched = unique.filter((m) => legal.has(m));
     let lines = [];
     if (searched.length) {
       const run = this.tasks.submit({
