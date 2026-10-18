@@ -54,22 +54,24 @@ export const test = base.extend({
 
 export { expect };
 
-/** Click-move a piece on the board, e.g. playMove(page, 'e2e4'). */
+/**
+ * Click-move a piece on the board, e.g. playMove(page, 'e2e4'). The board is measured
+ * right before each click, because the page can shift it (a scrollbar appearing when
+ * Stockfish's verdict lengthens the panel).
+ */
 export async function playMove(page, uci, orientation = 'white') {
   const board = page.locator('cg-board').first();
-  const box = await board.boundingBox();
-  const size = box.width / 8;
-  const point = (square) => {
+  const clickSquare = async (square) => {
+    const { width } = await board.boundingBox();
+    const size = width / 8;
     const file = square.charCodeAt(0) - 97;
     const rank = Number(square[1]);
     const col = orientation === 'white' ? file : 7 - file;
     const row = orientation === 'white' ? 8 - rank : rank - 1;
-    return { x: box.x + (col + 0.5) * size, y: box.y + (row + 0.5) * size };
+    await board.click({ position: { x: (col + 0.5) * size, y: (row + 0.5) * size } });
   };
-  const from = point(uci.slice(0, 2));
-  const to = point(uci.slice(2, 4));
-  await page.mouse.click(from.x, from.y);
-  await page.mouse.click(to.x, to.y);
+  await clickSquare(uci.slice(0, 2));
+  await clickSquare(uci.slice(2, 4));
 }
 
 /** In the trainer, play your moves of a line (UCI), waiting for each prompt. */

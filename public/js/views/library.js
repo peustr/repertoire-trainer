@@ -2,7 +2,8 @@
 
 import { h, clear, levelBar, plural, toast, sound, fig, sanLabel, action } from '../ui.js';
 import { state, loadReps, modelFor, saveCards } from '../store.js';
-import { repertoireStats, describeWait, isDue, promote, demote } from '../srs.js';
+import { repertoireStats, describeWait, isDue } from '../srs.js';
+import { gradeCard } from '../session.js';
 import { createBoard, isPromotion, choosePromotion, applyUci } from '../board.js';
 import { api } from '../api.js';
 import { positionKey } from '../pgn.js';
@@ -171,7 +172,7 @@ function renderQuickCard(container, entries) {
       let note = 'Right.';
       if (uci !== card.uci) note = 'Right — that is one of your repertoire moves here.';
       if (current.due && uci === card.uci) {
-        const next = promote(current.state, now);
+        const next = gradeCard(current.state, true, state.settings, now);
         await saveCards(rep.id, { [card.key]: next }, { correct: 1 });
         note += ` Next review in ${describeWait(next.due - now)}.`;
       }
@@ -182,7 +183,7 @@ function renderQuickCard(container, entries) {
       sound.wrong();
       let note = `Your repertoire move is ${fig(card.san)}.`;
       if (current.due) {
-        const next = demote(current.state, now, state.settings.mistakePolicy);
+        const next = gradeCard(current.state, false, state.settings, now);
         await saveCards(rep.id, { [card.key]: next }, { wrong: 1 });
         note += ' It will come back in your next review.';
       }
