@@ -95,7 +95,8 @@ export function lineIsMine(model, node) {
 
 /**
  * The moves (UCI) from the chapter start to this node. Link to a node with these
- * (#/explore/<id>?moves=...), not with node.id: ids depend on what else was parsed.
+ * (#/explore/<id>?moves=...), not with node.id: ids number the nodes of one parse, so an
+ * edit to the PGN shifts them.
  */
 export function movesTo(node) {
   const moves = [];

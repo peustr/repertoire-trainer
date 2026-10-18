@@ -98,16 +98,17 @@ test('transpositions share cards', () => {
 
 test('scheduler: promote, demote, due lines', () => {
   const now = 1_000_000_000_000;
-  let s = srs.learned(now);
+  const sched = srs.DEFAULT_SCHEDULE;
+  let s = srs.learned(sched, now);
   assert.equal(s.level, 1);
   assert.equal(s.due, now + 4 * 3600e3);
-  s = srs.promote(s, s.due);
+  s = srs.promote(sched, s, s.due);
   assert.equal(s.level, 2);
-  s = srs.promote(srs.promote(s, now), now);
+  s = srs.promote(sched, srs.promote(sched, s, now), now);
   assert.equal(s.level, 4);
-  assert.equal(srs.demote(s, now).level, 1);
-  assert.equal(srs.demote(s, now, 'stepback').level, 2);
-  for (let i = 0; i < 20; i++) s = srs.promote(s, now);
+  assert.equal(srs.demote(sched, s, now).level, 1);
+  assert.equal(srs.demote(sched, s, now, 'stepback').level, 2);
+  for (let i = 0; i < 20; i++) s = srs.promote(sched, s, now);
   assert.equal(s.level, srs.MAX_LEVEL);
 });
 
@@ -202,16 +203,29 @@ test('settings schema: defaults, clamping and bad values', () => {
   assert.ok(schema.ENGINE_KEYS.includes('analysisHash'));
 });
 
-test('scheduler follows custom intervals and step-back size', (t) => {
-  srs.setIntervals([1, 2, 3, 4, 5, 6, 7, 8]);
-  srs.setStepback(3);
-  t.after(() => { // the scheduler's settings are module-wide: put the defaults back
-    srs.setIntervals([4, 24, 72, 168, 336, 720, 2160, 4320]);
-    srs.setStepback(2);
-  });
+test('scheduler follows custom intervals and step-back size', () => {
+  const sched = { intervals: [1, 2, 3, 4, 5, 6, 7, 8], stepbackLevels: 3 };
   const now = 0;
-  const s = srs.promote({ level: 4, due: 0 }, now);
-  assert.equal(s.due, 5 * 3600e3);
-  assert.equal(srs.demote({ level: 6, due: 0 }, now, 'stepback').level, 3);
+  assert.equal(srs.promote(sched, { level: 4, due: 0 }, now).due, 5 * 3600e3);
+  assert.equal(srs.demote(sched, { level: 6, due: 0 }, now, 'stepback').level, 3);
+  // Unusable parts fall back to the defaults.
+  assert.equal(srs.intervalFor({ intervals: [1, 2, 3] }, 1), 4 * 3600e3);
+  assert.equal(srs.intervalFor({ intervals: [0, 2, 3, 4, 5, 6, 7, 8] }, 2), 24 * 3600e3);
+  assert.equal(srs.demote({ stepbackLevels: 99 }, { level: 8, due: 0 }, now, 'stepback').level, 1, 'at most seven levels');
+  assert.equal(srs.demote({}, { level: 6, due: 0 }, now, 'stepback').level, 4);
 });
 
+
+test('node ids number one parse: the same PGN gives the same ids, unique across its chapters', () => {
+  const pgn = '[Event "A"]\n\n1. e4 e5 (1... c5 2. Nf3) 2. Nf3 *\n\n[Event "B"]\n\n1. d4 d5 *';
+  const ids = (games) => games.flatMap((g) => {
+    const out = [];
+    const walk = (n) => { out.push(n.id); n.children.forEach(walk); };
+    walk(g.root);
+    return out;
+  });
+  const first = ids(parsePgn(pgn));
+  parsePgn('1. c4 e5 2. Nc3 *'); // another repertoire parsed in between
+  assert.deepEqual(ids(parsePgn(pgn)), first);
+  assert.equal(new Set(first).size, first.length, 'no two nodes share an id');
+});

@@ -14,7 +14,7 @@ import { WebSocketServer } from 'ws';
 import * as store from './store.js';
 import * as schema from './settings-schema.js';
 import { EngineManager } from './engine.js';
-import * as lichess from './lichess.js';
+import { createLichessClient } from './lichess.js';
 import { searchMistakes } from './puzzles.js';
 import { buildRepertoire } from './public/js/repertoire.js'; // shared with the browser
 
@@ -22,6 +22,12 @@ const PORT = Number(process.env.PORT) || 3210;
 const HOST = process.env.HOST || '127.0.0.1'; // only reachable from this computer
 
 const engines = new EngineManager(() => store.getSettings());
+// The app's one Lichess client: one request queue for everything that asks Lichess.
+const lichess = createLichessClient({
+  dataDir: store.DATA_DIR,
+  baseUrl: process.env.LICHESS_URL || undefined,
+  explorerUrl: process.env.LICHESS_EXPLORER_URL || undefined,
+});
 
 const app = express();
 
@@ -265,6 +271,7 @@ wss.on('connection', (ws) => {
           fen: msg.fen,
           prefix: msg.prefix,
           engines,
+          lichess,
           options: schema.finderOptions(store.getSettings()),
           cancelled: () => stopped || ws.readyState !== ws.OPEN,
           onEvent: (ev) => {

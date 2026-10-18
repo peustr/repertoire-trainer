@@ -14,7 +14,7 @@
 
 import crypto from 'node:crypto';
 import { Chess } from 'chess.js';
-import * as lichess from './lichess.js';
+import { cleanSpeeds, cleanRatings } from './lichess.js';
 import { defaults, finderOptions } from './settings-schema.js';
 import { positionKey, scoreToCp } from './public/js/constants.js';
 
@@ -167,13 +167,16 @@ function puzzleId(fen, uci) {
  *   fen:     position to search from
  *   prefix:  { startFen, moves[] } — how that position is reached from the chapter start
  *   options: overrides for DEFAULTS (SearchOptions)
+ *   engines: the engine manager (evaluate, lines)
+ *   lichess: the app's Lichess client, for explorer lookups
  *   onEvent: progress callback
  *   cancelled(): returns true to stop early
  *
  * @param {{ rep: any, model: any, fen: string, prefix?: { startFen?: string, moves?: string[] },
- *   options?: Partial<SearchOptions>, engines: any, onEvent?: (event: any) => void, cancelled?: () => boolean }} args
+ *   options?: Partial<SearchOptions>, engines: any, lichess: import('./lichess.js').LichessClient,
+ *   onEvent?: (event: any) => void, cancelled?: () => boolean }} args
  */
-async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, onEvent = () => {}, cancelled = () => false }) {
+async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, lichess, onEvent = () => {}, cancelled = () => false }) {
   const opts = { ...DEFAULTS, ...options };
   const side = rep.color === 'black' ? 'b' : 'w';
   const pov = side === 'w' ? 1 : -1;
@@ -307,7 +310,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
             gain: Math.round(gain),
           },
           reach: Math.round(node.reach * c.share * 10000) / 10000,
-          filters: { speeds: lichess.cleanSpeeds(opts.speeds), ratings: lichess.cleanRatings(opts.ratings) },
+          filters: { speeds: cleanSpeeds(opts.speeds), ratings: cleanRatings(opts.ratings) },
           ...built,
         };
         found.push(puzzle);

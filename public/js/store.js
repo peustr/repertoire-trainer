@@ -4,7 +4,6 @@ import { api } from './api.js';
 import { buildRepertoire, hash } from './repertoire.js';
 import { setFigurines, setSounds, toast } from './ui.js';
 import { createOutbox, applyCards } from './outbox.js';
-import { setIntervals, setStepback } from './srs.js';
 import { setBoardPrefs } from './board.js';
 
 export const state = {
@@ -33,8 +32,6 @@ export function applySettings() {
   const s = state.settings;
   setFigurines(s.figurines);
   setSounds(s.sounds, s.volume);
-  setIntervals(s.srsIntervals);
-  setStepback(s.stepbackLevels);
   setBoardPrefs({ coordinates: s.coordinates, showDests: s.showDests, animation: s.animation });
   applyTheme();
 }

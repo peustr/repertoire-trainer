@@ -14,6 +14,15 @@
 
 import { lineStatus, learned, promote, demote, isDue } from './srs.js';
 
+/**
+ * The memory schedule in the user's settings.
+ * @param {{ srsIntervals?: number[], stepbackLevels?: number }} settings
+ * @returns {import('./srs.js').Schedule}
+ */
+export function scheduleOf({ srsIntervals, stepbackLevels }) {
+  return { intervals: srsIntervals, stepbackLevels };
+}
+
 /** Which card keys a pass asks you to play, and which were due when it began. */
 export function passPlan(line, cards, phase, { quizAllMoves = false } = {}, now = Date.now()) {
   const st = lineStatus(line, cards, now);
@@ -68,7 +77,9 @@ export function judgeWrongMove({ inRepertoire, phase }, { altPolicy = 'retry' } 
  *   outcomes: [{ key, result, change, next }] in line order, where change is
  *             'learned' | 'promoted' | 'demoted' | 'not-due' | 'hint' | 'practice'
  */
-export function gradePass({ line, phase, quiz, dueAtStart, results, cards, now = Date.now() }, { mistakePolicy = 'reset' } = {}) {
+export function gradePass({ line, phase, quiz, dueAtStart, results, cards, now = Date.now() }, settings = {}) {
+  const { mistakePolicy = 'reset' } = settings;
+  const schedule = scheduleOf(settings);
   const graded = new Map(results);
   if (phase === 'guided') {
     for (const key of quiz) if (graded.get(key) !== 'wrong') graded.set(key, 'right');
@@ -88,10 +99,10 @@ export function gradePass({ line, phase, quiz, dueAtStart, results, cards, now =
     if (phase === 'practice') {
       if (result === 'right' || result === 'wrong' || result === 'hint') change = 'practice';
     } else if (phase === 'recall') {
-      if (quiz.has(key)) { next = learned(now, result === 'right'); change = 'learned'; }
+      if (quiz.has(key)) { next = learned(schedule, now, result === 'right'); change = 'learned'; }
     } else if (phase === 'review') {
-      if (result === 'wrong' && prev) { next = demote(prev, now, mistakePolicy); change = 'demoted'; }
-      else if (result === 'right' && prev && dueAtStart.has(key)) { next = promote(prev, now); change = 'promoted'; }
+      if (result === 'wrong' && prev) { next = demote(schedule, prev, now, mistakePolicy); change = 'demoted'; }
+      else if (result === 'right' && prev && dueAtStart.has(key)) { next = promote(schedule, prev, now); change = 'promoted'; }
       else if (result === 'right') change = 'not-due';
       else if (result === 'hint') change = 'hint';
     }
@@ -108,9 +119,11 @@ export function gradePass({ line, phase, quiz, dueAtStart, results, cards, now =
  *   missed:   demoted, due or not
  *   solved:   promoted if due, otherwise unchanged
  */
-export function gradeCard(prev, success, { mistakePolicy = 'reset' } = {}, now = Date.now()) {
-  if (!prev) return learned(now, success);
-  if (!success) return demote(prev, now, mistakePolicy);
-  if (isDue(prev, now)) return promote(prev, now);
+export function gradeCard(prev, success, settings = {}, now = Date.now()) {
+  const { mistakePolicy = 'reset' } = settings;
+  const schedule = scheduleOf(settings);
+  if (!prev) return learned(schedule, now, success);
+  if (!success) return demote(schedule, prev, now, mistakePolicy);
+  if (isDue(prev, now)) return promote(schedule, prev, now);
   return prev;
 }
