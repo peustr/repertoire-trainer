@@ -68,6 +68,35 @@ test('explorer answers: castling as e1g1, totals added up, then served from the 
   assert.equal((await mock.stats()).explorerCalls, before + 1, 'asked Lichess once');
 });
 
+test('the explorer cache drops old answers and stays under its size cap', async () => {
+  const dir = path.join(dataDir, 'cache', 'explorer');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of fs.readdirSync(dir)) fs.rmSync(path.join(dir, name));
+  const day = 24 * 3600 * 1000;
+  const put = (name, daysOld) => fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify({ at: Date.now() - daysOld * day, url: name, data: {} }));
+  put('old', 40);
+  put('fresh1', 1);
+  put('fresh2', 2);
+  put('fresh3', 3);
+  fs.writeFileSync(path.join(dir, 'damaged.json'), '{"at": 1');
+  fs.writeFileSync(path.join(dir, 'README.txt'), 'not ours');
+
+  const first = await lichess.pruneCache(30);
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['README.txt', 'fresh1.json', 'fresh2.json', 'fresh3.json']);
+  assert.equal(first.removed, 2, 'the 40-day-old answer and the damaged file');
+
+  const second = await lichess.pruneCache(30, { maxFiles: 2 });
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['README.txt', 'fresh1.json', 'fresh2.json'], 'the newest are kept');
+  assert.equal(second.removed, 1);
+
+  assert.deepEqual(await lichess.pruneCache(30), { removed: 0, kept: 2 });
+});
+
+test('pruning a cache that does not exist yet is not an error', async () => {
+  fs.rmSync(path.join(dataDir, 'cache'), { recursive: true, force: true });
+  assert.deepEqual(await lichess.pruneCache(30), { removed: 0, kept: 0 });
+});
+
 test('Lichess is asked one question at a time', async () => {
   const before = await mock.stats();
   await Promise.all([AFTER_E4, AFTER_D4, AFTER_C4].map((fen) => lichess.explorer({ fen })));

@@ -237,6 +237,25 @@ function addPuzzles(id, puzzles) {
   return { rep, added };
 }
 
+/**
+ * Append a puzzle's line to the repertoire as a new PGN chapter and mark the puzzle as
+ * added, in one save. A puzzle already added is left alone, so a repeat adds nothing.
+ */
+function addPuzzleLine(id, pid, chapter) {
+  const rep = getRepertoire(id);
+  if (!rep) return null;
+  const puzzle = rep.puzzles && Object.hasOwn(rep.puzzles, pid) ? rep.puzzles[pid] : null;
+  if (!puzzle) throw Object.assign(new Error('That puzzle is no longer in this repertoire.'), { status: 404 });
+  if (puzzle.addedAt) return rep;
+  if (typeof chapter !== 'string' || !chapter.trim()) throw Object.assign(new Error('The line to add is missing.'), { status: 400 });
+  const now = new Date().toISOString();
+  rep.pgn = `${(rep.pgn || '').trimEnd()}\n\n${chapter}`;
+  puzzle.addedAt = now;
+  rep.updatedAt = now;
+  writeJsonAtomic(repFile(id), rep);
+  return rep;
+}
+
 /** Remember popular replies the repertoire does not cover (deduplicated by position). */
 function addGaps(id, gaps) {
   const rep = getRepertoire(id);
@@ -307,6 +326,7 @@ module.exports = {
   patchProgress,
   resetProgress,
   addPuzzles,
+  addPuzzleLine,
   deletePuzzle,
   addGaps,
   deleteGap,

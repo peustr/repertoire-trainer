@@ -119,6 +119,33 @@ test('a save retried after a lost reply is applied once', () => {
   assert.equal(store.getRepertoire(rep.id).history[0].correct, 6, 'a different save still counts');
 });
 
+test("a puzzle's line is added to the repertoire in one save, and only once", (t) => {
+  const rep = store.createRepertoire({ name: 'Puzzled', color: 'white', pgn: PGN });
+  store.addPuzzles(rep.id, [{ id: 'pz1', fen: 'x' }]);
+  const chapter = '[Event "Punishing 1...f6"]\n\n1. e4 f6 2. Qh5+ *\n';
+  const renames = t.mock.method(fs, 'renameSync');
+  const first = store.addPuzzleLine(rep.id, 'pz1', chapter);
+  assert.equal(renames.mock.callCount(), 1, 'the chapter and the mark go in the same write');
+  renames.mock.restore();
+  assert.equal(first.pgn, `${PGN}\n\n${chapter}`);
+  assert.ok(first.puzzles.pz1.addedAt);
+
+  const again = store.addPuzzleLine(rep.id, 'pz1', chapter); // a double click, or a retry
+  assert.equal(again.pgn.split('Punishing').length, 2, 'the chapter is there once');
+  assert.equal(again.puzzles.pz1.addedAt, first.puzzles.pz1.addedAt);
+  assert.deepEqual(store.getRepertoire(rep.id), again);
+});
+
+test('adding the line of a missing puzzle, or without a chapter, is refused', () => {
+  const rep = store.createRepertoire({ name: 'Refused', color: 'white', pgn: PGN });
+  store.addPuzzles(rep.id, [{ id: 'pz1', fen: 'x' }]);
+  assert.throws(() => store.addPuzzleLine(rep.id, 'gone', '1. e4 *'), (err) => err.status === 404);
+  assert.throws(() => store.addPuzzleLine(rep.id, '__proto__', '1. e4 *'), (err) => err.status === 404);
+  assert.throws(() => store.addPuzzleLine(rep.id, 'pz1', '  '), (err) => err.status === 400);
+  assert.equal(store.addPuzzleLine('no-such-rep', 'pz1', '1. e4 *'), null);
+  assert.equal(store.getRepertoire(rep.id).pgn, PGN);
+});
+
 test('temp files left by interrupted saves are swept', () => {
   fs.mkdirSync(REP_DIR, { recursive: true });
   const stale = [path.join(REP_DIR, 'x-1a2b3c.json.4242.1700000000000.tmp'), path.join(dataDir, 'settings.json.4242.1700000000000.tmp')];
