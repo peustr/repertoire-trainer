@@ -7,6 +7,8 @@
 //   ok     (default) handshakes and answers searches with --move (+0.30)
 //   mute   never answers anything, like an engine that hangs while starting
 //   hang   handshakes, then ignores "go" and "stop", like a stuck search
+//   refuse handshakes, then refuses the first "position" the way Stockfish refuses
+//          one with more than 32 pieces, and answers nothing after that
 //
 // Flags for "ok":
 //   --delay=ms        answer a search after this long (default at once)
@@ -48,6 +50,7 @@ function go(line) {
 }
 
 let buffer = '';
+let refused = false;
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => {
   buffer += chunk;
@@ -56,10 +59,14 @@ process.stdin.on('data', (chunk) => {
     const line = buffer.slice(0, idx).trim();
     buffer = buffer.slice(idx + 1);
     if (line === 'quit') process.exit(0);
-    if (mode === 'mute') continue;
+    if (mode === 'mute' || refused) continue;
     if (line === 'uci') setTimeout(() => say('id name FakeFish\nuciok'), startDelay);
     else if (line === 'isready') say('readyok');
     else if (mode === 'hang') continue;
+    else if (mode === 'refuse' && line.startsWith('position')) {
+      refused = true;
+      say(`info string CRITICAL ERROR: Command \`${line}\` failed. Reason: Invalid FEN. More than 32 pieces on the board.`);
+    }
     else if (line.startsWith('go')) go(line);
     else if (line === 'stop') finish(stopMove);
   }

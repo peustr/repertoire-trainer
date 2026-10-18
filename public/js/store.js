@@ -3,7 +3,7 @@
 import { api } from './api.js';
 import { buildRepertoire, hash } from './repertoire.js';
 import { setFigurines, setSounds, toast } from './ui.js';
-import { createOutbox, applyCards } from './outbox.js';
+import { createOutbox, applyCards, webStorage } from './outbox.js';
 import { setBoardPrefs } from './board.js';
 
 export const state = {
@@ -95,23 +95,28 @@ function today() {
 // has them, so a server restart, a sleeping laptop or a locked file loses nothing.
 
 const OUTBOX_KEY = 'repertoire-trainer.unsaved-progress';
-let outboxMemory = []; // used when localStorage is unavailable (private window, blocked storage)
+const KEEP_TAB_OPEN = 'Your progress could not be saved just now, and this browser will not store it either. Keep this tab open: it will be saved as soon as the trainer answers again.';
+
+let saveFailing = false; // the server is not taking saves just now
+const outboxStorage = webStorage(() => localStorage, OUTBOX_KEY, {
+  // localStorage is full or blocked, so only this tab holds those saves: say so if the
+  // server is not taking them either.
+  onUnstored: () => { if (saveFailing) toast(KEEP_TAB_OPEN, 'bad'); },
+});
 
 const outbox = createOutbox({
-  storage: {
-    get() {
-      try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch (err) { return outboxMemory; }
-    },
-    set(entries) {
-      outboxMemory = entries;
-      try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(entries)); } catch (err) { /* kept in memory */ }
-    },
-  },
+  storage: outboxStorage,
   send: (e) => api.progress(e.repId, { cards: e.cards, tally: e.tally, saveId: e.saveId }),
   onChange({ error, recovered, dropped }) {
-    if (dropped) toast(`Some progress could not be saved: ${error.message}`, 'bad');
-    else if (error) toast('Your progress could not be saved just now. It is kept in this browser and will be saved as soon as the trainer answers again.', 'bad');
-    else if (recovered) toast('Your progress is saved.');
+    if (dropped) {
+      toast(`Some progress could not be saved: ${error.message}`, 'bad');
+    } else if (error) {
+      saveFailing = true;
+      toast(outboxStorage.unstored() ? KEEP_TAB_OPEN : 'Your progress could not be saved just now. It is kept in this browser and will be saved as soon as the trainer answers again.', 'bad');
+    } else if (recovered) {
+      saveFailing = false;
+      toast('Your progress is saved.');
+    }
   },
 });
 

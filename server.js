@@ -13,7 +13,7 @@ import { createRequire } from 'node:module';
 import { WebSocketServer } from 'ws';
 import * as store from './store.js';
 import * as schema from './settings-schema.js';
-import { EngineManager } from './engine.js';
+import { EngineManager, checkFen } from './engine.js';
 import { createLichessClient } from './lichess.js';
 import { searchMistakes } from './puzzles.js';
 import { buildRepertoire } from './public/js/repertoire.js'; // shared with the browser
@@ -258,12 +258,13 @@ wss.on('connection', (ws) => {
       } else if (msg.type === REQUEST.PUZZLE_SEARCH) {
         const rep = store.getRepertoire(msg.repId);
         if (!rep) throw Object.assign(new Error('Repertoire not found'), { status: 404 });
+        const fen = checkFen(msg.fen);
         let stopped = false;
         runs.set(id, { kind: 'search', cancel: () => { stopped = true; } });
         const result = await searchMistakes({
           rep,
           model: buildRepertoire(rep),
-          fen: msg.fen,
+          fen,
           prefix: msg.prefix,
           engines,
           lichess,

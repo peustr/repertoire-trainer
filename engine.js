@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import stockfish from 'stockfish';
+import { Chess } from 'chess.js';
 import { WASM_HASH_MAX } from './settings-schema.js';
 
 const ENGINE_DIR = path.join(import.meta.dirname, 'engine');
@@ -140,6 +141,85 @@ function toWhitePov(score, fen) {
 }
 
 // ---------------------------------------------------------------------------
+// Checking what reaches the engine
+// ---------------------------------------------------------------------------
+//
+// Searches come from the browser. Stockfish trusts what it is told: a position with
+// no king makes it hang until the watchdog replaces it, holding up every job behind
+// it, and a line break inside any value would pass a command of its own. A position it
+// does check (more than 32 pieces) it refuses and then stops answering altogether, so
+// those are refused here too, and UciEngine replaces an engine that refuses anyway.
+
+const badRequest = (message) => Object.assign(new Error(message), { status: 400 });
+const UCI_MOVE = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
+const GO = /^(depth \d+|movetime \d+|infinite)$/;
+const MAX_DEPTH = 50; // past every setting (the highest is 40); deeper would run for hours
+
+/** What chess.js finds wrong with a FEN, in words a player can act on. @type {Array<[RegExp, string]>} */
+const FEN_PROBLEMS = [
+  [/six space-delimited fields/, 'a FEN has six parts separated by spaces'],
+  [/move number/, 'the move number must be 1 or more'],
+  [/half move counter/, 'the half-move count must be 0 or more'],
+  [/en-passant/, 'the en passant square is wrong'],
+  [/castling/, 'the castling rights are wrong'],
+  [/side-to-move/, 'the side to move must be w or b'],
+  [/8 '\/'-delimited rows/, 'the board needs 8 ranks separated by /'],
+  [/piece data is invalid/, 'one of the ranks is not written correctly'],
+  [/missing white king/, 'White has no king'],
+  [/missing black king/, 'Black has no king'],
+  [/too many white kings/, 'White has more than one king'],
+  [/too many black kings/, 'Black has more than one king'],
+  [/pawns are on the edge rows/, 'there is a pawn on the first or last rank'],
+];
+
+/**
+ * The position as a chess.js game, or a 400 error when Stockfish could not search it safely.
+ * @param {unknown} fen
+ * @returns {Chess}
+ */
+function parsePosition(fen) {
+  let chess;
+  try {
+    chess = new Chess(String(fen || '').trim()); // a pasted FEN often ends in a space
+  } catch (err) {
+    const known = FEN_PROBLEMS.find(([pattern]) => pattern.test(String(err.message)));
+    throw badRequest(known ? `That is not a legal chess position (${known[1]}).` : 'That is not a legal chess position.');
+  }
+  if (chess.board().flat().filter(Boolean).length > 32) throw badRequest('That is not a legal chess position (more than 32 pieces).');
+  // The side that has just moved cannot be in check: that position never arises.
+  const turn = chess.turn();
+  const [king] = chess.findPiece({ type: 'k', color: turn === 'w' ? 'b' : 'w' });
+  if (chess.isAttacked(king, turn)) throw badRequest('That is not a legal chess position (the side not to move is in check).');
+  return chess;
+}
+
+/**
+ * The position in a form Stockfish can search safely, or a 400 error.
+ * @param {unknown} fen
+ * @returns {string}
+ */
+function checkFen(fen) {
+  return parsePosition(fen).fen();
+}
+
+/** A whole number from min to max, or the fallback when it is not a number. */
+function clampInt(value, min, max, fallback) {
+  const n = value === null || value === '' ? NaN : Math.round(Number(value));
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+}
+
+/** Refuse a job that could make the engine read more than one command per line. */
+function checkJob(job) {
+  const moves = [...(job.moves || []), ...(job.searchmoves || [])];
+  if (moves.some((m) => !UCI_MOVE.test(m))) throw badRequest('Moves must be in UCI form, like e2e4.');
+  if (job.go !== undefined && !GO.test(job.go)) throw badRequest(`Unknown search "${job.go}".`);
+  for (const [name, value] of Object.entries(job.options || {})) {
+    if (!/^[\w ]+$/.test(name) || !/^[\w .-]*$/.test(String(value))) throw badRequest('Engine options must be plain names and values.');
+  }
+  return { ...job, fen: checkFen(job.fen) };
+}
+
+// ---------------------------------------------------------------------------
 // One engine process with a job queue
 // ---------------------------------------------------------------------------
 
@@ -255,6 +335,13 @@ class UciEngine extends EventEmitter {
     }
     const job = this.current;
     if (!job) return;
+    if (line.startsWith('info string CRITICAL ERROR')) {
+      // Stockfish refused a command of this search ("... failed. Reason: ...") and now
+      // answers nothing at all, not even "stop": replace it now, not after the watchdog.
+      const reason = line.replace(/^.*?Reason:\s*/, '').replace(/\.$/, '');
+      this._replaceStuck(badRequest(`Stockfish could not search that position (${reason}).`));
+      return;
+    }
     if (line.startsWith('info ')) {
       const info = parseInfo(line);
       if (info && info.pv && info.score) {
@@ -321,6 +408,7 @@ class UciEngine extends EventEmitter {
     this.spec = null;
     this.restartPending = false; // the replacement starts with the current settings anyway
     try { proc.kill(); } catch (e) { /* already gone */ }
+    clearTimeout(job.watchdog);
     job.reject(err);
     this._next();
   }
@@ -357,13 +445,15 @@ class UciEngine extends EventEmitter {
   /**
    * Queue a search.
    * job: { fen, moves?, go: 'depth 18' | 'movetime 1000' | 'infinite', searchmoves?, options?, onInfo? }
-   * Returns { id, promise, cancel() }.
+   * Returns { id, promise, cancel() }. Throws a 400 error, before anything is queued, for
+   * an illegal position or a value that is not what UCI expects (see checkJob).
    */
   submit(job) {
+    const checked = checkJob(job);
     const id = ++jobCounter;
     let resolve, reject;
     const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
-    const full = { ...job, id, resolve, reject, lines: new Map(), cancelled: false };
+    const full = { ...checked, id, resolve, reject, lines: new Map(), cancelled: false };
     this.queue.push(full);
     this._next();
     return { id, promise, cancel: () => this.cancel(id) };
@@ -491,57 +581,73 @@ class EngineManager {
     this.analysis.start().catch((e) => console.warn('[engine]', e.message));
   }
 
-  /** Streaming multi-line analysis. */
-  analyse({ fen, multipv = 3, depth, movetime, infinite }, onInfo) {
-    const go = infinite ? 'infinite' : movetime ? `movetime ${movetime}` : `depth ${depth || 22}`;
-    return this.analysis.submit({ fen, go, options: { MultiPV: Math.max(1, Math.min(5, multipv)) }, onInfo });
+  /**
+   * Streaming multi-line analysis. The values come from the page: numbers are kept in
+   * range, and a bad position is refused (see checkJob).
+   * @param {{ fen: string, multipv?: unknown, depth?: unknown, movetime?: unknown, infinite?: unknown }} request
+   * @param {(snapshot: any) => void} [onInfo]
+   */
+  analyse({ fen, multipv, depth, movetime, infinite }, onInfo) {
+    const go = infinite ? 'infinite' : movetime ? `movetime ${clampInt(movetime, 50, 600000, 1000)}` : `depth ${clampInt(depth, 1, MAX_DEPTH, 22)}`;
+    return this.analysis.submit({ fen, go, options: { MultiPV: clampInt(multipv, 1, 5, 3) }, onInfo });
   }
 
   /**
    * Score specific moves in a position, plus the engine's own best move.
    * Returns { best: {move, score, pv}, moves: [{move, score, pv}] } with White-POV scores.
+   * A move that is not legal there is not searched and comes back with a null score.
+   * @param {{ fen: string, moves?: unknown, depth?: unknown }} request
    */
-  async evaluate({ fen, moves, depth = 14 }) {
-    const bestRun = this.tasks.submit({ fen, go: `depth ${depth}`, options: { MultiPV: 1 } });
+  async evaluate({ fen, moves, depth }) {
+    const d = clampInt(depth, 1, MAX_DEPTH, 14);
+    const legal = new Set(parsePosition(fen).moves({ verbose: true }).map((m) => m.from + m.to + (m.promotion || '')));
+    const unique = [...new Set(Array.isArray(moves) ? moves.map(String) : [])];
+    const searched = unique.filter((m) => legal.has(m));
+    const bestRun = this.tasks.submit({ fen, go: `depth ${d}`, options: { MultiPV: 1 } });
     const best = await bestRun.promise;
-    const unique = [...new Set(moves || [])];
-    let scored = [];
-    if (unique.length) {
+    let lines = [];
+    if (searched.length) {
       const run = this.tasks.submit({
         fen,
-        go: `depth ${depth}`,
-        searchmoves: unique,
-        options: { MultiPV: unique.length },
+        go: `depth ${d}`,
+        searchmoves: searched,
+        options: { MultiPV: searched.length },
       });
-      const res = await run.promise;
-      scored = unique.map((m) => {
-        const line = res.lines.find((l) => l.pv[0] === m);
-        return { move: m, score: line ? line.score : null, pv: line ? line.pv : [] };
-      });
+      lines = (await run.promise).lines;
     }
+    const scored = unique.map((m) => {
+      const line = lines.find((l) => l.pv[0] === m);
+      return { move: m, score: line ? line.score : null, pv: line ? line.pv : [] };
+    });
     const top = best.lines[0];
     return {
       fen,
-      depth,
+      depth: d,
       best: top ? { move: top.pv[0], score: top.score, pv: top.pv } : { move: best.bestmove, score: null, pv: [] },
       moves: scored,
     };
   }
 
-  /** A one-off MultiPV search on the task engine. Resolves to { lines, bestmove }. */
-  async lines({ fen, depth = 14, multipv = 2 }) {
-    const run = this.tasks.submit({ fen, go: `depth ${depth}`, options: { MultiPV: Math.max(1, Math.min(8, multipv)) } });
+  /**
+   * A one-off MultiPV search on the task engine. Resolves to { lines, bestmove }.
+   * @param {{ fen: string, depth?: unknown, multipv?: unknown }} request
+   */
+  async lines({ fen, depth, multipv }) {
+    const run = this.tasks.submit({ fen, go: `depth ${clampInt(depth, 1, MAX_DEPTH, 14)}`, options: { MultiPV: clampInt(multipv, 1, 8, 2) } });
     const res = await run.promise;
     return { lines: res.lines, bestmove: res.bestmove };
   }
 
-  /** Pick a move to play, optionally at a limited strength. */
-  async bestmove({ fen, elo, movetime = 800, newGame = false }) {
-    const limited = elo && elo < 3190;
-    const options = limited
-      ? { UCI_LimitStrength: 'true', UCI_Elo: Math.max(1320, Math.min(3190, Math.round(elo))) }
+  /**
+   * Pick a move to play, optionally at a limited strength.
+   * @param {{ fen: string, elo?: unknown, movetime?: unknown, newGame?: unknown }} request
+   */
+  async bestmove({ fen, elo, movetime, newGame = false }) {
+    const rating = elo ? clampInt(elo, 1320, 3190, 3190) : 3190; // no Elo: full strength
+    const options = rating < 3190
+      ? { UCI_LimitStrength: 'true', UCI_Elo: rating }
       : { UCI_LimitStrength: 'false' };
-    const run = this.tasks.submit({ fen, go: `movetime ${Math.max(50, Math.min(10000, movetime))}`, options, newGame });
+    const run = this.tasks.submit({ fen, go: `movetime ${clampInt(movetime, 50, 10000, 800)}`, options, newGame: newGame === true });
     const res = await run.promise;
     const top = res.lines[0];
     return { move: res.bestmove, score: top ? top.score : null };
@@ -557,4 +663,4 @@ class EngineManager {
   }
 }
 
-export { EngineManager, UciEngine, parseInfo, toWhitePov, findNativeEngine, engineSpec, isNetworkPath };
+export { EngineManager, UciEngine, checkFen, parseInfo, toWhitePov, findNativeEngine, engineSpec, isNetworkPath };
