@@ -20,9 +20,19 @@ const ENGINE_DIR = path.join(__dirname, 'engine');
 // Locating an engine
 // ---------------------------------------------------------------------------
 
+/**
+ * \\server\share\x.exe or //server/share/x: never run, and never even checked,
+ * because checking makes Windows connect to that server and offer the user's
+ * login. (\\?\C:\... and \\.\C:\... are local paths.)
+ */
+function isNetworkPath(p) {
+  return /^[\\/]{2}(?![?.][\\/][a-z]:)/i.test(String(p));
+}
+
 function findNativeEngine(customPath) {
   for (const candidate of [customPath, process.env.STOCKFISH_PATH]) {
-    if (candidate && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return path.resolve(candidate);
+    if (!candidate || isNetworkPath(candidate)) continue;
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return path.resolve(candidate);
   }
   if (!fs.existsSync(ENGINE_DIR)) return null;
   const isWin = process.platform === 'win32';
@@ -57,13 +67,15 @@ function engineSpec(role, cfg = {}) {
   const threads = Math.max(1, Math.min(cores, (role === 'analysis' ? cfg.analysisThreads : cfg.taskThreads) || 1));
   const hash = Math.max(16, (role === 'analysis' ? cfg.analysisHash : cfg.taskHash) || 64);
   const warnings = [];
+  const networkPath = !!cfg.enginePath && isNetworkPath(cfg.enginePath);
+  if (networkPath) warnings.push('Engines on a network share are not run. Copy the .exe to this computer and point at the copy.');
 
   if (build === 'auto' || build === 'native') {
     const native = findNativeEngine(cfg.enginePath);
     if (native) {
       return { kind: 'native', cmd: native, args: [], label: path.basename(native), options: { Threads: threads, Hash: hash }, warnings };
     }
-    if (build === 'native') warnings.push(cfg.enginePath ? `No engine found at ${cfg.enginePath}; using the built-in one.` : 'No stockfish .exe in the engine folder; using the built-in one.');
+    if (build === 'native' && !networkPath) warnings.push(cfg.enginePath ? `No engine found at ${cfg.enginePath}; using the built-in one.` : 'No stockfish .exe in the engine folder; using the built-in one.');
   }
   const flavour = build === 'builtin-lite' || role === 'tasks' ? 'lite' : 'full';
   const file = findBundledEngine(flavour) || findBundledEngine('lite-single');
@@ -132,13 +144,19 @@ class UciEngine extends EventEmitter {
   /**
    * options.specFor(role, config): how to launch the engine (tests pass a fake one).
    * options.startTimeout: ms to wait for the engine's uciok/readyok.
+   * options.stallTimeout: ms a search may stay silent before the engine is asked to stop.
+   * options.stopGrace: ms to wait for an answer to that stop before replacing the engine.
    */
-  constructor(role, getConfig = () => ({}), { specFor = engineSpec, startTimeout = 60000 } = {}) {
+  constructor(role, getConfig = () => ({}), { specFor = engineSpec, startTimeout = 60000, stallTimeout = 45000, stopGrace = 3000 } = {}) {
     super();
     this.role = role;
     this.getConfig = getConfig;
     this.specFor = specFor;
     this.startTimeout = startTimeout;
+    this.stallTimeout = stallTimeout;
+    this.stopGrace = stopGrace;
+    this.restartPending = false;
+    this.lastOutput = 0;
     this.proc = null;
     this.ready = null; // Promise resolved after uciok/readyok
     this.name = null;
@@ -186,6 +204,7 @@ class UciEngine extends EventEmitter {
       this.proc = null;
       this.ready = null;
       this.spec = null;
+      this.restartPending = false; // the next start uses the current settings anyway
       try { proc.kill(); } catch (err) { /* already gone */ }
     });
     return ready;
@@ -207,6 +226,7 @@ class UciEngine extends EventEmitter {
   }
 
   _onData(chunk) {
+    this.lastOutput = Date.now();
     this.buffer += chunk;
     let idx;
     while ((idx = this.buffer.indexOf('\n')) >= 0) {
@@ -253,9 +273,47 @@ class UciEngine extends EventEmitter {
       result.ponder = parts[3] || null;
       result.cancelled = job.cancelled;
       this.current = null;
+      clearTimeout(job.watchdog);
       job.resolve(result);
+      this._swapIfRestarting();
       this._next();
     }
+  }
+
+  /**
+   * Watch a running search. Stockfish prints progress at least every few seconds;
+   * if it goes quiet for stallTimeout, ask it to stop. A slow search then answers
+   * with its best move so far. A stuck engine does not, so it is replaced: only this
+   * search fails, and the queue carries on with a fresh engine.
+   */
+  _watch(job) {
+    this.lastOutput = Date.now();
+    const check = () => {
+      if (this.current !== job) return;
+      const quiet = Date.now() - this.lastOutput;
+      if (quiet < this.stallTimeout) {
+        job.watchdog = setTimeout(check, this.stallTimeout - quiet);
+        return;
+      }
+      this.send('stop');
+      job.watchdog = setTimeout(() => {
+        if (this.current === job) this._replaceStuck(new Error('Stockfish stopped responding, so it was restarted.'));
+      }, this.stopGrace);
+    };
+    job.watchdog = setTimeout(check, this.stallTimeout);
+  }
+
+  _replaceStuck(err) {
+    const proc = this.proc;
+    const job = this.current;
+    this.current = null;
+    this.proc = null;
+    this.ready = null;
+    this.spec = null;
+    this.restartPending = false; // the replacement starts with the current settings anyway
+    try { proc.kill(); } catch (e) { /* already gone */ }
+    job.reject(err);
+    this._next();
   }
 
   _snapshot(job) {
@@ -278,11 +336,12 @@ class UciEngine extends EventEmitter {
     if (!this.proc) return;
     this.proc = null;
     this.ready = null;
+    this.restartPending = false;
     for (const w of this.lineWaiters.splice(0)) { clearTimeout(w.timer); w.reject(err); }
     const pending = [this.current, ...this.queue].filter(Boolean);
     this.current = null;
     this.queue = [];
-    for (const job of pending) job.reject(err);
+    for (const job of pending) { clearTimeout(job.watchdog); job.reject(err); }
     this.emit('exit', err);
   }
 
@@ -326,6 +385,8 @@ class UciEngine extends EventEmitter {
       return;
     }
     this._starting = false;
+    // Settings changed while this engine was starting: start again with the new ones.
+    if (this._swapIfRestarting()) { this._next(); return; }
     if (this.current || !this.queue.length) return;
     const job = this.queue.shift();
     this.current = job;
@@ -337,6 +398,7 @@ class UciEngine extends EventEmitter {
     this.send(`position fen ${job.fen}${moves}`);
     const sm = job.searchmoves && job.searchmoves.length ? ` searchmoves ${job.searchmoves.join(' ')}` : '';
     this.send(`go ${job.go || 'depth 16'}${sm}`);
+    this._watch(job);
   }
 
   info() {
@@ -353,14 +415,30 @@ class UciEngine extends EventEmitter {
     };
   }
 
-  /** Stop the process; the next job starts a fresh one with the current settings. */
+  /**
+   * Pick up new settings without failing anything in progress: a running search
+   * finishes on the old process (an endless analysis is asked to stop), and queued
+   * searches wait for a fresh process started with the new settings.
+   */
   restart() {
+    this.restartPending = true;
+    if (this.current && /^infinite\b/.test(this.current.go || '')) this.send('stop');
+    if (!this._starting) this._swapIfRestarting();
+  }
+
+  /** If a restart is due and no search is running, retire the old process. */
+  _swapIfRestarting() {
+    if (!this.restartPending || this.current) return false;
+    this.restartPending = false;
     const proc = this.proc;
-    if (!proc) { this.ready = null; this.spec = null; return; }
-    this._onExit(new Error('Stockfish restarted with new settings'));
-    try { proc.stdin.write('quit\n'); } catch (err) { /* already closed */ }
-    setTimeout(() => { try { proc.kill(); } catch (err) { /* gone */ } }, 500);
+    this.proc = null;
+    this.ready = null;
     this.spec = null;
+    if (proc) {
+      try { proc.stdin.write('quit\n'); } catch (err) { /* already closed */ }
+      setTimeout(() => { try { proc.kill(); } catch (err) { /* gone */ } }, 500);
+    }
+    return true;
   }
 
   quit() {
@@ -459,4 +537,4 @@ class EngineManager {
   }
 }
 
-module.exports = { EngineManager, UciEngine, parseInfo, toWhitePov, findNativeEngine, engineSpec };
+module.exports = { EngineManager, UciEngine, parseInfo, toWhitePov, findNativeEngine, engineSpec, isNetworkPath };
