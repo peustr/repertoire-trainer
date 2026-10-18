@@ -158,12 +158,17 @@ public/
                      lichess, finder (search dialog), puzzles, settings
 samples/             Two sample repertoires
 test/run-tests.mjs   Parser, scheduler and puzzle checks (npm test)
+test/*.test.mjs      Storage, engine and server-security tests (npm test)
 test/smoke-server.mjs Boots the server and checks the API and engine (npm run test:smoke)
 test/mock-lichess.js Offline stand-in for the Lichess API
+test/helpers/, test/fixtures/  Test server launcher, fake Stockfish
 ```
 
 Settings live in `data/settings.json`, repertoires in `data/repertoires/*.json`.
-Back up or sync the `data` folder to keep your progress.
+Back up or sync the `data` folder to keep your progress. Each file keeps its
+previous version next to it as `.bak`. If a file is ever damaged (say, by a
+sync conflict), the trainer keeps the damaged copy as `.corrupt-<time>`, restores
+the previous version, and says so in its console window.
 
 ## Credits
 

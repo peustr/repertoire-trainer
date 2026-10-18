@@ -10,12 +10,13 @@ See `README.md` for the user-facing feature tour and a file-by-file project layo
 npm install            # or `npm ci` for a clean install from the lockfile
 npm start              # server on http://localhost:3210, opens the browser
 npm run serve          # same, without opening the browser
-npm test               # unit tests: PGN parser, cards/lines, scheduler, puzzles, settings schema
+npm test               # test/run-tests.mjs (parser, scheduler, puzzles, schema) + every test/*.test.mjs (node:test)
 npm run test:smoke     # boots the real server on a free port with a temp data dir, hits the API and Stockfish
 npm run mock-lichess   # fake Lichess on :9099 (set LICHESS_URL and LICHESS_EXPLORER_URL to use it)
+node --test test/store.test.mjs   # one node:test file
 ```
 
-Run both `npm test` and `npm run test:smoke` before finishing a change. CI (`.github/workflows/ci.yml`) runs them on Node 20/22/24 (Ubuntu) and Node 24 (Windows), plus a secrets scan and a check that nothing under `data/` is tracked.
+Run both `npm test` and `npm run test:smoke` before finishing a change. New tests go in `test/<area>.test.mjs` using `node:test`, which `npm test` picks up automatically. Shared helpers live in `test/helpers/`: `startServer()` boots the real server on a free port with a temp data dir. Fixtures live in `test/fixtures/`, including `fake-uci-engine.js`, a Stockfish stand-in for `UciEngine`'s `specFor` option. Bug fixes land with a test that fails without the fix. CI (`.github/workflows/ci.yml`) runs them on Node 20/22/24 (Ubuntu) and Node 24 (Windows), plus a secrets scan and a check that nothing under `data/` is tracked.
 
 There is no build step, bundler, TypeScript, or linter. What is in `public/` is exactly what the browser loads.
 
@@ -24,6 +25,7 @@ There is no build step, bundler, TypeScript, or linter. What is in `public/` is 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` / `HOST` | `3210` / `127.0.0.1` | Server bind. Keep it on localhost: the API has no auth. |
+| `ALLOWED_HOSTS` | none | Extra comma-separated host names the server answers to, besides `localhost`, `127.0.0.1`, `[::1]` and `HOST` |
 | `TRAINER_DATA_DIR` | `./data` | Where repertoires, settings, the Lichess token and the cache live |
 | `STOCKFISH_PATH` | none | Native Stockfish binary (otherwise `engine/stockfish*`, then the bundled WASM) |
 | `LICHESS_URL`, `LICHESS_EXPLORER_URL` | the real Lichess hosts | Point at `test/mock-lichess.js` for offline work |
@@ -40,6 +42,8 @@ There is no build step, bundler, TypeScript, or linter. What is in `public/` is 
 - **Card keys are stored user data.** A card is keyed by `positionKey(fen)|uci` (`repertoire.js` `cardKey`), and progress in `data/repertoires/*.json` is keyed the same way. Changing `positionKey`, `cardKey` or line hashing silently resets everyone's progress. Don't, unless a migration comes with it.
 - **Lichess etiquette is deliberate.** All Lichess calls go through the one-at-a-time queue in `lichess.js`, with a 61 s pause after a 429. Never fire parallel requests or bypass the cache.
 - **The Lichess token never reaches the browser.** It lives in `data/lichess.json`, and `lichess.status()` (what `/api/lichess/status` returns) deliberately leaves it out. Keep it out of any new response or log line.
+- **Other websites must not reach the server.** `refusal()` in `server.js` rejects requests whose `Host` is not a local name (DNS rebinding) and requests or WebSockets whose `Origin` is another site. Every route and the `/ws` socket pass through it. Don't add routes ahead of it or loosen it.
+- **Data files go through `store.js`.** `writeJsonAtomic` writes a temp file, keeps the previous version as `<file>.bak`, and retries the rename while a sync client or scanner holds the file. `readJson` never overwrites a damaged file: it keeps it as `<file>.corrupt-<time>` and restores the `.bak`. Don't read or write data files with `fs` directly.
 - **IDs are validated** (`/^[a-z0-9-]+$/` in `store.repFile`) before they touch the filesystem. Keep that check on any new route that builds a path.
 - API handlers use the `wrap`/`wrapAsync` helpers: return a value for JSON, `null` for 404, or throw an error with `.status`.
 - User-facing text is plain, friendly British English ("Practise", "analyse", "colour"). Write errors the user can act on ("Connect your Lichess account first."), not internal jargon.
@@ -48,4 +52,4 @@ There is no build step, bundler, TypeScript, or linter. What is in `public/` is 
 
 ## Never commit
 
-`data/` holds personal repertoires, progress, settings and **`data/lichess.json`, a live Lichess OAuth token**. It is gitignored, and CI fails if anything under it is tracked. Native engine binaries in `engine/` are also ignored; only `engine/README.txt` is tracked. When writing tests, point `TRAINER_DATA_DIR` at a temp dir (as `test/smoke-server.mjs` does) rather than using `./data`.
+`data/` holds personal repertoires, progress, settings and **`data/lichess.json`, a live Lichess OAuth token**. It is gitignored, and CI fails if anything under it is tracked. Native engine binaries in `engine/` are also ignored; only `engine/README.txt` is tracked. When writing tests, point `TRAINER_DATA_DIR` at a temp dir (`startServer()` and `test/store.test.mjs` do) rather than using `./data`.

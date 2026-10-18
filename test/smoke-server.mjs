@@ -1,35 +1,16 @@
 // End-to-end smoke test: boots the real server against a throwaway data
 // folder, checks the static files, the REST API and the Stockfish bridge.
 // Run with:  npm run test:smoke
-//
-// Never touches ./data or the network: TRAINER_DATA_DIR points at a temp
-// folder and the Lichess URLs point at a closed local port.
 
 import assert from 'node:assert/strict';
-import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { startServer } from './helpers/server.mjs';
 const require = createRequire(import.meta.url);
 const WebSocket = require('ws');
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-smoke-'));
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.once('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const { port } = srv.address();
-      srv.close(() => resolve(port));
-    });
-  });
-}
 
 function withTimeout(promise, ms, what) {
   let timer;
@@ -39,33 +20,10 @@ function withTimeout(promise, ms, what) {
   ]).finally(() => clearTimeout(timer));
 }
 
-const port = await freePort();
-const base = `http://127.0.0.1:${port}`;
-const server = spawn(process.execPath, ['server.js'], {
-  cwd: root,
-  env: {
-    ...process.env,
-    PORT: String(port),
-    HOST: '127.0.0.1',
-    TRAINER_DATA_DIR: dataDir,
-    LICHESS_URL: 'http://127.0.0.1:9',
-    LICHESS_EXPLORER_URL: 'http://127.0.0.1:9',
-  },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-let output = '';
-server.stdout.on('data', (d) => { output += d; });
-server.stderr.on('data', (d) => { output += d; });
-
-function stopServer() {
-  if (server.exitCode !== null) return;
-  // The server spawns Stockfish children; on Windows kill() would orphan them.
-  if (process.platform === 'win32') {
-    try { execFileSync('taskkill', ['/pid', String(server.pid), '/T', '/F'], { stdio: 'ignore' }); } catch (err) { /* already gone */ }
-  } else {
-    server.kill('SIGTERM');
-  }
-}
+let server = null;
+let base;
+let port;
+let dataDir;
 
 let passed = 0;
 async function test(name, fn) {
@@ -92,10 +50,8 @@ async function api(method, url, body) {
 }
 
 try {
-  await withTimeout(new Promise((resolve, reject) => {
-    server.stdout.on('data', () => { if (output.includes('is running')) resolve(); });
-    server.on('exit', (code) => reject(new Error(`server exited with code ${code}`)));
-  }), 30000, 'server start');
+  server = await startServer();
+  ({ base, port, dataDir } = server);
 
   await test('app shell and vendored packages are served', async () => {
     const page = await api('GET', '/');
@@ -169,9 +125,8 @@ try {
   console.error(`  FAIL ${err.message}`);
   process.exitCode = 1;
 } finally {
-  stopServer();
-  fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  if (server) server.stop();
 }
 
-if (process.exitCode) console.error(`\nServer output:\n${output}`);
+if (process.exitCode && server) console.error(`\nServer output:\n${server.output()}`);
 console.log(`\n${passed} passed${process.exitCode ? ', some failed' : ''}`);

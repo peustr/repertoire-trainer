@@ -59,6 +59,17 @@ test('illegal moves skip only their own variation', () => {
   assert.equal(g.root.children[0].children[0].children[0].san, 'Nf3');
 });
 
+test('an unclosed comment is reported, not silently swallowed', () => {
+  const [g] = parsePgn('1. e4 e5 2. Nf3 {a note with no end 2... Nc6 3. Bb5 a6 *');
+  assert.equal(g.errors.length, 1);
+  assert.match(g.errors[0], /after 1\.e4 1\.\.\.e5 2\.Nf3 is never closed/);
+  assert.equal(g.moves, 3, 'moves before the comment are kept');
+  const [start] = parsePgn('{ never closed 1. e4 e5 *');
+  assert.match(start.errors[0], /at the start is never closed/);
+  const [ok] = parsePgn('1. e4 {fine} e5 *');
+  assert.deepEqual(ok.errors, []);
+});
+
 test('arrow and square markup becomes shapes', () => {
   const c = parseComment('Look here [%cal Ge2e4,Rd7d5] [%csl Yf7] [%clk 0:01:00]');
   assert.equal(c.text, 'Look here');

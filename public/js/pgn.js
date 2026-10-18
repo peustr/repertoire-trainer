@@ -54,7 +54,7 @@ export function tokenize(text) {
     if (c === '{') {
       const end = text.indexOf('}', i + 1);
       const body = text.slice(i + 1, end < 0 ? n : end);
-      tokens.push({ t: 'comment', text: body });
+      tokens.push(end < 0 ? { t: 'comment', text: body, unclosed: true } : { t: 'comment', text: body });
       i = end < 0 ? n : end + 1;
       continue;
     }
@@ -246,6 +246,9 @@ function buildGame(tokens, headers, chapterIndex) {
         break;
       }
       case 'comment':
+        if (tok.unclosed) {
+          errors.push(`A comment ${cur.san ? `after ${pathSan(cur)}` : 'at the start'} is never closed with "}", so everything after it was read as part of the comment.`);
+        }
         if (dead) break;
         if (cur === root && stack.length === 0) appendComment(root, 'comment', tok.text);
         else if (atVariationStart) pendingPre = pendingPre ? `${pendingPre} ${tok.text}` : tok.text;
