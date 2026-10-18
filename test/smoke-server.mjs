@@ -121,6 +121,31 @@ try {
       ws.close();
     }
   });
+
+  await test('changing an engine setting mid-search does not fail the search', async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const answers = new Map();
+    const answer = (id) => new Promise((resolve, reject) => answers.set(id, { resolve, reject }));
+    ws.on('message', (raw) => {
+      const msg = JSON.parse(raw);
+      const waiting = answers.get(msg.id);
+      if (waiting && msg.type === 'result') waiting.resolve(msg);
+      if (waiting && msg.type === 'error') waiting.reject(new Error(msg.message));
+    });
+    try {
+      await withTimeout(new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); }), 10000, 'socket open');
+      const first = answer(2);
+      ws.send(JSON.stringify({ type: 'evaluate', id: 2, fen: START_FEN, moves: ['d2d4'], depth: 12 }));
+      const saved = await api('PUT', '/api/settings', { taskHash: 32 }); // restarts Stockfish
+      assert.equal(saved.status, 200);
+      assert.ok((await withTimeout(first, 90000, 'search during restart')).best.move, 'the running search still answered');
+      const second = answer(3);
+      ws.send(JSON.stringify({ type: 'evaluate', id: 3, fen: START_FEN, moves: ['e2e4'], depth: 8 }));
+      assert.ok((await withTimeout(second, 90000, 'search after restart')).best.move, 'the restarted engine answers');
+    } finally {
+      ws.close();
+    }
+  });
 } catch (err) {
   console.error(`  FAIL ${err.message}`);
   process.exitCode = 1;
