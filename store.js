@@ -2,17 +2,16 @@
 // File-based storage. Everything lives in ./data as plain JSON so you can
 // back it up, sync it with OneDrive/Dropbox, or edit it by hand.
 
-'use strict';
+// The default fs object, not named imports: the tests swap its methods to simulate
+// files held open by other programs.
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import * as schema from './settings-schema.js';
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-
-const DATA_DIR = process.env.TRAINER_DATA_DIR || path.join(__dirname, 'data');
+const DATA_DIR = process.env.TRAINER_DATA_DIR || path.join(import.meta.dirname, 'data');
 const REP_DIR = path.join(DATA_DIR, 'repertoires');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
-
-const schema = require('./settings-schema');
 
 function ensureDirs() {
   fs.mkdirSync(REP_DIR, { recursive: true });
@@ -190,6 +189,9 @@ const APPLIED_SAVES_KEPT = 200;
  * The browser retries a save until it gets an answer, so the same save can arrive twice
  * (the reply to the first was lost). A saveId already applied is ignored, which keeps the
  * daily tally from counting twice.
+ * @param {string} id
+ * @param {{ cards?: Record<string, object | null>, tally?: { date: string, correct?: number, wrong?: number, lines?: number },
+ *   saveId?: string }} patch
  */
 function patchProgress(id, { cards, tally, saveId }) {
   const rep = getRepertoire(id);
@@ -316,7 +318,7 @@ function saveSettings(patch) {
   return next;
 }
 
-module.exports = {
+export {
   DATA_DIR,
   sweepTempFiles,
   listRepertoires,

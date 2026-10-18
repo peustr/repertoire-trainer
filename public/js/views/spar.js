@@ -1,17 +1,16 @@
+// @ts-check
 // Spar: play a position out against Stockfish at a chosen strength.
 // While the game is still inside your repertoire, the opponent can pick from
 // the replies you prepared for — so you also practise what happens after them.
 
 import { h, clear, fig, toast, uciLineToSan, formatSanLine } from '../ui.js';
 import { state, getRep, modelFor } from '../store.js';
-import { positionKey } from '../pgn.js';
+import { START_FEN, positionKey } from '../constants.js';
 import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci, gameStatus, turnColor } from '../board.js';
 import { bestmove, analyse, formatScore, evalBarShare } from '../engine-client.js';
 
-const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-
 export async function renderSpar(root, { fen, color, id, back }) {
-  const startFen = fen || START;
+  const startFen = fen || START_FEN;
   const me = color === 'black' ? 'black' : 'white';
   const rep = id ? await getRep(id).catch(() => null) : null;
   const model = rep ? modelFor(rep) : null;

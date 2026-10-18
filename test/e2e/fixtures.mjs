@@ -1,3 +1,4 @@
+// @ts-check
 // Shared fixtures for the browser tests.
 //
 // `app` starts the real server for one test, on a free port with a throwaway data
@@ -12,6 +13,18 @@ import { startServer } from '../helpers/server.mjs';
 
 const SAMPLES = fileURLToPath(new URL('../../samples', import.meta.url));
 
+/**
+ * @typedef {Awaited<ReturnType<typeof startServer>> & {
+ *   api: (method: string, url: string, body?: object) => Promise<any>,
+ *   seedSample: (file: string, name?: string) => Promise<any>,
+ *   editRepertoire: (id: string, change: (rep: any) => void) => void,
+ *   open: (hash?: string) => Promise<unknown>,
+ * }} App
+ * @typedef {import('@playwright/test').PlaywrightTestArgs & import('@playwright/test').PlaywrightTestOptions} TestArgs
+ * @typedef {import('@playwright/test').PlaywrightWorkerArgs & import('@playwright/test').PlaywrightWorkerOptions} WorkerArgs
+ */
+
+/** @type {import('@playwright/test').TestType<TestArgs & { app: App }, WorkerArgs>} */
 export const test = base.extend({
   app: async ({ page }, use) => {
     const server = await startServer();
@@ -91,7 +104,7 @@ export async function trackKeyHandlers(page) {
     const remove = document.removeEventListener.bind(document);
     document.addEventListener = (type, fn, opts) => { if (type === 'keydown') live.add(fn); return add(type, fn, opts); };
     document.removeEventListener = (type, fn, opts) => { if (type === 'keydown') live.delete(fn); return remove(type, fn, opts); };
-    window.__liveKeyHandlers = () => live.size;
+    /** @type {any} */ (window).__liveKeyHandlers = () => live.size;
   });
-  return () => page.evaluate(() => window.__liveKeyHandlers());
+  return () => page.evaluate(() => /** @type {any} */ (window).__liveKeyHandlers());
 }

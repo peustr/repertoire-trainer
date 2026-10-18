@@ -1,3 +1,4 @@
+// @ts-check
 // Other websites open in the same browser must not be able to use the local server:
 // not by DNS rebinding (a foreign Host header), not by cross-site requests, and not
 // by opening the engine WebSocket.
@@ -5,17 +6,18 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { createRequire } from 'node:module';
+import WebSocket from 'ws';
 import { startServer } from './helpers/server.mjs';
-
-const require = createRequire(import.meta.url);
-const WebSocket = require('ws');
 
 let server;
 before(async () => { server = await startServer(); });
 after(() => server && server.stop());
 
-// Raw requests, so the Host and Origin headers are exactly what a browser would send.
+/**
+ * Raw requests, so the Host and Origin headers are exactly what a browser would send.
+ * @param {{ method?: string, path?: string, host?: string, origin?: string, body?: object }} [options]
+ * @returns {Promise<{ status: number, text: string }>}
+ */
 function request({ method = 'GET', path = '/api/settings', host, origin, body } = {}) {
   const headers = { Host: host || `localhost:${server.port}` };
   if (origin) headers.Origin = origin;

@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "description": "A local, MoveTrainer-style opening trainer with spaced repetition and Stockfish.",
   "private": true,
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js --open",

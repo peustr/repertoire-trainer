@@ -1,3 +1,4 @@
+// @ts-check
 // The Lichess client (lichess.js) against the mock Lichess: tokens, the explorer
 // and its cache, one request at a time, the 429 pause, studies and OAuth.
 // Tests run in order and share the client's state, like the app does.
@@ -7,10 +8,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { startMockLichess } from './helpers/mock-lichess.mjs';
+import { START_FEN as START } from '../public/js/constants.js';
 
-const require = createRequire(import.meta.url);
 const mock = await startMockLichess({ delay: 80 }); // slow enough to see overlapping requests
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-lichess-'));
 Object.assign(process.env, {
@@ -19,7 +19,7 @@ Object.assign(process.env, {
   LICHESS_EXPLORER_URL: mock.url,
   LICHESS_RATE_LIMIT_PAUSE_MS: '300',
 });
-const lichess = require('../lichess.js');
+const lichess = await import('../lichess.js'); // after the environment is set: it is read on load
 const TOKEN_FILE = path.join(dataDir, 'lichess.json');
 
 after(() => {
@@ -27,7 +27,6 @@ after(() => {
   fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
-const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 const AFTER_D4 = 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1';
 const AFTER_C4 = 'rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR b KQkq - 0 1';
@@ -35,11 +34,11 @@ const AFTER_NF3 = 'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1';
 const CAN_CASTLE = 'r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4';
 
 test('the explorer needs a connected account', async () => {
-  await assert.rejects(lichess.explorer({ fen: START }), (err) => err.status === 401 && /connect a Lichess account/.test(err.message));
+  await assert.rejects(lichess.explorer({ fen: START }), { status: 401, message: /connect a Lichess account/ });
 });
 
 test('a malformed token is refused before anything is stored', async () => {
-  await assert.rejects(lichess.connectWithToken('no!'), (err) => err.status === 400);
+  await assert.rejects(lichess.connectWithToken('no!'), { status: 400 });
   assert.ok(!fs.existsSync(TOKEN_FILE));
 });
 
@@ -66,6 +65,12 @@ test('explorer answers: castling as e1g1, totals added up, then served from the 
   const again = await lichess.explorer({ fen: CAN_CASTLE, speeds: 'blitz', ratings: '1600' });
   assert.equal(again.cached, true);
   assert.equal((await mock.stats()).explorerCalls, before + 1, 'asked Lichess once');
+});
+
+test("requests say which version of the trainer is asking, as Lichess asks clients to", async () => {
+  const { version } = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  await lichess.explorer({ fen: 'rnbqkbnr/pppppppp/8/8/8/6P1/PPPPPP1P/RNBQKBNR b KQkq - 0 1' }); // 1. g3: not cached
+  assert.equal((await mock.stats()).userAgent, `RepertoireTrainer/${version} (local opening trainer)`);
 });
 
 test('the explorer cache drops old answers and stays under its size cap', async () => {
@@ -124,7 +129,7 @@ test('a study is imported from its link', async () => {
   assert.equal(st.orientation, 'white');
   assert.equal(st.studyId, 'AbCd1234');
   assert.match(st.pgn, /Scotch/);
-  await assert.rejects(lichess.studyPgn('not a study link'), (err) => err.status === 400);
+  await assert.rejects(lichess.studyPgn('not a study link'), { status: 400 });
 });
 
 test("the account's own studies are listed", async () => {

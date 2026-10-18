@@ -10,17 +10,18 @@
 // after a 429, so every call goes through a single queue, and explorer answers
 // are cached on disk.
 
-'use strict';
-
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const { EventEmitter } = require('events');
-const store = require('./store');
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import * as store from './store.js';
+import { defaults } from './settings-schema.js';
+import { SPEEDS, RATING_GROUPS } from './public/js/constants.js';
 
 const LICHESS = process.env.LICHESS_URL || 'https://lichess.org';
 const EXPLORER = process.env.LICHESS_EXPLORER_URL || 'https://explorer.lichess.org';
-const USER_AGENT = 'RepertoireTrainer/0.2 (local opening trainer)';
+const { version } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'package.json'), 'utf8'));
+const USER_AGENT = `RepertoireTrainer/${version} (local opening trainer)`;
 const CLIENT_ID = 'repertoire-trainer-local';
 const CACHE_DIR = path.join(store.DATA_DIR, 'cache', 'explorer');
 const TOKEN_FILE = path.join(store.DATA_DIR, 'lichess.json');
@@ -28,8 +29,7 @@ const CACHE_TTL = 30 * 24 * 3600 * 1000; // explorer stats move slowly
 const CACHE_MAX_FILES = 20000; // a few kB each
 // Lichess asks for a full minute after a 429. Tests shorten it with this variable.
 const RATE_LIMIT_PAUSE = Number(process.env.LICHESS_RATE_LIMIT_PAUSE_MS) || 61000;
-const SPEEDS = ['ultraBullet', 'bullet', 'blitz', 'rapid', 'classical', 'correspondence'];
-const RATING_GROUPS = [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
+const { lichessSpeeds: DEFAULT_SPEEDS, lichessRatings: DEFAULT_RATINGS } = defaults();
 
 const events = new EventEmitter();
 
@@ -131,14 +131,16 @@ async function request(url, { auth = true, accept = 'application/json', method =
 
 // --- explorer ---------------------------------------------------------------------
 
+/** Valid explorer time controls from "blitz,rapid", or the settings' default. */
 function cleanSpeeds(speeds) {
   const list = String(speeds || '').split(',').map((s) => s.trim()).filter((s) => SPEEDS.includes(s));
-  return list.length ? list : ['blitz', 'rapid', 'classical'];
+  return list.length ? list : DEFAULT_SPEEDS.split(',');
 }
 
+/** Valid explorer rating groups from "1600,1800", sorted, or the settings' default. */
 function cleanRatings(ratings) {
   const list = String(ratings || '').split(',').map((s) => s.trim()).filter(Boolean).map(Number).filter((n) => RATING_GROUPS.includes(n));
-  return list.length ? [...new Set(list)].sort((a, b) => a - b) : [1600, 1800, 2000];
+  return list.length ? [...new Set(list)].sort((a, b) => a - b) : DEFAULT_RATINGS.split(',').map(Number);
 }
 
 const memCache = new Map();
@@ -210,6 +212,9 @@ async function pruneCache(maxAgeDays, { maxFiles = CACHE_MAX_FILES } = {}) {
  * Opening explorer lookup.
  * source: 'lichess' (rated Lichess games, filtered) or 'masters' (OTB master games).
  * Returns { white, draws, black, total, opening, moves: [{uci, san, white, draws, black, total, averageRating}], cached }.
+ * speeds and ratings fall back to the settings' defaults; cacheDays to 30.
+ * @param {{ fen: string, source?: 'lichess' | 'masters', speeds?: string, ratings?: string, since?: string,
+ *   moves?: number, cacheDays?: number }} query
  */
 async function explorer({ fen, source = 'lichess', speeds, ratings, since, moves = 12, cacheDays }) {
   if (!fen) throw new LichessError('Missing position', 400);
@@ -360,6 +365,10 @@ function oauthStart(redirectUri) {
   return `${LICHESS}/oauth?${params}`;
 }
 
+/**
+ * Finish the OAuth sign-in with what Lichess sent back to /auth/lichess/callback.
+ * @param {{ code?: string, state?: string, error?: string }} query
+ */
 async function oauthCallback({ code, state, error }) {
   if (error) throw new LichessError(`Lichess sign-in was cancelled (${error}).`, 400);
   const entry = pendingAuth.get(state);
@@ -383,7 +392,7 @@ async function oauthCallback({ code, state, error }) {
   return connectWithToken(data.access_token, 'oauth');
 }
 
-module.exports = {
+export {
   events,
   status,
   explorer,
@@ -397,7 +406,5 @@ module.exports = {
   oauthCallback,
   cleanSpeeds,
   cleanRatings,
-  RATING_GROUPS,
-  SPEEDS,
   LichessError,
 };

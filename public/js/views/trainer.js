@@ -1,3 +1,4 @@
+// @ts-check
 // The move trainer: Learn, Review and Practise.
 //
 // Learn:    the line plays out with arrows and the author's notes for each new
@@ -10,11 +11,12 @@ import { h, clear, sound, fig, sanLabel, uciLineToSan, formatSanLine, plural, ac
 import { refresh } from '../nav.js';
 import { state, getRep, modelFor, saveCards } from '../store.js';
 import { cardKey } from '../repertoire.js';
-import { positionKey, nagGlyphs, moveNumber } from '../pgn.js';
+import { nagGlyphs, moveNumber } from '../pgn.js';
+import { START_FEN, positionKey, scoreToCp } from '../constants.js';
 import { lineStatus, nextReviewLine, newLines, describeWait } from '../srs.js';
 import { passPlan, resultForCorrectMove, resultAfterHint, firstResult, judgeWrongMove, gradePass } from '../session.js';
 import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci } from '../board.js';
-import { evaluate, analyse, scoreToCp, formatScore, evalBarShare } from '../engine-client.js';
+import { evaluate, analyse, formatScore, evalBarShare } from '../engine-client.js';
 import { openMistakeFinder } from './finder.js';
 
 const MODE_NAMES = { learn: 'Learn', review: 'Review', practice: 'Practise' };
@@ -280,7 +282,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     const finalEval = h('p.final-eval.muted', 'Stockfish is looking at the final position…');
     feedback.append(finalEval);
     clear(controls,
-      next ? h('button.btn.primary', { type: 'button', on: { click: () => startLine(next, phaseFor(next)) }, 'data-key': 'Enter' }, 'Next line') : h('button.btn.primary', { type: 'button', on: { click: showSessionDone }, 'data-key': 'Enter' }, 'Finish session'),
+      next ? h('button.btn.primary', { type: 'button', on: { click: () => startLine(next, phaseFor()) }, 'data-key': 'Enter' }, 'Next line') : h('button.btn.primary', { type: 'button', on: { click: showSessionDone }, 'data-key': 'Enter' }, 'Finish session'),
       h('button.btn', { type: 'button', on: { click: () => startLine(line, 'practice') } }, 'Retry line'),
       h('a.btn.ghost', { href: sparLink(run.fen) }, 'Spar from here'),
       finderButton(),
@@ -459,7 +461,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
           clearTimers();
           done.add(run.line.id);
           const next = nextLine();
-          if (next) startLine(next, phaseFor(next));
+          if (next) startLine(next, phaseFor());
           else showSessionDone();
         },
       },
@@ -504,10 +506,10 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
 
   // ---- go ------------------------------------------------------------------------------
   const first = nextLine();
-  if (first) startLine(first, phaseFor(first));
+  if (first) startLine(first, phaseFor());
   else {
     run = null;
-    board.setPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+    board.setPosition(START_FEN);
     clear(crumbs, h('a.backlink', { href: `#/rep/${rep.id}` }, rep.name), h('span.mode-tag', MODE_NAMES[mode]));
     showSessionDone();
   }

@@ -1,3 +1,4 @@
+// @ts-check
 // The PGN parser, lines and cards, the scheduler, puzzle helpers and the settings schema.
 // Run with:  npm test  (or: node --test test/core.test.mjs)
 
@@ -9,11 +10,11 @@ import { fileURLToPath } from 'node:url';
 import { parsePgn, tokenize, parseComment, formatSequence } from '../public/js/pgn.js';
 import { buildRepertoire } from '../public/js/repertoire.js';
 import * as srs from '../public/js/srs.js';
-import { puzzleToPgn, describeRatings, puzzleQueue } from '../public/js/puzzle-utils.js';
-import { createRequire } from 'node:module';
-const require = createRequire(import.meta.url);
-const puzzles = require('../puzzles.js');
-const lichess = require('../lichess.js');
+import { puzzleToPgn, describeRatings, describeSpeeds, puzzleQueue } from '../public/js/puzzle-utils.js';
+import { START_FEN, ratingGroupLabel } from '../public/js/constants.js';
+import * as puzzles from '../puzzles.js';
+import * as lichess from '../lichess.js';
+import * as schema from '../settings-schema.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -112,9 +113,8 @@ test('scheduler: promote, demote, due lines', () => {
 });
 
 test('puzzle PGN round-trips through the parser with comments and glyphs', () => {
-  const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   const p = {
-    startFen: start,
+    startFen: START_FEN,
     lineMoves: ['e2e4', 'e7e5', 'g1f3', 'd7d6', 'f1c4', 'c8g4', 'b1c3', 'g7g6'],
     solution: ['f3e5', 'g4d1', 'c4f7', 'e8e7', 'c3d5'],
     pathSan: ['e4', 'e5', 'Nf3', 'd6', 'Bc4', 'Bg4', 'Nc3', 'g6'],
@@ -140,6 +140,26 @@ test('rating bands describe the explorer groups', () => {
   assert.deepEqual(lichess.cleanRatings(''), [1600, 1800, 2000]);
   assert.deepEqual(lichess.cleanRatings('0,1000'), [0, 1000]);
   assert.deepEqual(lichess.cleanSpeeds('blitz,nonsense'), ['blitz']);
+  assert.deepEqual(lichess.cleanSpeeds(''), ['blitz', 'rapid', 'classical']);
+  assert.equal(describeSpeeds('ultraBullet,blitz'), 'ultrabullet, blitz');
+  assert.deepEqual([0, 1000, 2500].map(ratingGroupLabel), ['Under 1000', '1000–1199', '2500+']);
+  const ratingField = schema.buildSchema().flatMap((s) => s.fields).find((f) => f.key === 'lichessRatings');
+  assert.deepEqual(ratingField.options[4], ['1600', '1600–1799'], 'the Settings page names each group');
+});
+
+test("the mistake finder's options come from the settings", () => {
+  const options = schema.finderOptions(schema.defaults());
+  assert.deepEqual(Object.keys(options).sort(), [
+    'beyondBook', 'cacheDays', 'candidates', 'depth', 'gapShare', 'maxLength', 'maxOppDepth', 'maxPositions', 'maxPuzzles',
+    'minAdvantage', 'minGames', 'minShare', 'ratings', 'since', 'solveDepth', 'speeds', 'threshold', 'uniqueGap',
+  ]);
+  assert.equal(options.minShare, 0.05, 'percentages become fractions');
+  assert.equal(options.gapShare, 0.1);
+  assert.equal(options.threshold, 150);
+  assert.deepEqual(puzzles.DEFAULTS, options);
+  const custom = schema.finderOptions(schema.validate(schema.defaults(), { puzzleThreshold: 220, lichessSince: '2024-01' }));
+  assert.equal(custom.threshold, 220);
+  assert.equal(custom.since, '2024-01');
 });
 
 test('puzzle queue: due first, then new by likelihood', () => {
@@ -159,7 +179,6 @@ test('puzzle themes from material', () => {
 });
 
 test('settings schema: defaults, clamping and bad values', () => {
-  const schema = require('../settings-schema.js');
   const d = schema.defaults();
   assert.equal(d.reviewBatch, 20);
   assert.equal(d.srsIntervals.length, 8);

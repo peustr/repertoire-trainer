@@ -1,12 +1,12 @@
+// @ts-check
 // The training rules (public/js/session.js), case by case.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { buildRepertoire } from '../public/js/repertoire.js';
 import { passPlan, resultForCorrectMove, resultAfterHint, firstResult, judgeWrongMove, gradePass, gradeCard } from '../public/js/session.js';
+import { buildSchema } from '../settings-schema.js';
 
-const require = createRequire(import.meta.url);
 const HOUR = 3600e3;
 const NOW = 1_800_000_000_000;
 // White plays e4, Nf3 and Bb5: three cards.
@@ -36,6 +36,7 @@ test('which moves a pass asks for', () => {
 });
 
 test('grading the right move', () => {
+  /** @type {Array<[{ tries: number, hints: number }, { hintsCount?: boolean }, string]>} */
   const cases = [
     [{ tries: 0, hints: 0 }, {}, 'right'],
     [{ tries: 1, hints: 0 }, {}, 'wrong'],
@@ -49,6 +50,7 @@ test('grading the right move', () => {
 });
 
 test('grading a hint', () => {
+  /** @type {Array<[string | undefined, string, { hintsCount: boolean }, string | undefined]>} */
   const cases = [
     [undefined, 'review', { hintsCount: true }, 'wrong'],
     [undefined, 'review', { hintsCount: false }, 'hint'],
@@ -69,6 +71,7 @@ test("a move's first result in a pass is the one that counts", () => {
 });
 
 test('playing a different move', () => {
+  /** @type {Array<[{ inRepertoire: boolean, phase: string }, { altPolicy?: string }, string]>} */
   const cases = [
     [{ inRepertoire: true, phase: 'review' }, { altPolicy: 'retry' }, 'alternative'],
     [{ inRepertoire: true, phase: 'review' }, { altPolicy: 'mistake' }, 'mistake'],
@@ -122,7 +125,7 @@ test('review: due moves level up, misses drop, the rest stay put', () => {
 test('review: a miss demotes even a move that was not due (quizAllMoves)', () => {
   // Deliberate: forgetting a move is worth knowing about, due or not. The setting's
   // help text says so too; keep the two in step.
-  const help = require('../settings-schema.js').buildSchema().flatMap((s) => s.fields).find((f) => f.key === 'quizAllMoves').help;
+  const help = buildSchema().flatMap((s) => s.fields).find((f) => f.key === 'quizAllMoves').help;
   assert.match(help, /a mistake sends any move back down, due or not/);
   const g = gradePass({
     line, phase: 'review', quiz: new Set([k1, k2, k3]), dueAtStart: new Set([k1]), now: NOW,
@@ -143,6 +146,7 @@ test('practice: results are reported, the schedule is untouched', () => {
 
 test('a single card (puzzles, warm-up)', () => {
   const notDue = later(3);
+  /** @type {Array<[object | undefined, boolean, (s: any) => boolean, string]>} */
   const cases = [
     [undefined, true, (s) => s.level === 1 && s.due === NOW + 4 * HOUR, 'a new card solved starts at level 1'],
     [undefined, false, (s) => s.level === 1 && s.due === NOW, 'a new card missed is due again at once'],

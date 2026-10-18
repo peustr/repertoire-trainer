@@ -1,3 +1,4 @@
+// @ts-check
 // The UCI engine wrapper, driven by a fake engine (test/fixtures/fake-uci-engine.js)
 // so failures can be staged in milliseconds.
 
@@ -7,13 +8,10 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const { UciEngine, engineSpec, isNetworkPath } = require('../engine.js');
+import { UciEngine, engineSpec, isNetworkPath } from '../engine.js';
+import { START_FEN } from '../public/js/constants.js';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-uci-engine.js', import.meta.url));
-const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const fake = (mode, ...flags) => ({ kind: 'wasm', cmd: process.execPath, args: [FAKE, mode, ...flags], label: 'fake', options: {}, warnings: [] });
 const search = (engine, go = 'depth 1') => engine.submit({ fen: START_FEN, go }).promise;
 

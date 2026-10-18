@@ -13,36 +13,38 @@
 //     (product of the opponents' move frequencies), within a fixed budget of
 //     explorer lookups, so the most practical mistakes surface first.
 
-'use strict';
+import crypto from 'node:crypto';
+import { Chess } from 'chess.js';
+import * as lichess from './lichess.js';
+import { defaults, finderOptions } from './settings-schema.js';
+import { positionKey, scoreToCp } from './public/js/constants.js';
 
-const crypto = require('crypto');
-const { Chess } = require('chess.js');
-const lichess = require('./lichess');
+/**
+ * The search's options. Each one is a setting tagged `search` in settings-schema.js,
+ * which holds its default and help text; finderOptions() turns settings into these.
+ * @typedef {object} SearchOptions
+ * @property {number} maxPositions  opponent positions to look up (explorer calls, cached ones included)
+ * @property {number} maxOppDepth   how many opponent decisions deep to follow
+ * @property {number} candidates    most popular replies scored per opponent position
+ * @property {number} minShare      ignore replies played in a smaller share of games (0.05 is 5%)
+ * @property {number} minGames      ignore positions with fewer games than this
+ * @property {number} threshold     centipawns an opponent move must give away to count as a mistake
+ * @property {number} minAdvantage  and you must stand at least this well afterwards
+ * @property {number} depth         Stockfish depth while searching
+ * @property {number} solveDepth    Stockfish depth for working out the punishment
+ * @property {number} uniqueGap     best move must beat the second best by this much to be a single-answer puzzle
+ * @property {number} maxLength     most moves of yours in a solution
+ * @property {number} maxPuzzles    stop once this many puzzles are found
+ * @property {number} beyondBook    opponent moves to keep following after your repertoire line ends
+ * @property {number} gapShare      unprepared replies at least this popular are reported as gaps
+ * @property {string} speeds        explorer time controls, e.g. "blitz,rapid"
+ * @property {string} ratings       explorer rating groups, e.g. "1600,1800"
+ * @property {string} since         only games since this month (YYYY-MM); '' for all
+ * @property {number} cacheDays     how long explorer answers are reused
+ */
 
-const DEFAULTS = {
-  maxPositions: 30,   // opponent positions to look up (explorer calls, cached ones included)
-  maxOppDepth: 5,     // how many opponent decisions deep to follow
-  minShare: 0.05,     // ignore replies played in fewer than 5% of games at that node
-  minGames: 40,       // ignore positions with fewer games than this
-  threshold: 150,     // centipawns an opponent move must give away to count as a mistake
-  minAdvantage: 120,  // and you must stand at least this well afterwards
-  depth: 14,          // Stockfish depth while searching
-  uniqueGap: 120,     // best move must beat the second best by this much to be a single-answer puzzle
-  candidates: 8,      // most popular replies scored per opponent position
-  solveDepth: 16,     // Stockfish depth for working out the punishment
-  maxLength: 3,       // most moves of yours in a solution
-  beyondBook: 2,      // opponent moves to keep following after your repertoire line ends
-  maxPuzzles: 15,     // stop once this many puzzles are found
-  gapShare: 0.1,      // unprepared replies at least this popular are reported as gaps
-  speeds: 'blitz,rapid,classical', // explorer time controls (as lichess.cleanSpeeds falls back to)
-  ratings: '1600,1800,2000',       // explorer rating bands (as lichess.cleanRatings falls back to)
-  since: '',          // only games since this month (YYYY-MM); '' for all
-  cacheDays: 30,      // how long explorer answers are reused
-};
-
-function positionKey(fen) {
-  return fen.split(/\s+/).slice(0, 4).join(' ');
-}
+/** @type {SearchOptions} */
+const DEFAULTS = /** @type {any} */ (finderOptions(defaults()));
 
 function play(fen, move) {
   const c = new Chess();
@@ -67,12 +69,6 @@ function sanLine(fen, ucis) {
     f = r.fen;
   }
   return out;
-}
-
-function cp(score) {
-  if (!score) return null;
-  if ('mate' in score) return score.mate === 0 ? 0 : Math.sign(score.mate) * (10000 - Math.abs(score.mate) * 10);
-  return score.cp;
 }
 
 const VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
@@ -114,9 +110,9 @@ async function buildPuzzle(engines, fen, side, opts) {
   const first = await engines.lines({ fen, depth: opts.solveDepth || opts.depth + 2, multipv: 2 });
   const [a, b] = first.lines;
   if (!a || !a.pv.length) return null;
-  const s1 = cp(a.score) * pov;
+  const s1 = scoreToCp(a.score) * pov;
   if (s1 < opts.minAdvantage && !isMateFor(a.score, pov)) return null;
-  const s2 = b ? cp(b.score) * pov : -Infinity;
+  const s2 = b ? scoreToCp(b.score) * pov : -Infinity;
   const unique = !b || s1 - s2 >= opts.uniqueGap || (isMateFor(a.score, pov) && !isMateFor(b.score, pov));
 
   // Extend the solution while each next move of ours is also clearly the only good one.
@@ -133,8 +129,8 @@ async function buildPuzzle(engines, fen, side, opts) {
     const r = await engines.lines({ fen: afterReply.fen, depth: opts.solveDepth || opts.depth, multipv: 2 });
     const [x, y] = r.lines;
     if (!x || !x.pv.length) break;
-    const sx = cp(x.score) * pov;
-    const sy = y ? cp(y.score) * pov : -Infinity;
+    const sx = scoreToCp(x.score) * pov;
+    const sy = y ? scoreToCp(y.score) * pov : -Infinity;
     const only = !y || sx - sy >= Math.max(opts.uniqueGap, 100) || (isMateFor(x.score, pov) && !isMateFor(y.score, pov));
     if (!only) break;
     const next = play(afterReply.fen, x.pv[0]);
@@ -171,12 +167,12 @@ function puzzleId(fen, uci) {
  *   model:   parsed repertoire (myMovesAt: positionKey -> Set(uci))
  *   fen:     position to search from
  *   prefix:  { startFen, moves[] } — how that position is reached from the chapter start
- *   options: overrides for DEFAULTS plus { speeds, ratings }
+ *   options: overrides for DEFAULTS (SearchOptions)
  *   onEvent: progress callback
  *   cancelled(): returns true to stop early
  *
  * @param {{ rep: any, model: any, fen: string, prefix?: { startFen?: string, moves?: string[] },
- *   options?: Partial<typeof DEFAULTS>, engines: any, onEvent?: (event: any) => void, cancelled?: () => boolean }} args
+ *   options?: Partial<SearchOptions>, engines: any, onEvent?: (event: any) => void, cancelled?: () => boolean }} args
  */
 async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, onEvent = () => {}, cancelled = () => false }) {
   const opts = { ...DEFAULTS, ...options };
@@ -266,14 +262,14 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
       stats.skipped++;
       continue;
     }
-    const bestForUs = cp(ev.best.score) * pov; // what the opponent's best move leaves us with
+    const bestForUs = scoreToCp(ev.best.score) * pov; // what the opponent's best move leaves us with
     // Did you prepare replies for the opponent here? Then a popular reply outside your lines is a gap.
     const prepared = inTree(node.fen) && (model.nodesByPosition.get(positionKey(node.fen)) || []).some((n) => n.children.some((ch) => ch.color !== side));
 
     for (const c of candidates) {
       const scored = ev.moves.find((m) => m.move === c.uci);
       if (!scored || !scored.score) continue;
-      const afterForUs = cp(scored.score) * pov;
+      const afterForUs = scoreToCp(scored.score) * pov;
       const gain = afterForUs - bestForUs;
       const mistake = (gain >= opts.threshold && afterForUs >= opts.minAdvantage) || (isMateFor(scored.score, pov) && !isMateFor(ev.best.score, pov));
 
@@ -359,4 +355,4 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
   return { puzzles: found, gaps, stats, exhausted: frontier.length === 0, cancelled: cancelled() };
 }
 
-module.exports = { searchMistakes, buildPuzzle, DEFAULTS, positionKey, material, theme };
+export { searchMistakes, buildPuzzle, DEFAULTS, material, theme };

@@ -1,8 +1,10 @@
+// @ts-check
 // Repertoire audit: ask Stockfish about every move you are expected to play.
 
 import { h, clear, sanLabel, toast } from '../ui.js';
 import { state, putRep } from '../store.js';
-import { evaluate, scoreToCp } from '../engine-client.js';
+import { evaluate } from '../engine-client.js';
+import { scoreToCp } from '../constants.js';
 import { api } from '../api.js';
 
 export async function runAudit(box, rep, model, onDone) {

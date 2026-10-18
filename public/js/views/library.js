@@ -1,3 +1,4 @@
+// @ts-check
 // Library: a one-move warm-up card, then every repertoire with its memory state.
 
 import { h, clear, levelBar, plural, toast, sound, fig, sanLabel, action } from '../ui.js';
@@ -6,7 +7,7 @@ import { repertoireStats, describeWait, isDue } from '../srs.js';
 import { gradeCard } from '../session.js';
 import { createBoard, isPromotion, choosePromotion, applyUci } from '../board.js';
 import { api } from '../api.js';
-import { positionKey } from '../pgn.js';
+import { START_FEN, positionKey } from '../constants.js';
 import { puzzleStats } from '../puzzle-utils.js';
 
 export async function renderLibrary(root) {
@@ -136,7 +137,7 @@ function renderQuickCard(container, entries) {
     answered = false;
     clear(feedback);
     if (!current) {
-      board.setPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+      board.setPosition(START_FEN);
       clear(caption,
         h('h2.quick-title', 'Warm-up'),
         h('p', 'Once you have learned some lines, a position from your repertoire waits here for a one-move quiz.'));

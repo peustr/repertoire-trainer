@@ -1,8 +1,8 @@
 // @ts-check
 // Stops with a plain message when Node.js is older than package.json's "engines"
 // asks for, instead of failing later with a cryptic error. start.bat runs it before
-// installing anything, and server.js requires it first.
-// Keep this file in syntax that very old Node versions can still parse.
+// installing anything, and server.js imports it first.
+// Keep this file CommonJS, in syntax that very old Node versions can still parse.
 
 'use strict';
 

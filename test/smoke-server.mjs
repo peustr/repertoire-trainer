@@ -1,3 +1,4 @@
+// @ts-check
 // End-to-end smoke test: boots the real server against a throwaway data
 // folder, checks the static files, the REST API and the Stockfish bridge.
 // Run with:  npm run test:smoke
@@ -5,12 +6,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import WebSocket from 'ws';
 import { startServer } from './helpers/server.mjs';
-const require = createRequire(import.meta.url);
-const WebSocket = require('ws');
-
-const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+import { START_FEN } from '../public/js/constants.js';
 
 function withTimeout(promise, ms, what) {
   let timer;
