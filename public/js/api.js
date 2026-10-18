@@ -18,6 +18,7 @@ export const api = {
   update: (id, patch) => call('PUT', `/api/repertoires/${id}`, patch),
   remove: (id) => call('DELETE', `/api/repertoires/${id}`),
   progress: (id, patch) => call('PATCH', `/api/repertoires/${id}/progress`, patch),
+  addLine: (id, pgn, gapKey) => call('POST', `/api/repertoires/${id}/lines`, { pgn, gapKey }),
   resetProgress: (id) => call('DELETE', `/api/repertoires/${id}/progress`),
   settings: () => call('GET', '/api/settings'),
   saveSettings: (s) => call('PUT', '/api/settings', s),

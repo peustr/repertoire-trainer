@@ -1,7 +1,8 @@
 // The training rules, without the board or the page: which of your moves a pass
 // over a line quizzes, how each answer is graded, and what the results do to the
-// memory schedule. The trainer, the puzzle page and the library's warm-up card use
-// these; test/session.test.mjs pins them down. No DOM code here.
+// memory schedule. The trainer, the puzzle page, the library's warm-up card, the
+// Surprise drills and Spar's play-outs use these; test/session.test.mjs pins them
+// down. No DOM code here.
 //
 // A pass has a phase:
 //   guided    Learn, first time through: arrows show the new moves
@@ -126,4 +127,61 @@ export function gradeCard(prev, success, settings = {}, now = Date.now()) {
   if (!success) return demote(schedule, prev, now, mistakePolicy);
   if (isDue(prev, now)) return promote(schedule, prev, now);
   return prev;
+}
+
+// --- off the book --------------------------------------------------------------------
+// Surprise drills and play-outs are graded by Stockfish, not by a book move, and leave
+// the schedule alone. `loss` is how many centipawns a move gives away against
+// Stockfish's best, from your side (never below 0).
+
+/**
+ * Your answer to a surprise: 'best' and 'good' pass, 'inaccuracy' and 'mistake' do not.
+ * @param {{ loss: number, isBest?: boolean }} answer
+ * @param {{ surpriseTolerance?: number }} [settings]
+ * @returns {'best' | 'good' | 'inaccuracy' | 'mistake'}
+ */
+export function gradeSurprise({ loss, isBest = false }, { surpriseTolerance = 50 } = {}) {
+  if (isBest || loss <= 10) return 'best';
+  if (loss <= surpriseTolerance) return 'good';
+  if (loss <= Math.max(150, surpriseTolerance * 2)) return 'inaccuracy';
+  return 'mistake';
+}
+
+/** @param {string} grade */
+export const surprisePassed = (grade) => grade === 'best' || grade === 'good';
+
+/** Clearly winning: dropping some of a big advantage still counts as keeping it. */
+const STILL_WINNING = 300;
+
+/**
+ * The end of a play-out, where you try to keep the position the line left you with.
+ * startCp and endCp are Stockfish's evaluations from your side; `result` is set when the
+ * game itself ended. You pass if the evaluation fell by at most playOutTolerance, or
+ * you are still clearly winning.
+ * @param {{ startCp: number, endCp: number, result?: 'win' | 'loss' | 'draw' | null }} playout
+ * @param {{ playOutTolerance?: number }} [settings]
+ * @returns {{ pass: boolean, drop: number, verdict: 'won' | 'lost' | 'drawn' | 'improved' | 'held' | 'slipped' }}
+ */
+export function gradePlayout({ startCp, endCp, result = null }, { playOutTolerance = 70 } = {}) {
+  if (result === 'win') return { pass: true, drop: 0, verdict: 'won' };
+  if (result === 'loss') return { pass: false, drop: Math.max(0, startCp - endCp), verdict: 'lost' };
+  if (result === 'draw') return { pass: startCp <= playOutTolerance, drop: Math.max(0, startCp), verdict: 'drawn' };
+  const drop = startCp - endCp;
+  if (drop <= playOutTolerance) return { pass: true, drop, verdict: drop < -playOutTolerance ? 'improved' : 'held' };
+  if (endCp >= STILL_WINNING) return { pass: true, drop, verdict: 'held' };
+  return { pass: false, drop, verdict: 'slipped' };
+}
+
+/**
+ * The move that gave away the most, if it gave away at least `min` centipawns. Moves
+ * without a loss (not checked by Stockfish) are left out.
+ * @template {{ loss?: number | null }} T
+ * @param {T[]} moves
+ * @param {number} [min]
+ * @returns {T | null}
+ */
+export function biggestSlip(moves, min = 50) {
+  let worst = null;
+  for (const m of moves) if (m.loss != null && m.loss >= min && (!worst || m.loss > worst.loss)) worst = m;
+  return worst;
 }

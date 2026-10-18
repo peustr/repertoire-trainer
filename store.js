@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import * as schema from './settings-schema.js';
-import { SCHEMA_VERSION, migrate, checkRepertoireInput, checkProgress } from './repertoire-format.js';
+import { SCHEMA_VERSION, migrate, checkRepertoireInput, checkProgress, checkChapter } from './repertoire-format.js';
 
 /** @typedef {import('./repertoire-format.js').RepertoireFile} RepertoireFile */
 
@@ -259,6 +259,24 @@ function addPuzzleLine(id, pid, chapter) {
   return rep;
 }
 
+/**
+ * Add one line to the end of a repertoire as a new chapter (a Surprise answer). The
+ * server appends it, so an edit made meanwhile in another tab is kept. With gapKey, that
+ * gap is now answered and is removed.
+ * @param {string} id
+ * @param {{ pgn?: unknown, gapKey?: unknown }} body
+ */
+function addLine(id, { pgn, gapKey } = {}) {
+  const chapter = checkChapter(pgn);
+  const rep = getRepertoire(id);
+  if (!rep) return null;
+  rep.pgn = `${(rep.pgn || '').trimEnd()}\n\n${chapter}\n`;
+  if (typeof gapKey === 'string' && rep.gaps && Object.hasOwn(rep.gaps, gapKey)) delete rep.gaps[gapKey];
+  rep.updatedAt = new Date().toISOString();
+  writeJsonAtomic(repFile(id), rep);
+  return rep;
+}
+
 /** Remember popular replies the repertoire does not cover (deduplicated by position). */
 function addGaps(id, gaps) {
   const rep = getRepertoire(id);
@@ -309,7 +327,7 @@ function deleteRepertoire(id) {
 
 /** Saved settings on top of the defaults; anything stale or invalid falls back to the default. */
 function getSettings() {
-  return schema.validate(schema.defaults(), readJson(SETTINGS_FILE, {}));
+  return schema.validate(schema.defaults(), schema.upgrade(readJson(SETTINGS_FILE, {})));
 }
 
 function saveSettings(patch) {
@@ -330,6 +348,7 @@ export {
   resetProgress,
   addPuzzles,
   addPuzzleLine,
+  addLine,
   deletePuzzle,
   addGaps,
   deleteGap,

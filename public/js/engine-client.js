@@ -112,6 +112,19 @@ export function analyse(fen, { multipv = 3, depth = 22 } = {}, onUpdate, onError
   return { stop, ready };
 }
 
+/**
+ * One finished analysis (on the analysis engine, so it replaces this page's live one).
+ * Resolves to the DONE message: { depth, lines: [{ multipv, score, pv }], bestmove }.
+ * @param {string} fen
+ * @param {{ multipv?: number, depth?: number }} [options]
+ * @returns {Promise<{ depth: number, lines: { multipv: number, depth: number, score: { cp?: number, mate?: number }, pv: string[] }[] }>}
+ */
+export function analyseOnce(fen, { multipv = 3, depth = 14 } = {}) {
+  return new Promise((resolve, reject) => {
+    analyse(fen, { multipv, depth }, (msg, final) => { if (final) resolve(msg); }, reject);
+  });
+}
+
 /** Score specific moves (UCI) in a position. Resolves to { best, moves }. */
 export async function evaluate(fen, moves, depth = 14) {
   const r = await request({ type: REQUEST.EVALUATE, fen, moves, depth });

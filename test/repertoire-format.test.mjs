@@ -118,18 +118,54 @@ test('a progress save with the wrong shape is refused and changes nothing', () =
   assert.equal(fs.readFileSync(file(rep.id), 'utf8'), before);
 });
 
-test('the API answers 400 with the reason, for both kinds of update', async () => {
+const CHAPTER = '[Event "Surprise: 2...d6"]\n[ChapterName "Answer to 2...d6"]\n\n1. e4 e5 2. Nf3 d6 { Played in 9% of Lichess games here (1600–1999). } 3. d4 *\n';
+
+test('a line is added as a new chapter at the end, and answers its gap', () => {
+  const rep = store.createRepertoire({ name: 'Growing', color: 'white', pgn: PGN });
+  store.addGaps(rep.id, [{ fen: 'rnbqkbnr/ppp2ppp/3p4/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3', lineMoves: ['e2e4', 'e7e5', 'g1f3', 'd7d6'], share: 0.09 }]);
+  const [gapKey] = Object.keys(onDisk(rep.id).gaps);
+  const saved = store.addLine(rep.id, { pgn: CHAPTER, gapKey });
+  assert.equal(saved.pgn, `${PGN}\n\n${CHAPTER}`);
+  assert.deepEqual(onDisk(rep.id).gaps, {}, 'the gap is answered now');
+  assert.equal(onDisk(rep.id).pgn, saved.pgn);
+  assert.ok(store.addLine(rep.id, { pgn: CHAPTER, gapKey: 'not-a-gap' }), 'an unknown gap is no reason to refuse the line');
+  assert.equal(store.addLine('no-such-rep', { pgn: CHAPTER }), null);
+});
+
+test('a line to add with the wrong shape is refused and changes nothing', () => {
+  const rep = store.createRepertoire({ name: 'Picky', color: 'white', pgn: PGN });
+  const before = fs.readFileSync(file(rep.id), 'utf8');
+  const bad = [
+    [undefined, /missing/],
+    ['   ', /missing/],
+    [42, /missing/],
+    ['[Event "Just headers"]\n\n*', /no moves/],
+    ['1. e4 e5 *\n\n1. d4 d5 *', /one line/],
+    ['1. e4 e5 2. Ke3 *', /could not be read.*Ke3/],
+    [`1. e4 { ${'x'.repeat(20000)} } *`, /too long/],
+  ];
+  for (const [pgn, message] of bad) assert.throws(() => store.addLine(rep.id, { pgn }), { status: 400, message }, String(pgn).slice(0, 40));
+  assert.equal(fs.readFileSync(file(rep.id), 'utf8'), before);
+});
+
+test('the API answers 400 with the reason, for every kind of update', async (t) => {
   const server = await startServer();
-  try {
-    const send = (method, url, body) => fetch(server.base + url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const rep = await (await send('POST', '/api/repertoires', { name: 'Over HTTP', color: 'white', pgn: PGN })).json();
-    const put = await send('PUT', `/api/repertoires/${rep.id}`, { audit: 'done' });
-    assert.equal(put.status, 400);
-    assert.match((await put.json()).error, /audit/);
-    const patch = await send('PATCH', `/api/repertoires/${rep.id}/progress`, { cards: { k: { level: 9, due: 0 } } });
-    assert.equal(patch.status, 400);
-    assert.match((await patch.json()).error, /level/);
-  } finally {
-    await server.stop();
-  }
+  t.after(() => server.stop());
+  const send = (method, url, body) => fetch(server.base + url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const rep = await (await send('POST', '/api/repertoires', { name: 'Over HTTP', color: 'white', pgn: PGN })).json();
+  const put = await send('PUT', `/api/repertoires/${rep.id}`, { audit: 'done' });
+  assert.equal(put.status, 400);
+  assert.match((await put.json()).error, /audit/);
+  const patch = await send('PATCH', `/api/repertoires/${rep.id}/progress`, { cards: { k: { level: 9, due: 0 } } });
+  assert.equal(patch.status, 400);
+  assert.match((await patch.json()).error, /level/);
+  const badLine = await send('POST', `/api/repertoires/${rep.id}/lines`, { pgn: '1. e4 e5 2. Ke3 *' });
+  assert.equal(badLine.status, 400);
+  assert.match((await badLine.json()).error, /could not be read/);
+
+  const added = await send('POST', `/api/repertoires/${rep.id}/lines`, { pgn: CHAPTER });
+  assert.equal(added.status, 200);
+  assert.match((await added.json()).pgn, /Answer to 2\.\.\.d6/);
+  assert.equal((await send('POST', '/api/repertoires/no-such-rep/lines', { pgn: CHAPTER })).status, 404);
+  assert.equal((await send('POST', '/api/repertoires/Bad..Id/lines', { pgn: CHAPTER })).status, 400, 'ids are checked before they touch the disk');
 });

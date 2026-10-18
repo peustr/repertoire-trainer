@@ -1,14 +1,17 @@
 // Shared fixtures for the browser tests.
 //
 // `app` starts the real server for one test, on a free port with a throwaway data
-// folder, and offers helpers to seed data through the API. `playMove` moves a piece
-// on the chessground board by clicking its square and then the destination.
+// folder, and offers helpers to seed data through the API. With
+// `test.use({ lichess: true })` it also starts the mock Lichess (test/mock-lichess.js)
+// and connects the trainer to it. `playMove` moves a piece on the chessground board by
+// clicking its square and then the destination.
 
 import { test as base, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../helpers/server.mjs';
+import { startMockLichess } from '../helpers/mock-lichess.mjs';
 
 const SAMPLES = fileURLToPath(new URL('../../samples', import.meta.url));
 
@@ -23,10 +26,15 @@ const SAMPLES = fileURLToPath(new URL('../../samples', import.meta.url));
  * @typedef {import('@playwright/test').PlaywrightWorkerArgs & import('@playwright/test').PlaywrightWorkerOptions} WorkerArgs
  */
 
-/** @type {import('@playwright/test').TestType<TestArgs & { app: App }, WorkerArgs>} */
+/** @type {import('@playwright/test').TestType<TestArgs & { app: App, lichess: boolean }, WorkerArgs>} */
 export const test = base.extend({
-  app: async ({ page }, use) => {
-    const server = await startServer();
+  lichess: [false, { option: true }],
+  app: async ({ page, lichess }, use) => {
+    const mock = lichess ? await startMockLichess() : null;
+    const server = await startServer(mock ? { env: { LICHESS_URL: mock.url, LICHESS_EXPLORER_URL: mock.url } } : {}).catch((err) => {
+      if (mock) mock.stop();
+      throw err;
+    });
     const api = async (method, url, body) => {
       const res = await fetch(server.base + url, {
         method,
@@ -54,12 +62,14 @@ export const test = base.extend({
       /** Open a route of the app, e.g. '#/settings'. */
       open: (hash = '#/') => page.goto(`${server.base}/${hash}`),
     };
-    // Fast, quiet training: opponent moves play at once, no sounds or animation.
-    await api('PUT', '/api/settings', { moveDelay: 0, knownDelay: 0, animation: 0, sounds: false });
     try {
+      // Fast, quiet training: opponent moves play at once, no sounds or animation.
+      await api('PUT', '/api/settings', { moveDelay: 0, knownDelay: 0, animation: 0, sounds: false });
+      if (mock) await api('POST', '/api/lichess/token', { token: 'lip_mockPersonalToken' }); // gitleaks:allow (fake token for the mock)
       await use(app);
     } finally {
       await server.stop();
+      if (mock) mock.stop();
     }
   },
 });

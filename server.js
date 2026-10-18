@@ -102,6 +102,7 @@ app.get('/api/repertoires', wrap(() => store.listRepertoires()));
 app.get('/api/repertoires/:id', wrap((req) => store.getRepertoire(req.params.id)));
 app.post('/api/repertoires', wrap((req) => store.createRepertoire(req.body || {})));
 app.put('/api/repertoires/:id', wrap((req) => store.updateRepertoire(req.params.id, req.body || {})));
+app.post('/api/repertoires/:id/lines', wrap((req) => store.addLine(req.params.id, req.body || {})));
 app.patch('/api/repertoires/:id/progress', wrap((req) => store.patchProgress(req.params.id, req.body || {})));
 app.delete('/api/repertoires/:id/progress', wrap((req) => store.resetProgress(req.params.id)));
 app.delete('/api/repertoires/:id', wrap((req) => (store.deleteRepertoire(req.params.id) ? { ok: true } : null)));

@@ -7,6 +7,7 @@
 // in the old format.
 
 import { MAX_LEVEL } from './public/js/srs.js';
+import { parsePgn } from './public/js/pgn.js';
 
 export const SCHEMA_VERSION = 1;
 
@@ -122,6 +123,24 @@ export function checkRepertoireInput(input, partial = false) {
   if (notes !== undefined && typeof notes !== 'string') errors.push('Notes must be text.');
   if (errors.length) throw fail(errors.join(' '));
   if (audit !== undefined) checkAudit(audit);
+}
+
+const MAX_CHAPTER = 20000; // characters: one added line, not a whole book
+
+/**
+ * Check one chapter to add to a repertoire (POST …/lines): PGN text for a single game
+ * whose moves all read cleanly.
+ * @param {unknown} pgn
+ * @returns {string} the chapter, trimmed
+ */
+export function checkChapter(pgn) {
+  if (typeof pgn !== 'string' || !pgn.trim()) throw fail('The line to add is missing.');
+  if (pgn.length > MAX_CHAPTER) throw fail('That line is too long to add in one go. Edit the repertoire instead.');
+  const games = parsePgn(pgn); // games without moves are left out
+  if (!games.length) throw fail('The line to add has no moves.');
+  if (games.length > 1) throw fail('Send one line (a single PGN game) at a time.');
+  if (games[0].errors.length) throw fail(`The line could not be read: ${games[0].errors[0]}`);
+  return pgn.trim();
 }
 
 /**

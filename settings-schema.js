@@ -89,9 +89,21 @@ function buildSchema() {
         { key: 'verdictDepth', group: 'Checking your moves', type: 'int', min: 6, max: 30, default: 14, unit: 'ply', label: 'Mistake verdict depth', help: 'When you play a wrong move, Stockfish compares it with the book move at this depth. Higher is more reliable, but you wait longer for the verdict.' },
         { key: 'auditDepth', group: 'Checking your moves', type: 'int', min: 6, max: 30, default: 14, unit: 'ply', label: 'Repertoire audit depth', help: 'Depth used when checking every move of a repertoire.' },
         { key: 'auditThreshold', group: 'Checking your moves', type: 'int', min: 10, max: 500, step: 5, default: 70, unit: 'centipawns', label: 'Audit flags moves that lose at least', help: '100 centipawns is one pawn. 70 flags moves Stockfish thinks give away about three quarters of a pawn.' },
-        { key: 'sparElo', group: 'Sparring', type: 'int', min: 1320, max: 3190, step: 10, default: 1800, unit: 'Elo', label: 'Default sparring strength', help: 'Stockfish can imitate players from 1320 to 3190 Elo. At 3190 it plays at full strength.' },
-        { key: 'sparMoveTime', group: 'Sparring', type: 'int', min: 100, max: 10000, step: 100, default: 700, unit: 'ms', label: 'Sparring thinking time per move', help: 'Longer is a little stronger and a little slower.' },
-        { key: 'sparFollowBook', group: 'Sparring', type: 'bool', default: true, label: 'Sparring opponent plays your prepared lines first', help: 'While the game is still in your repertoire, the opponent picks one of the replies you prepared for, then improvises once the book runs out.' },
+      ],
+    },
+    {
+      id: 'sparring',
+      title: 'Sparring and drills',
+      intro: 'Play on against an opponent who behaves like the people you meet: Spar, “Play it out” after a line, and Surprise drills, where the opponent leaves your book.',
+      fields: [
+        { key: 'sparOpponent', group: 'Opponent', type: 'select', default: 'lichess', label: 'Sparring opponent', help: 'Lichess players choose each move as often as players in your rating bands and time controls (under Opponents on Lichess) do. Once a position has no games in the database, Stockfish takes over at the strength below. Needs your Lichess account connected.', options: [['lichess', 'Lichess players at your rating, then Stockfish'], ['book', 'Your prepared lines, then Stockfish'], ['engine', 'Stockfish from the first move']] },
+        { key: 'sparElo', group: 'Opponent', type: 'int', min: 1320, max: 3190, step: 10, default: 1800, unit: 'Elo', label: 'Stockfish’s strength', help: 'Stockfish can imitate players from 1320 to 3190 Elo. At 3190 it plays at full strength.' },
+        { key: 'sparMoveTime', group: 'Opponent', type: 'int', min: 100, max: 10000, step: 100, default: 700, unit: 'ms', label: 'Stockfish’s thinking time per move', help: 'Longer is a little stronger and a little slower.' },
+        { key: 'playOutMoves', group: 'Play it out', type: 'int', min: 2, max: 40, default: 8, unit: 'moves', label: 'Moves to play after a line', help: '“Play it out” at the end of a line: play this many more moves of your own against the sparring opponent, then Stockfish judges the position.' },
+        { key: 'playOutTolerance', group: 'Play it out', type: 'int', min: 10, max: 500, step: 10, default: 70, unit: 'centipawns', label: 'You keep the position if the evaluation drops by at most', help: '100 centipawns is one pawn. Staying clearly winning (3 pawns or more) always counts.' },
+        { key: 'surpriseBatch', group: 'Surprise drills', type: 'int', min: 1, max: 50, default: 10, unit: 'surprises', label: 'Surprises per session', help: 'Saved gaps from the mistake finder come first, then replies looked up from your lines.' },
+        { key: 'surpriseMinShare', group: 'Surprise drills', type: 'number', min: 1, max: 50, step: 1, default: 5, unit: '%', label: 'Surprise with replies played in at least', help: 'How popular an unprepared reply must be on Lichess to come up. Without a Lichess account, Stockfish suggests sound sidelines instead.' },
+        { key: 'surpriseTolerance', group: 'Surprise drills', type: 'int', min: 10, max: 300, step: 10, default: 50, unit: 'centipawns', label: 'A good answer gives away at most', help: 'Compared with Stockfish’s best answer. 50 is half a pawn.' },
       ],
     },
     {
@@ -194,6 +206,17 @@ function clean(field, value) {
   }
 }
 
+/**
+ * Saved settings from an older trainer, in today's terms: "Sparring opponent plays your
+ * prepared lines first" (sparFollowBook) became the Sparring opponent choice. Off meant
+ * Stockfish from the first move; on gets the new default.
+ * @param {Record<string, any>} saved
+ */
+function upgrade(saved) {
+  if (!saved || saved.sparOpponent !== undefined || saved.sparFollowBook !== false) return saved;
+  return { ...saved, sparOpponent: 'engine' };
+}
+
 /** Merge a patch into current settings, keeping only valid values. */
 function validate(current, patch) {
   const next = { ...current };
@@ -220,4 +243,4 @@ function finderOptions(settings) {
   return out;
 }
 
-export { buildSchema, defaults, validate, clean, machine, engineDefaults, finderOptions, ENGINE_KEYS, WASM_HASH_MAX };
+export { buildSchema, defaults, validate, upgrade, clean, machine, engineDefaults, finderOptions, ENGINE_KEYS, WASM_HASH_MAX };
