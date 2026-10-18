@@ -2,9 +2,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { buildRepertoire } from '../public/js/repertoire.js';
 import { passPlan, resultForCorrectMove, resultAfterHint, firstResult, judgeWrongMove, gradePass, gradeCard } from '../public/js/session.js';
 
+const require = createRequire(import.meta.url);
 const HOUR = 3600e3;
 const NOW = 1_800_000_000_000;
 // White plays e4, Nf3 and Bb5: three cards.
@@ -118,7 +120,10 @@ test('review: due moves level up, misses drop, the rest stay put', () => {
 });
 
 test('review: a miss demotes even a move that was not due (quizAllMoves)', () => {
-  // Current behaviour, kept by the refactor. The setting's help text says only due moves change level.
+  // Deliberate: forgetting a move is worth knowing about, due or not. The setting's
+  // help text says so too; keep the two in step.
+  const help = require('../settings-schema.js').buildSchema().flatMap((s) => s.fields).find((f) => f.key === 'quizAllMoves').help;
+  assert.match(help, /a mistake sends any move back down, due or not/);
   const g = gradePass({
     line, phase: 'review', quiz: new Set([k1, k2, k3]), dueAtStart: new Set([k1]), now: NOW,
     cards: { [k1]: due(3), [k2]: later(5), [k3]: later(4) }, results: new Map([[k2, 'wrong']]),
