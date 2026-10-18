@@ -9,7 +9,7 @@ import { setBoardPrefs } from './board.js';
 export const state = {
   settings: null,
   lichess: /** @type {Partial<import('../../lichess.js').LichessStatus> & { error?: string }} */ ({ connected: false }),
-  reps: new Map(),
+  reps: /** @type {Map<string, import('../../repertoire-format.js').RepertoireFile>} */ (new Map()),
   models: new Map(), // id -> { sig, model }
 };
 

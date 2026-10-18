@@ -17,6 +17,7 @@ import { EngineManager } from './engine.js';
 import { createLichessClient } from './lichess.js';
 import { searchMistakes } from './puzzles.js';
 import { buildRepertoire } from './public/js/repertoire.js'; // shared with the browser
+import { REQUEST, REPLY } from './public/js/protocol.js';
 
 const PORT = Number(process.env.PORT) || 3210;
 const HOST = process.env.HOST || '127.0.0.1'; // only reachable from this computer
@@ -190,16 +191,7 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API route' 
 
 // --- WebSocket engine bridge ---------------------------------------------------
 //
-// Client -> server
-//   { type: 'analyse',  id, fen, multipv, depth?, movetime?, infinite? }
-//   { type: 'stop',     id }
-//   { type: 'evaluate', id, fen, moves: [uci], depth }
-//   { type: 'bestmove', id, fen, elo?, movetime?, newGame? }
-// Server -> client
-//   { type: 'info',  id, depth, lines }     (streamed while analysing)
-//   { type: 'done',  id, depth, lines, bestmove }
-//   { type: 'result', id, ...payload }      (evaluate / bestmove)
-//   { type: 'error', id, message }
+// The messages and what answers each are described in public/js/protocol.js.
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({
@@ -214,7 +206,7 @@ const wss = new WebSocketServer({
 
 const clients = new Set();
 lichess.events.on('ratelimit', (until) => {
-  for (const c of clients) if (c.readyState === c.OPEN) c.send(JSON.stringify({ type: 'lichess', status: lichess.status(), until }));
+  for (const c of clients) if (c.readyState === c.OPEN) c.send(JSON.stringify({ type: REPLY.LICHESS, status: lichess.status(), until }));
 });
 
 wss.on('connection', (ws) => {
@@ -223,19 +215,22 @@ wss.on('connection', (ws) => {
   const runs = new Map(); // client id -> engine run (for cancelling)
   const send = (msg) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); };
 
-  send({ type: 'hello', engine: engines.info() });
+  send({ type: REPLY.HELLO, engine: engines.info() });
 
   ws.on('message', async (raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch (e) { return; }
+    // Not a request (null, a number, a list): ignore it. Reading msg.id from null here,
+    // outside the try below, would stop the whole server.
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
     const { id } = msg;
     try {
-      if (msg.type === 'analyse') {
+      if (msg.type === REQUEST.ANALYSE) {
         // A client only ever has one live analysis: a new one replaces the old.
         for (const [key, run] of runs) if (run.kind === 'analyse') { run.cancel(); runs.delete(key); }
         let last = 0;
         let pending = null;
-        const flush = () => { pending = null; last = Date.now(); send({ type: 'info', ...latest, id }); };
+        const flush = () => { pending = null; last = Date.now(); send({ type: REPLY.INFO, ...latest, id }); };
         let latest = null;
         const run = engines.analyse(msg, (snap) => {
           latest = snap;
@@ -248,19 +243,19 @@ wss.on('connection', (ws) => {
         const res = await run.promise;
         if (pending) clearTimeout(pending);
         runs.delete(id);
-        send({ type: 'done', ...res, id });
-      } else if (msg.type === 'stop') {
+        send({ type: REPLY.DONE, ...res, id });
+      } else if (msg.type === REQUEST.STOP) {
         const run = runs.get(id);
         if (run) run.cancel();
-      } else if (msg.type === 'evaluate') {
+      } else if (msg.type === REQUEST.EVALUATE) {
         const res = await engines.evaluate(msg);
-        send({ type: 'result', ...res, id });
-      } else if (msg.type === 'bestmove') {
+        send({ type: REPLY.RESULT, ...res, id });
+      } else if (msg.type === REQUEST.BESTMOVE) {
         const res = await engines.bestmove(msg);
-        send({ type: 'result', ...res, id });
-      } else if (msg.type === 'status') {
-        send({ type: 'result', id, engine: engines.info() });
-      } else if (msg.type === 'puzzle-search') {
+        send({ type: REPLY.RESULT, ...res, id });
+      } else if (msg.type === REQUEST.STATUS) {
+        send({ type: REPLY.RESULT, id, engine: engines.info() });
+      } else if (msg.type === REQUEST.PUZZLE_SEARCH) {
         const rep = store.getRepertoire(msg.repId);
         if (!rep) throw Object.assign(new Error('Repertoire not found'), { status: 404 });
         let stopped = false;
@@ -277,14 +272,17 @@ wss.on('connection', (ws) => {
           onEvent: (ev) => {
             if (ev.kind === 'found') store.addPuzzles(rep.id, [ev.puzzle]);
             if (ev.kind === 'gap') store.addGaps(rep.id, [ev.gap]);
-            send({ type: 'search-event', id, ...ev });
+            send({ type: REPLY.SEARCH_EVENT, id, ...ev });
           },
         });
         runs.delete(id);
-        send({ type: 'result', id, ...result, puzzles: result.puzzles.map((p) => p.id) });
+        send({ type: REPLY.RESULT, id, ...result, puzzles: result.puzzles.map((p) => p.id) });
+      } else {
+        // Without an answer the page would wait for its timeout.
+        throw new Error(`The server does not understand "${String(msg.type)}" requests. Reload the page.`);
       }
     } catch (err) {
-      send({ type: 'error', id, message: err.message });
+      send({ type: REPLY.ERROR, id, message: err.message });
     }
   });
 

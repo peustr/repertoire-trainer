@@ -1,0 +1,77 @@
+// The engine WebSocket protocol (public/js/protocol.js) as the real server speaks it.
+
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import WebSocket from 'ws';
+import { startServer } from './helpers/server.mjs';
+import { REQUEST, REPLY } from '../public/js/protocol.js';
+
+let server;
+before(async () => { server = await startServer(); });
+after(() => server && server.stop());
+
+/** Open the socket as the app's own page would, and collect what the server sends. */
+async function connect() {
+  const ws = new WebSocket(`ws://127.0.0.1:${server.port}/ws`, { headers: { Origin: server.base } });
+  const inbox = [];
+  const waiters = [];
+  ws.on('message', (raw) => {
+    const msg = JSON.parse(String(raw));
+    inbox.push(msg);
+    for (const w of [...waiters]) if (w.match(msg)) { waiters.splice(waiters.indexOf(w), 1); w.resolve(msg); }
+  });
+  await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+  const next = (match, what) => {
+    const seen = inbox.find(match);
+    if (seen) return Promise.resolve(seen);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`No ${what} within 5 s`)), 5000);
+      waiters.push({ match, resolve: (m) => { clearTimeout(timer); resolve(m); } });
+    });
+  };
+  return { ws, next, send: (msg) => ws.send(JSON.stringify(msg)) };
+}
+
+test('the server greets each page with the engines it runs', async () => {
+  const { ws, next } = await connect();
+  const hello = await next((m) => m.type === REPLY.HELLO, 'hello');
+  assert.ok(hello.engine && hello.engine.analysis && hello.engine.tasks);
+  ws.close();
+});
+
+test('a status request is answered with a result for its id', async () => {
+  const { ws, next, send } = await connect();
+  send({ type: REQUEST.STATUS, id: 7 });
+  const res = await next((m) => m.id === 7, 'status result');
+  assert.equal(res.type, REPLY.RESULT);
+  assert.ok(res.engine);
+  ws.close();
+});
+
+test('a request the server does not know is answered with an error, not silence', async () => {
+  const { ws, next, send } = await connect();
+  send({ type: 'analyze', id: 8 }); // misspelt
+  const res = await next((m) => m.id === 8, 'answer to an unknown request');
+  assert.equal(res.type, REPLY.ERROR);
+  assert.match(res.message, /analyze/);
+  ws.close();
+});
+
+test('the protocol names each message once', () => {
+  const values = [...Object.values(REQUEST), ...Object.values(REPLY)];
+  assert.equal(new Set(Object.values(REQUEST)).size, Object.values(REQUEST).length);
+  assert.equal(new Set(Object.values(REPLY)).size, Object.values(REPLY).length);
+  assert.ok(values.every((v) => typeof v === 'string' && v));
+  assert.ok(Object.isFrozen(REQUEST) && Object.isFrozen(REPLY));
+});
+
+test('a message that is not a request object is ignored, and the server keeps going', async () => {
+  const junk = await connect();
+  for (const raw of ['null', '5', '"analyse"', '[]', 'not json']) junk.ws.send(raw);
+  await new Promise((r) => setTimeout(r, 500)); // long enough for a crash to happen
+  junk.ws.close();
+  const { ws, next, send } = await connect();
+  send({ type: REQUEST.STATUS, id: 9 });
+  assert.equal((await next((m) => m.id === 9, 'status result after the junk')).type, REPLY.RESULT);
+  ws.close();
+});

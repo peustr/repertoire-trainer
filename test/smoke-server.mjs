@@ -8,6 +8,7 @@ import path from 'node:path';
 import WebSocket from 'ws';
 import { startServer } from './helpers/server.mjs';
 import { START_FEN } from '../public/js/constants.js';
+import { REQUEST, REPLY } from '../public/js/protocol.js';
 
 function withTimeout(promise, ms, what) {
   let timer;
@@ -106,9 +107,9 @@ try {
         ws.on('error', reject);
         ws.on('message', (raw) => {
           const msg = JSON.parse(raw);
-          if (msg.type === 'hello') ws.send(JSON.stringify({ type: 'evaluate', id: 1, fen: START_FEN, moves: ['e2e4', 'g1f3'], depth: 8 }));
-          if (msg.id === 1 && msg.type === 'result') resolve(msg);
-          if (msg.id === 1 && msg.type === 'error') reject(new Error(msg.message));
+          if (msg.type === REPLY.HELLO) ws.send(JSON.stringify({ type: REQUEST.EVALUATE, id: 1, fen: START_FEN, moves: ['e2e4', 'g1f3'], depth: 8 }));
+          if (msg.id === 1 && msg.type === REPLY.RESULT) resolve(msg);
+          if (msg.id === 1 && msg.type === REPLY.ERROR) reject(new Error(msg.message));
         });
       }), 90000, 'engine evaluate');
       assert.match(result.best.move, /^[a-h][1-8][a-h][1-8]/);
@@ -126,18 +127,18 @@ try {
     ws.on('message', (raw) => {
       const msg = JSON.parse(raw);
       const waiting = answers.get(msg.id);
-      if (waiting && msg.type === 'result') waiting.resolve(msg);
-      if (waiting && msg.type === 'error') waiting.reject(new Error(msg.message));
+      if (waiting && msg.type === REPLY.RESULT) waiting.resolve(msg);
+      if (waiting && msg.type === REPLY.ERROR) waiting.reject(new Error(msg.message));
     });
     try {
       await withTimeout(new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); }), 10000, 'socket open');
       const first = answer(2);
-      ws.send(JSON.stringify({ type: 'evaluate', id: 2, fen: START_FEN, moves: ['d2d4'], depth: 12 }));
+      ws.send(JSON.stringify({ type: REQUEST.EVALUATE, id: 2, fen: START_FEN, moves: ['d2d4'], depth: 12 }));
       const saved = await api('PUT', '/api/settings', { taskHash: 32 }); // restarts Stockfish
       assert.equal(saved.status, 200);
       assert.ok((await withTimeout(first, 90000, 'search during restart')).best.move, 'the running search still answered');
       const second = answer(3);
-      ws.send(JSON.stringify({ type: 'evaluate', id: 3, fen: START_FEN, moves: ['e2e4'], depth: 8 }));
+      ws.send(JSON.stringify({ type: REQUEST.EVALUATE, id: 3, fen: START_FEN, moves: ['e2e4'], depth: 8 }));
       assert.ok((await withTimeout(second, 90000, 'search after restart')).best.move, 'the restarted engine answers');
     } finally {
       ws.close();

@@ -2,14 +2,15 @@
 // instead of showing "Thinking…" forever.
 
 import { test, expect } from './fixtures.mjs';
+import { REQUEST, REPLY } from '../../public/js/protocol.js';
 
 /** Replace the engine WebSocket with a fake that greets and then reacts to "analyse" as told. */
 async function fakeEngineSocket(page, onAnalyse) {
   await page.routeWebSocket(/\/ws$/, (ws) => {
-    ws.send(JSON.stringify({ type: 'hello', engine: null }));
+    ws.send(JSON.stringify({ type: REPLY.HELLO, engine: null }));
     ws.onMessage((raw) => {
       const msg = JSON.parse(String(raw));
-      if (msg.type === 'analyse') onAnalyse(ws, msg);
+      if (msg.type === REQUEST.ANALYSE) onAnalyse(ws, msg);
     });
   });
 }
