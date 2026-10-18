@@ -2,7 +2,8 @@
 
 import { api } from './api.js';
 import { buildRepertoire, hash } from './repertoire.js';
-import { setFigurines, setSounds } from './ui.js';
+import { setFigurines, setSounds, toast } from './ui.js';
+import { createOutbox, applyCards } from './outbox.js';
 import { setIntervals, setStepback } from './srs.js';
 import { setBoardPrefs } from './board.js';
 
@@ -50,14 +51,14 @@ export async function loadLichess() {
 }
 
 export async function loadReps() {
-  const list = await api.list();
+  const list = (await api.list()).map(withUnsaved);
   state.reps = new Map(list.map((r) => [r.id, r]));
   return list;
 }
 
 export async function getRep(id, { fresh = false } = {}) {
   if (fresh || !state.reps.has(id)) {
-    const rep = await api.get(id);
+    const rep = withUnsaved(await api.get(id));
     state.reps.set(id, rep);
   }
   return state.reps.get(id);
@@ -91,17 +92,46 @@ function today() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Persist card updates (and a daily tally) for one repertoire. */
+// --- progress saves ---------------------------------------------------------------
+// Answers go through an outbox (outbox.js): kept in localStorage until the server
+// has them, so a server restart, a sleeping laptop or a locked file loses nothing.
+
+const OUTBOX_KEY = 'repertoire-trainer.unsaved-progress';
+let outboxMemory = []; // used when localStorage is unavailable (private window, blocked storage)
+
+const outbox = createOutbox({
+  storage: {
+    get() {
+      try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch (err) { return outboxMemory; }
+    },
+    set(entries) {
+      outboxMemory = entries;
+      try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(entries)); } catch (err) { /* kept in memory */ }
+    },
+  },
+  send: (e) => api.progress(e.repId, { cards: e.cards, tally: e.tally, saveId: e.saveId }),
+  onChange({ error, recovered, dropped }) {
+    if (dropped) toast(`Some progress could not be saved: ${error.message}`, 'bad');
+    else if (error) toast('Your progress could not be saved just now. It is kept in this browser and will be saved as soon as the trainer answers again.', 'bad');
+    else if (recovered) toast('Your progress is saved.');
+  },
+});
+
+/** A repertoire from the server, with any card updates it does not have yet laid on top. */
+function withUnsaved(rep) {
+  const unsaved = outbox.pendingCards(rep.id);
+  if (Object.keys(unsaved).length) rep.cards = applyCards({ ...(rep.cards || {}) }, unsaved);
+  return rep;
+}
+
+/** Send any progress left over from before (call at start-up). Never fails. */
+export function flushProgress() {
+  return outbox.flush();
+}
+
+/** Save card updates (and a daily tally) for one repertoire. Never fails: see the outbox. */
 export async function saveCards(repId, cards, tally) {
   const rep = state.reps.get(repId);
-  if (rep) {
-    rep.cards = rep.cards || {};
-    for (const [k, v] of Object.entries(cards)) {
-      if (v === null) delete rep.cards[k];
-      else rep.cards[k] = v;
-    }
-  }
-  const updated = await api.progress(repId, { cards, tally: tally ? { date: today(), ...tally } : undefined });
-  state.reps.set(repId, { ...updated, cards: rep ? rep.cards : updated.cards });
-  return updated;
+  if (rep) rep.cards = applyCards(rep.cards || {}, cards);
+  await outbox.add({ repId, cards, tally: tally ? { date: today(), ...tally } : undefined });
 }

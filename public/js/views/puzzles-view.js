@@ -176,7 +176,7 @@ export async function renderPuzzles(root, { id, ids }) {
     else next = prev;
     if (success) tally.solved++; else tally.missed++;
     if (next !== prev) {
-      saveCards(rep.id, { [puzzleKey(p.id)]: next }, success ? { correct: 1 } : { wrong: 1 }).catch((err) => toast(err.message, 'bad'));
+      saveCards(rep.id, { [puzzleKey(p.id)]: next }, success ? { correct: 1 } : { wrong: 1 });
     }
     if (success) sound.done();
     const title = head.querySelector('.line-title');
@@ -205,7 +205,7 @@ export async function renderPuzzles(root, { id, ids }) {
     engineRun = analyse(cur.fen, { multipv: 1, depth: 16 }, (msg) => {
       const top = msg.lines && msg.lines[0];
       if (top) evalBar.update(evalBarShare(top.score), formatScore(top.score), rep.color === 'black');
-    });
+    }, () => evalBar.hide(true));
   }
 
   async function addToRepertoire(p, btn) {

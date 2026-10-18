@@ -9,7 +9,7 @@ Everything runs on your laptop. Your repertoires are plain JSON files in `data/`
 
 ## Start it on Windows
 
-1. Install **Node.js LTS** (version 20 or newer) from https://nodejs.org.
+1. Install **Node.js LTS** (version 22.12 or newer) from https://nodejs.org.
 2. Unzip this folder somewhere, for example `Documents\repertoire-trainer`.
 3. Double-click **`start.bat`**. The first run installs dependencies (about a
    minute, needs internet once). Your browser opens at http://localhost:3210.
@@ -166,7 +166,9 @@ test/helpers/, test/fixtures/  Test server launcher, fake Stockfish
 ```
 
 Settings live in `data/settings.json`, repertoires in `data/repertoires/*.json`.
-Back up or sync the `data` folder to keep your progress. Each file keeps its
+Back up or sync the `data` folder to keep your progress. If the trainer's console
+window is closed while you train, your answers wait in the browser and are saved as
+soon as it is running again. Each file keeps its
 previous version next to it as `.bak`. If a file is ever damaged (say, by a
 sync conflict), the trainer keeps the damaged copy as `.corrupt-<time>`, restores
 the previous version, and says so in its console window.

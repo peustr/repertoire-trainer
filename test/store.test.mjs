@@ -109,6 +109,16 @@ test('a save that keeps failing reports the error and leaves no temp file', (t) 
   assert.deepEqual(store.getRepertoire(rep.id).cards, {}, 'the last good version is untouched');
 });
 
+test('a save retried after a lost reply is applied once', () => {
+  const rep = store.createRepertoire({ name: 'Retried', color: 'white', pgn: PGN });
+  const save = { cards: { k: { level: 1, due: 0 } }, tally: { date: '2026-10-18', correct: 3, wrong: 1, lines: 1 }, saveId: 'save-1' };
+  store.patchProgress(rep.id, save);
+  store.patchProgress(rep.id, save); // the browser never heard back, so it sent it again
+  assert.deepEqual(store.getRepertoire(rep.id).history, [{ date: '2026-10-18', correct: 3, wrong: 1, lines: 1 }]);
+  store.patchProgress(rep.id, { ...save, saveId: 'save-2' });
+  assert.equal(store.getRepertoire(rep.id).history[0].correct, 6, 'a different save still counts');
+});
+
 test('temp files left by interrupted saves are swept', () => {
   fs.mkdirSync(REP_DIR, { recursive: true });
   const stale = [path.join(REP_DIR, 'x-1a2b3c.json.4242.1700000000000.tmp'), path.join(dataDir, 'settings.json.4242.1700000000000.tmp')];

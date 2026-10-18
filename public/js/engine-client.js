@@ -3,9 +3,20 @@
 let ws = null;
 let seq = 0;
 let connecting = null;
-const pending = new Map(); // id -> { resolve, reject, onInfo }
+const pending = new Map(); // id -> { resolve, reject, onInfo, timer, touch }
 const listeners = new Set();
 let status = { connected: false, engine: null };
+
+// How long a request may go without hearing from the server before it is given up.
+// Searches stream progress, so silence means something is wrong. The server's own
+// watchdog replaces a stuck engine after about 48 s; this covers a server that never
+// answers at all. The mistake search can wait 61 s for Lichess, so it gets longer.
+const limits = { request: 90000, search: 180000 };
+
+/** Shorten the limits (tests). */
+export function setRequestLimits(next) {
+  Object.assign(limits, next);
+}
 
 function setStatus(patch) {
   status = { ...status, ...patch };
@@ -35,19 +46,22 @@ function connect() {
       ws = null;
       connecting = null;
       setStatus({ connected: false });
-      for (const [id, p] of pending) { p.reject(new Error('Lost connection to the engine')); pending.delete(id); }
+      for (const [id, p] of pending) { clearTimeout(p.timer); p.reject(new Error('Lost connection to the engine')); pending.delete(id); }
       if (!wasOpen) reject(new Error('Could not reach the local server'));
       setTimeout(() => connect().catch(() => {}), 2000);
     };
     sock.onmessage = (ev) => {
-      const msg = JSON.parse(ev.data);
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch (err) { return; }
       if (msg.type === 'hello') { setStatus({ engine: msg.engine }); return; }
       if (msg.type === 'lichess') { for (const fn of lichessListeners) fn(msg); return; }
       const p = pending.get(msg.id);
       if (!p) return;
-      if (msg.type === 'info' || msg.type === 'search-event') p.onInfo && p.onInfo(msg);
-      else if (msg.type === 'error') { pending.delete(msg.id); p.reject(new Error(msg.message)); }
-      else { pending.delete(msg.id); p.resolve(msg); }
+      if (msg.type === 'info' || msg.type === 'search-event') { p.touch(); if (p.onInfo) p.onInfo(msg); return; }
+      clearTimeout(p.timer);
+      pending.delete(msg.id);
+      if (msg.type === 'error') p.reject(new Error(msg.message));
+      else p.resolve(msg);
     };
   });
   return connecting;
@@ -56,16 +70,30 @@ function connect() {
 async function request(payload, onInfo) {
   const sock = await connect();
   const id = ++seq;
-  const promise = new Promise((resolve, reject) => pending.set(id, { resolve, reject, onInfo }));
+  const quiet = payload.type === 'puzzle-search' ? limits.search : limits.request;
+  const promise = new Promise((resolve, reject) => {
+    const entry = { resolve, reject, onInfo, timer: null };
+    entry.touch = () => {
+      clearTimeout(entry.timer);
+      entry.timer = setTimeout(() => {
+        pending.delete(id);
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop', id }));
+        reject(new Error('Stockfish did not answer in time. Try again, or restart the trainer if it keeps happening.'));
+      }, quiet);
+    };
+    entry.touch();
+    pending.set(id, entry);
+  });
   sock.send(JSON.stringify({ ...payload, id }));
   return { id, promise };
 }
 
 /**
  * Live analysis. onUpdate receives { depth, lines: [{ multipv, depth, score: {cp}|{mate}, pv: [uci] }] }.
- * Returns a handle with stop().
+ * onError(err) hears why it failed (no engine, lost connection, no answer in time),
+ * unless it was stopped first. Returns a handle with stop().
  */
-export function analyse(fen, { multipv = 3, depth = 22 } = {}, onUpdate) {
+export function analyse(fen, { multipv = 3, depth = 22 } = {}, onUpdate, onError = (err) => console.warn('[engine]', err.message)) {
   let stopped = false;
   let id = null;
   const ready = request({ type: 'analyse', fen, multipv, depth }, (msg) => { if (!stopped) onUpdate(msg, false); })
@@ -74,7 +102,7 @@ export function analyse(fen, { multipv = 3, depth = 22 } = {}, onUpdate) {
       if (stopped) stop();
       return r.promise.then((msg) => { if (!stopped) onUpdate(msg, true); });
     })
-    .catch(() => {});
+    .catch((err) => { if (!stopped) onError(err); });
   function stop() {
     stopped = true;
     if (id != null && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop', id }));

@@ -182,10 +182,23 @@ function updateRepertoire(id, patch) {
   return rep;
 }
 
-/** Merge spaced-repetition updates: { cards: {key: state|null}, tally: {date, correct, wrong} } */
-function patchProgress(id, { cards, tally }) {
+const APPLIED_SAVES_KEPT = 200;
+
+/**
+ * Merge spaced-repetition updates: { cards: {key: state|null}, tally: {date, correct, wrong}, saveId? }
+ * The browser retries a save until it gets an answer, so the same save can arrive twice
+ * (the reply to the first was lost). A saveId already applied is ignored, which keeps the
+ * daily tally from counting twice.
+ */
+function patchProgress(id, { cards, tally, saveId }) {
   const rep = getRepertoire(id);
   if (!rep) return null;
+  if (typeof saveId === 'string' && saveId && saveId.length <= 64) {
+    rep.appliedSaves = rep.appliedSaves || [];
+    if (rep.appliedSaves.includes(saveId)) return rep;
+    rep.appliedSaves.push(saveId);
+    if (rep.appliedSaves.length > APPLIED_SAVES_KEPT) rep.appliedSaves.splice(0, rep.appliedSaves.length - APPLIED_SAVES_KEPT);
+  }
   rep.cards = rep.cards || {};
   for (const [key, state] of Object.entries(cards || {})) {
     if (state === null) delete rep.cards[key];
