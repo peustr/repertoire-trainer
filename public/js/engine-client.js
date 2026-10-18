@@ -1,4 +1,6 @@
-// Browser side of the Stockfish bridge (see server.js for the protocol).
+// Browser side of the Stockfish bridge. The messages are described in protocol.js.
+
+import { REQUEST, REPLY } from './protocol.js';
 
 let ws = null;
 let seq = 0;
@@ -53,14 +55,14 @@ function connect() {
     sock.onmessage = (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch (err) { return; }
-      if (msg.type === 'hello') { setStatus({ engine: msg.engine }); return; }
-      if (msg.type === 'lichess') { for (const fn of lichessListeners) fn(msg); return; }
+      if (msg.type === REPLY.HELLO) { setStatus({ engine: msg.engine }); return; }
+      if (msg.type === REPLY.LICHESS) { for (const fn of lichessListeners) fn(msg); return; }
       const p = pending.get(msg.id);
       if (!p) return;
-      if (msg.type === 'info' || msg.type === 'search-event') { p.touch(); if (p.onInfo) p.onInfo(msg); return; }
+      if (msg.type === REPLY.INFO || msg.type === REPLY.SEARCH_EVENT) { p.touch(); if (p.onInfo) p.onInfo(msg); return; }
       clearTimeout(p.timer);
       pending.delete(msg.id);
-      if (msg.type === 'error') p.reject(new Error(msg.message));
+      if (msg.type === REPLY.ERROR) p.reject(new Error(msg.message));
       else p.resolve(msg);
     };
   });
@@ -70,14 +72,14 @@ function connect() {
 async function request(payload, onInfo) {
   const sock = await connect();
   const id = ++seq;
-  const quiet = payload.type === 'puzzle-search' ? limits.search : limits.request;
+  const quiet = payload.type === REQUEST.PUZZLE_SEARCH ? limits.search : limits.request;
   const promise = new Promise((resolve, reject) => {
     const entry = { resolve, reject, onInfo, timer: null };
     entry.touch = () => {
       clearTimeout(entry.timer);
       entry.timer = setTimeout(() => {
         pending.delete(id);
-        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop', id }));
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: REQUEST.STOP, id }));
         reject(new Error('Stockfish did not answer in time. Try again, or restart the trainer if it keeps happening.'));
       }, quiet);
     };
@@ -96,7 +98,7 @@ async function request(payload, onInfo) {
 export function analyse(fen, { multipv = 3, depth = 22 } = {}, onUpdate, onError = (err) => console.warn('[engine]', err.message)) {
   let stopped = false;
   let id = null;
-  const ready = request({ type: 'analyse', fen, multipv, depth }, (msg) => { if (!stopped) onUpdate(msg, false); })
+  const ready = request({ type: REQUEST.ANALYSE, fen, multipv, depth }, (msg) => { if (!stopped) onUpdate(msg, false); })
     .then((r) => {
       id = r.id;
       if (stopped) stop();
@@ -105,14 +107,14 @@ export function analyse(fen, { multipv = 3, depth = 22 } = {}, onUpdate, onError
     .catch((err) => { if (!stopped) onError(err); });
   function stop() {
     stopped = true;
-    if (id != null && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop', id }));
+    if (id != null && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: REQUEST.STOP, id }));
   }
   return { stop, ready };
 }
 
 /** Score specific moves (UCI) in a position. Resolves to { best, moves }. */
 export async function evaluate(fen, moves, depth = 14) {
-  const r = await request({ type: 'evaluate', fen, moves, depth });
+  const r = await request({ type: REQUEST.EVALUATE, fen, moves, depth });
   return r.promise;
 }
 
@@ -122,7 +124,7 @@ export async function evaluate(fen, moves, depth = 14) {
  * @param {{ elo?: number, movetime?: number, newGame?: boolean }} [options]
  */
 export async function bestmove(fen, { elo, movetime = 700, newGame = false } = {}) {
-  const r = await request({ type: 'bestmove', fen, elo, movetime, newGame });
+  const r = await request({ type: REQUEST.BESTMOVE, fen, elo, movetime, newGame });
   return r.promise;
 }
 
@@ -141,7 +143,7 @@ export function onLichessNotice(fn) {
 export function searchMistakes({ repId, fen, prefix }, onEvent) {
   let id = null;
   let stopRequested = false;
-  const promise = request({ type: 'puzzle-search', repId, fen, prefix }, (msg) => onEvent(msg))
+  const promise = request({ type: REQUEST.PUZZLE_SEARCH, repId, fen, prefix }, (msg) => onEvent(msg))
     .then((r) => {
       id = r.id;
       if (stopRequested) stop();
@@ -149,7 +151,7 @@ export function searchMistakes({ repId, fen, prefix }, onEvent) {
     });
   function stop() {
     stopRequested = true;
-    if (id != null && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop', id }));
+    if (id != null && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: REQUEST.STOP, id }));
   }
   return { promise, stop };
 }

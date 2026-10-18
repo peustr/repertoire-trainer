@@ -7,6 +7,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import * as schema from './settings-schema.js';
+import { SCHEMA_VERSION, migrate, checkRepertoireInput, checkProgress } from './repertoire-format.js';
+
+/** @typedef {import('./repertoire-format.js').RepertoireFile} RepertoireFile */
 
 const DATA_DIR = process.env.TRAINER_DATA_DIR || path.join(import.meta.dirname, 'data');
 const REP_DIR = path.join(DATA_DIR, 'repertoires');
@@ -117,7 +120,8 @@ function listRepertoires() {
     .filter((f) => f.endsWith('.json'))
     .map((f) => {
       try {
-        return readJson(path.join(REP_DIR, f), null);
+        const rep = readJson(path.join(REP_DIR, f), null);
+        return rep && migrate(rep, f);
       } catch (err) {
         console.warn(`[store] Skipped ${f}: ${err.message}`);
         return null;
@@ -127,32 +131,27 @@ function listRepertoires() {
     .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
 }
 
+/**
+ * A repertoire in the current format (older files are migrated as they are read; the
+ * next save writes them in it). Null if there is none.
+ * @param {string} id
+ * @returns {RepertoireFile | null}
+ */
 function getRepertoire(id) {
   const file = repFile(id);
   if (!fs.existsSync(file)) return null;
-  return readJson(file, null);
-}
-
-function validateInput({ name, color, pgn }, partial = false) {
-  const errors = [];
-  if (!partial || name !== undefined) {
-    if (typeof name !== 'string' || !name.trim()) errors.push('Give the repertoire a name.');
-  }
-  if (!partial || color !== undefined) {
-    if (color !== 'white' && color !== 'black') errors.push('Choose White or Black.');
-  }
-  if (!partial || pgn !== undefined) {
-    if (typeof pgn !== 'string' || !pgn.trim()) errors.push('Paste or upload some PGN.');
-  }
-  if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
+  const rep = readJson(file, null);
+  return rep && migrate(rep, path.basename(file));
 }
 
 function createRepertoire(input) {
-  validateInput(input);
+  checkRepertoireInput(input);
   ensureDirs();
   const id = `${slug(input.name)}-${crypto.randomBytes(3).toString('hex')}`;
   const now = new Date().toISOString();
+  /** @type {RepertoireFile} */
   const rep = {
+    schemaVersion: SCHEMA_VERSION,
     id,
     name: input.name.trim(),
     color: input.color,
@@ -169,11 +168,11 @@ function createRepertoire(input) {
 }
 
 function updateRepertoire(id, patch) {
+  checkRepertoireInput(patch, true);
   const rep = getRepertoire(id);
   if (!rep) return null;
-  validateInput(patch, true);
   for (const key of ['name', 'color', 'pgn', 'notes', 'audit']) {
-    if (patch[key] !== undefined) rep[key] = typeof patch[key] === 'string' ? patch[key] : patch[key];
+    if (patch[key] !== undefined) rep[key] = patch[key];
   }
   if (typeof rep.name === 'string') rep.name = rep.name.trim();
   rep.updatedAt = new Date().toISOString();
@@ -187,15 +186,18 @@ const APPLIED_SAVES_KEPT = 200;
  * Merge spaced-repetition updates: { cards: {key: state|null}, tally: {date, correct, wrong}, saveId? }
  * The browser retries a save until it gets an answer, so the same save can arrive twice
  * (the reply to the first was lost). A saveId already applied is ignored, which keeps the
- * daily tally from counting twice.
+ * daily tally from counting twice. The body is checked first (checkProgress); a save that
+ * does not fit is refused with a 400 and changes nothing.
  * @param {string} id
- * @param {{ cards?: Record<string, object | null>, tally?: { date: string, correct?: number, wrong?: number, lines?: number },
- *   saveId?: string }} patch
+ * @param {any} patch  as the browser sent it
+ * @returns {RepertoireFile | null}
  */
-function patchProgress(id, { cards, tally, saveId }) {
+function patchProgress(id, patch) {
+  checkProgress(patch);
+  const { cards, tally, saveId } = patch;
   const rep = getRepertoire(id);
   if (!rep) return null;
-  if (typeof saveId === 'string' && saveId && saveId.length <= 64) {
+  if (saveId) {
     rep.appliedSaves = rep.appliedSaves || [];
     if (rep.appliedSaves.includes(saveId)) return rep;
     rep.appliedSaves.push(saveId);

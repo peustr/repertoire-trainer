@@ -144,6 +144,7 @@ engine.js            UCI engine manager (native .exe or bundled WASM)
 lichess.js           Lichess client: OAuth, explorer (queued, cached), studies
 puzzles.js           Opponent-mistake tree search and puzzle builder
 store.js             JSON file storage in ./data
+repertoire-format.js The repertoire file format: typedef, version, migration, checks
 settings-schema.js   Every setting: default, range, help text (drives the Settings page)
 check-node.cjs       Stops with a plain message on a too-old Node.js
 public/
@@ -155,6 +156,7 @@ public/
   js/srs.js          Spaced-repetition scheduler
   js/board.js        Chessground board, chess.js rules, eval bar
   js/engine-client.js  Browser side of the engine bridge
+  js/protocol.js     The engine WebSocket's messages
   js/puzzle-utils.js Puzzle queue, PGN export, explorer formatting
   js/views/          Library, repertoire, import, trainer, explore, spar, audit,
                      lichess, finder (search dialog), puzzles, settings
