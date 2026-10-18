@@ -157,6 +157,7 @@ test('an illegal position or a smuggled command is refused before it reaches the
   const refused = [
     { fen: '8/8/8/8/8/8/8/8 w - - 0 1' }, // no kings: Stockfish hangs on it
     { fen: '4k3/8/8/8/8/8/8/4R1K1 w - - 0 1' }, // Black is in check with White to move
+    { fen: 'rnbqkbnr/pppppppp/8/3n4/3N4/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' }, // 34 pieces: Stockfish refuses it, then goes silent
     { fen: `${START_FEN}\nquit` },
     { fen: START_FEN, go: 'depth 1\nquit' },
     { fen: START_FEN, searchmoves: ['e2e4\nquit'] },
@@ -168,6 +169,26 @@ test('an illegal position or a smuggled command is refused before it reaches the
   }
   assert.equal(engine.proc, null, 'no engine was started for them');
   assert.equal((await search(engine)).bestmove, 'e2e4', 'a good search still runs');
+});
+
+test('a search Stockfish refuses fails at once, and the one behind it runs on a fresh engine', async (t) => {
+  let starts = 0;
+  const engine = new UciEngine('tasks', () => ({}), {
+    specFor: () => fake(starts++ ? 'ok' : 'refuse'), // the first engine refuses, as Stockfish does past 32 pieces
+    stallTimeout: 5000,
+    stopGrace: 500,
+  });
+  t.after(() => engine.quit());
+  const began = Date.now();
+  const refused = search(engine);
+  const behind = search(engine);
+  const first = engine.proc;
+
+  await assert.rejects(refused, { status: 400, message: /could not search that position \(Invalid FEN\. More than 32 pieces on the board\)/ });
+  assert.ok(Date.now() - began < 2000, 'without waiting for the watchdog');
+  assert.equal((await behind).bestmove, 'e2e4');
+  assert.notEqual(engine.proc, first, 'the silent engine was replaced');
+  await exited(first);
 });
 
 /** An engine manager on fake engines that records each job it submits. */

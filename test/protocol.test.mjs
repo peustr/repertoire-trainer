@@ -86,9 +86,11 @@ test('an illegal position is refused at once instead of tying up Stockfish', asy
   const { ws, next, send } = await connect();
   t.after(() => ws.close()); // an open socket would keep the test process alive after a failure
   const kingless = '8/8/8/8/8/8/8/8 w - - 0 1';
+  const crowded = 'rnbqkbnr/pppppppp/8/3n4/3N4/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'; // 34 pieces: Stockfish refuses it, then goes silent
   send({ type: REQUEST.ANALYSE, id: 10, fen: kingless, depth: 5 });
   send({ type: REQUEST.PUZZLE_SEARCH, id: 11, repId: rep.id, fen: kingless });
-  for (const id of [10, 11]) {
+  send({ type: REQUEST.EVALUATE, id: 12, fen: crowded, moves: ['e2e4'], depth: 5 });
+  for (const id of [10, 11, 12]) {
     const answer = await next((m) => m.id === id && m.type !== REPLY.INFO, `answer to request ${id}`);
     assert.equal(answer.type, REPLY.ERROR);
     assert.match(answer.message, /not a legal chess position/);

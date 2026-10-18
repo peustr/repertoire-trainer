@@ -146,7 +146,9 @@ function toWhitePov(score, fen) {
 //
 // Searches come from the browser. Stockfish trusts what it is told: a position with
 // no king makes it hang until the watchdog replaces it, holding up every job behind
-// it, and a line break inside any value would pass a command of its own.
+// it, and a line break inside any value would pass a command of its own. A position it
+// does check (more than 32 pieces) it refuses and then stops answering altogether, so
+// those are refused here too, and UciEngine replaces an engine that refuses anyway.
 
 const badRequest = (message) => Object.assign(new Error(message), { status: 400 });
 const UCI_MOVE = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
@@ -165,6 +167,7 @@ function checkFen(fen) {
   } catch (err) {
     throw badRequest(`That is not a legal chess position (${String(err.message).replace(/^Invalid FEN: /, '')}).`);
   }
+  if (chess.board().flat().filter(Boolean).length > 32) throw badRequest('That is not a legal chess position (more than 32 pieces).');
   // The side that has just moved cannot be in check: that position never arises.
   const turn = chess.turn();
   const [king] = chess.findPiece({ type: 'k', color: turn === 'w' ? 'b' : 'w' });
@@ -305,6 +308,13 @@ class UciEngine extends EventEmitter {
     }
     const job = this.current;
     if (!job) return;
+    if (line.startsWith('info string CRITICAL ERROR')) {
+      // Stockfish refused a command of this search ("... failed. Reason: ...") and now
+      // answers nothing at all, not even "stop": replace it now, not after the watchdog.
+      const reason = line.replace(/^.*?Reason:\s*/, '').replace(/\.$/, '');
+      this._replaceStuck(badRequest(`Stockfish could not search that position (${reason}).`));
+      return;
+    }
     if (line.startsWith('info ')) {
       const info = parseInfo(line);
       if (info && info.pv && info.score) {
@@ -371,6 +381,7 @@ class UciEngine extends EventEmitter {
     this.spec = null;
     this.restartPending = false; // the replacement starts with the current settings anyway
     try { proc.kill(); } catch (e) { /* already gone */ }
+    clearTimeout(job.watchdog);
     job.reject(err);
     this._next();
   }
