@@ -1,3 +1,4 @@
+// @ts-check
 // File-based storage. Everything lives in ./data as plain JSON so you can
 // back it up, sync it with OneDrive/Dropbox, or edit it by hand.
 

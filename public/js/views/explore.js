@@ -1,6 +1,6 @@
 // Explore: walk the repertoire tree with Stockfish alongside, and wander off-book.
 
-import { h, clear, fig, uciLineToSan, formatSanLine, plural } from '../ui.js';
+import { h, clear, fig, uciLineToSan, formatSanLine, plural, action } from '../ui.js';
 import { state, getRep, modelFor, loadLichess } from '../store.js';
 import { cardKey, movesTo } from '../repertoire.js';
 import { nagGlyphs, moveNumber, positionKey } from '../pgn.js';
@@ -177,7 +177,6 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   function renderWhere() {
     const n = pos.node;
     if (pos.off.length) {
-      const first = pos.off[0];
       clear(where,
         h('p.where-main.off', 'Off the book — your own analysis'),
         h('p.where-sub', `${formatSanLine(pos.off.map((m, i) => ({ san: m.san, color: m.color, number: +(i === 0 ? n.fen : pos.off[i - 1].fen).split(' ')[5] })))}`),
@@ -210,7 +209,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     const line = pos.off.length ? null : lineThrough(pos.node);
     const backHash = encodeURIComponent(location.hash);
     clear(actions,
-      h('button.btn.primary', { type: 'button', title: 'Search the Lichess database for common opponent mistakes from this position', on: { click: findMistakes } }, 'Find opponent mistakes'),
+      h('button.btn.primary', { type: 'button', title: 'Search the Lichess database for common opponent mistakes from this position', on: { click: action(findMistakes) } }, 'Find opponent mistakes'),
       h('a.btn', { href: `#/spar?fen=${encodeURIComponent(fen)}&color=${rep.color}&rep=${rep.id}&back=${backHash}` }, 'Spar from here'),
       line ? h('a.btn.ghost', { href: `#/train/${rep.id}/practice/${line.id}` }, 'Practise this line') : null);
   }
@@ -218,7 +217,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   function findMistakes() {
     const moves = [...movesTo(pos.node), ...pos.off.map((m) => m.uci)];
     const sans = uciLineToSan(chapter.root.fen, moves, 80);
-    openMistakeFinder({
+    return openMistakeFinder({
       rep,
       fen: currentFen(),
       prefix: { startFen: chapter.root.fen, moves },

@@ -86,7 +86,7 @@ export async function renderLichess(root, { connected, error }) {
   const studySection = h('section.lc-section',
     h('h2.section-title', 'Import a study'),
     h('p.muted', 'Each chapter becomes a chapter here, with comments and arrows. Public studies work without connecting.'),
-    h('form.token-row', { on: { submit: (e) => { e.preventDefault(); importStudy(studyInput.value, e.submitter); } } }, studyInput, sideSelect, h('button.btn', { type: 'submit' }, 'Import')),
+    h('form.token-row', { on: { submit: (e) => { e.preventDefault(); void importStudy(studyInput.value, e.submitter); } } }, studyInput, sideSelect, h('button.btn', { type: 'submit' }, 'Import')),
     studies);
 
   add(page,

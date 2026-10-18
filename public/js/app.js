@@ -121,7 +121,7 @@ async function boot() {
   await flushProgress(); // answers saved while the server was away, before any page loads its data
   engineReady();
   window.addEventListener('hashchange', route);
-  route();
+  void route();
 }
 
-boot();
+void boot();

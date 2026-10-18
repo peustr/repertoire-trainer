@@ -1,3 +1,4 @@
+// @ts-check
 // Thin wrappers around the local REST API.
 
 async function call(method, url, body) {

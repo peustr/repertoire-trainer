@@ -50,6 +50,7 @@ test('restoring defaults that cannot be saved says so', async ({ page, app }) =>
 
 test('an unexpected error in the background is shown, not swallowed', async ({ page, app }) => {
   await app.open('#/');
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises -- the point of the test
   await page.evaluate(() => { Promise.reject(new Error('Something broke in the background')); });
   await expect(page.locator('.toast')).toContainText('Something broke in the background');
 });

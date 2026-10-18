@@ -1,3 +1,4 @@
+// @ts-check
 // PGN → move tree.
 //
 // Handles multi-game files (each game becomes a chapter), nested variations,
@@ -289,6 +290,7 @@ function buildGame(tokens, headers, chapterIndex) {
 export function parsePgn(text) {
   const tokens = tokenize(String(text || ''));
   const games = [];
+  /** @type {Record<string, string>} */
   let headers = {};
   let body = [];
   let depth = 0;

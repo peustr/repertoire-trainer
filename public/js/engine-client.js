@@ -1,3 +1,4 @@
+// @ts-check
 // Browser side of the Stockfish bridge (see server.js for the protocol).
 
 let ws = null;
@@ -116,7 +117,11 @@ export async function evaluate(fen, moves, depth = 14) {
   return r.promise;
 }
 
-/** Ask the engine for a move, optionally at limited strength. */
+/**
+ * Ask the engine for a move, optionally at limited strength.
+ * @param {string} fen
+ * @param {{ elo?: number, movetime?: number, newGame?: boolean }} [options]
+ */
 export async function bestmove(fen, { elo, movetime = 700, newGame = false } = {}) {
   const r = await request({ type: 'bestmove', fen, elo, movetime, newGame });
   return r.promise;

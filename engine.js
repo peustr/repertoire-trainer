@@ -1,3 +1,4 @@
+// @ts-check
 // UCI engine bridge.
 //
 // Talks to Stockfish over the Universal Chess Interface (plain text over
@@ -169,7 +170,7 @@ class UciEngine extends EventEmitter {
   }
 
   start() {
-    if (this.ready) return this.ready;
+    if (this.ready != null) return this.ready;
     const spec = this.specFor(this.role, this.getConfig());
     if (!spec) {
       // Not remembered: the next job looks again, in case an engine was installed since.
@@ -374,7 +375,18 @@ class UciEngine extends EventEmitter {
     }
   }
 
-  async _next() {
+  /**
+   * Start the next queued search if the engine is free. Never rejects: on the server
+   * an unhandled rejection would stop the whole app.
+   */
+  _next() {
+    this._runNext().catch((err) => {
+      this._starting = false;
+      console.error('[engine]', err);
+    });
+  }
+
+  async _runNext() {
     if (this.current || !this.queue.length || this._starting) return;
     this._starting = true;
     try {
@@ -402,16 +414,16 @@ class UciEngine extends EventEmitter {
   }
 
   info() {
-    const spec = this.spec || this.specFor(this.role, this.getConfig()) || {};
+    const spec = this.spec || this.specFor(this.role, this.getConfig());
     return {
       role: this.role,
       running: !!this.proc,
       name: this.name,
-      kind: spec.kind || null,
-      file: spec.label || null,
-      threads: spec.options ? spec.options.Threads : null,
-      hash: spec.options ? spec.options.Hash : null,
-      warnings: spec.warnings || [],
+      kind: spec ? spec.kind : null,
+      file: spec ? spec.label : null,
+      threads: spec ? spec.options.Threads : null,
+      hash: spec ? spec.options.Hash : null,
+      warnings: spec ? spec.warnings : [],
     };
   }
 
