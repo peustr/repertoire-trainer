@@ -102,7 +102,7 @@ function header() {
   return h('header.topbar',
     h('a.wordmark', { href: '#/', 'aria-label': 'Repertoire Trainer home' },
       h('span.wordmark-mark', { 'aria-hidden': 'true' }, '♞︎'),
-      h('span.wordmark-text', 'Repertoire')),
+      h('span.wordmark-text', 'Repertoire ', h('span', 'Trainer'))),
     h('nav.nav',
       h('a', { href: '#/' }, 'Library'),
       h('a', { href: '#/import' }, 'Add repertoire'),

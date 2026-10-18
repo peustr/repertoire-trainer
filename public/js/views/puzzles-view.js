@@ -1,13 +1,14 @@
 // Personalised puzzles: punish the mistakes real opponents make in your lines.
 // Each puzzle is a spaced-repetition card like any move in your repertoire.
 
-import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, confirmDialog, action } from '../ui.js';
+import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, confirmDialog, action, keyed, panelSection, toolList } from '../ui.js';
 import { state, getRep, putRep, saveCards } from '../store.js';
 import { describeWait, isDue } from '../srs.js';
 import { gradeCard } from '../session.js';
 import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci } from '../board.js';
 import { evaluate, analyse, formatScore, evalBarShare } from '../engine-client.js';
 import { api } from '../api.js';
+import { exploreTool, sparTool } from './tools.js';
 import { puzzleQueue, puzzleKey, puzzleState, puzzleToPgn, formatGames, formatShare, describeRatings, describeSpeeds, describeReach, cpFor } from '../puzzle-utils.js';
 
 export async function renderPuzzles(root, { id, ids }) {
@@ -27,9 +28,15 @@ export async function renderPuzzles(root, { id, ids }) {
   const prompt = h('div.prompt', { 'aria-live': 'polite' });
   const feedback = h('div.feedback', { 'aria-live': 'polite' });
   const controls = h('div.controls');
+  const toolsSection = panelSection('From this position', null, toolList([]));
   page.append(
     h('div.board-col', h('div.board-row', evalHost, boardHost)),
-    h('aside.panel', crumbs, head, prompt, feedback, context, controls));
+    h('aside.panel',
+      crumbs,
+      head,
+      h('div.task', prompt, feedback, controls),
+      panelSection('About this mistake', null, context),
+      toolsSection));
   root.append(page);
 
   const board = createBoard(boardHost, { orientation: rep.color, onMove });
@@ -57,6 +64,7 @@ export async function renderPuzzles(root, { id, ids }) {
     renderContext(p);
     clear(feedback);
     clear(controls, hintButton(), skipButton());
+    setTools([]);
     const prevMove = p.lineMoves.length > 1 ? p.lineMoves[p.lineMoves.length - 2] : undefined;
     board.setShapes([]);
     board.setPosition(p.beforeFen, { lastMove: prevMove });
@@ -102,7 +110,7 @@ export async function renderPuzzles(root, { id, ids }) {
     if (uci === expected) {
       play(uci);
       if (!cur.failed && cur.hint === 0) sound.right();
-      setFeedback('good', `${sanLabel(cur.fenBefore, uci)} — ${cur.step + 1 < p.solution.length ? 'keep going.' : 'that’s it.'}`);
+      setFeedback('good', `${sanLabel(cur.fenBefore, uci)} is correct.${cur.step + 1 < p.solution.length ? ' Keep going.' : ''}`);
       cur.step++;
       if (cur.step < p.solution.length) {
         cur.waiting = false;
@@ -190,12 +198,14 @@ export async function renderPuzzles(root, { id, ids }) {
     const added = !!p.addedAt;
     clear(controls,
       hasNext
-        ? h('button.btn.primary', { type: 'button', 'data-key': 'Enter', on: { click: () => { index++; start(queue[index]); } } }, 'Next puzzle')
-        : h('button.btn.primary', { type: 'button', 'data-key': 'Enter', on: { click: done } }, 'Finish'),
+        ? h('button.btn.primary', { type: 'button', 'data-key': 'Enter', 'aria-keyshortcuts': 'Enter', on: { click: () => { index++; start(queue[index]); } } }, keyed('Next puzzle', '↵'))
+        : h('button.btn.primary', { type: 'button', 'data-key': 'Enter', 'aria-keyshortcuts': 'Enter', on: { click: done } }, keyed('Finish', '↵')),
       h('button.btn', { type: 'button', disabled: added, on: { click: (e) => addToRepertoire(p, e.currentTarget) } }, added ? 'In your repertoire' : 'Add line to repertoire'),
-      h('a.btn.ghost', { href: `#/explore/${rep.id}?moves=${encodeURIComponent([...p.lineMoves, ...p.solution].join(','))}` }, 'Explore'),
-      h('a.btn.ghost', { href: `#/spar?fen=${encodeURIComponent(cur.fen)}&color=${rep.color}&rep=${rep.id}&back=${encodeURIComponent(location.hash)}` }, 'Spar from here'),
-      h('button.btn.ghost.danger', { type: 'button', on: { click: action(() => removePuzzle(p)) } }, 'Remove'));
+      h('button.btn.ghost.danger', { type: 'button', title: 'Remove this puzzle from your set', on: { click: action(() => removePuzzle(p)) } }, 'Remove'));
+    setTools([
+      exploreTool(`#/explore/${rep.id}?moves=${encodeURIComponent([...p.lineMoves, ...p.solution].join(','))}`, 'Explore the line'),
+      sparTool(`#/spar?fen=${encodeURIComponent(cur.fen)}&color=${rep.color}&rep=${rep.id}&back=${encodeURIComponent(location.hash)}`, state.settings),
+    ]);
     controls.firstChild.focus();
 
     evalBar.hide(false);
@@ -238,6 +248,7 @@ export async function renderPuzzles(root, { id, ids }) {
     clear(head);
     clear(context);
     clear(feedback);
+    setTools([]);
     board.setShapes([]);
     evalBar.hide(true);
     clear(crumbs, h('a.backlink', { href: `#/rep/${rep.id}` }, rep.name), h('span.mode-tag', 'Puzzles'));
@@ -254,6 +265,7 @@ export async function renderPuzzles(root, { id, ids }) {
     return h('button.btn', {
       type: 'button',
       'data-key': 'h',
+      'aria-keyshortcuts': 'H',
       on: {
         click: () => {
           if (!cur || !cur.waiting) return;
@@ -262,10 +274,10 @@ export async function renderPuzzles(root, { id, ids }) {
           board.setShapes(cur.hint === 1
             ? [{ orig: expected.slice(0, 2), brush: 'bark' }]
             : [{ orig: expected.slice(0, 2), dest: expected.slice(2, 4), brush: 'bark' }]);
-          setFeedback('neutral', cur.hint === 1 ? 'Hint: this piece. The puzzle will come back sooner.' : `The move is ${sanLabel(cur.fen, expected)}.`);
+          setFeedback('neutral', cur.hint === 1 ? 'Hint: move the highlighted piece. The puzzle will come back sooner.' : `The move is ${sanLabel(cur.fen, expected)}.`);
         },
       },
-    }, 'Hint');
+    }, keyed('Hint', 'H'));
   }
 
   function skipButton() {
@@ -277,6 +289,9 @@ export async function renderPuzzles(root, { id, ids }) {
   }
   function setFeedback(kind, text) {
     clear(feedback, h(`p.fb.fb-${kind}`, text));
+  }
+  function setTools(items) {
+    toolsSection.lastChild.replaceWith(toolList(items));
   }
 
   function onKey(e) {

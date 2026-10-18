@@ -15,7 +15,7 @@ test('the Explore link after a trained line opens the same move after a reload',
   await page.evaluate(([id, lineId]) => { location.hash = `#/train/${id}/practice/${lineId}`; }, [rep.id, line.id]);
   await playLine(page, mine);
 
-  await page.getByRole('link', { name: 'Explore', exact: true }).click();
+  await page.getByRole('link', { name: /^Explore this line/ }).click();
   const where = page.locator('.where-main');
   await expect(where).toContainText('After');
   const atEndOfLine = await where.textContent();

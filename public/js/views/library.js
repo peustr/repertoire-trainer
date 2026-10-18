@@ -34,9 +34,9 @@ export async function renderLibrary(root) {
   page.append(
     h('div.library-top',
       h('div.library-intro',
-        h('h1.page-title', totalDue ? `${plural(totalDue, 'line')} to review` : totalNew ? 'Nothing due. Time to learn something new.' : 'All caught up'),
+        h('h1.page-title', totalDue ? `${plural(totalDue, 'line')} to review` : totalNew ? 'Nothing due for review' : 'All caught up'),
         h('p.lede', totalDue
-          ? 'Reviews are scheduled just before you are likely to forget. Clear them first, then learn new lines.'
+          ? 'Each review is scheduled just before you are likely to forget the moves. Clear them first, then learn new lines.'
           : nextDueText(entries))),
       quick),
     list);
@@ -81,12 +81,12 @@ async function emptyLibrary() {
   const boardHost = h('div.welcome-board');
   const el = h('div.empty.welcome',
     h('div',
-      h('h1.page-title', 'Your openings, learned for good'),
+      h('h1.page-title', 'Remember every move of your repertoire'),
       h('p.lede', 'Paste a PGN of the lines you want to play. The trainer turns every move you need to remember into a quiz and brings it back just before you would forget it. Stockfish checks your moves along the way.'),
       h('div.welcome-actions',
         h('a.btn.primary', { href: '#/import' }, 'Add your first repertoire'),
         samples.map((s) => h('button.btn', { type: 'button', on: { click: action(() => add(s)) } }, `Try ${s.name}`)))),
-    h('div', boardHost, h('p.welcome-caption', 'After 3.Bc4 the bishop already eyes f7. Lines like this become quizzes.')));
+    h('div', boardHost, h('p.welcome-caption', 'After 3.Bc4 the bishop eyes f7. Each of your moves in a line like this becomes a quiz.')));
   // Board must be in the DOM before chessground measures it.
   let board = null;
   requestAnimationFrame(() => {
@@ -169,8 +169,8 @@ function renderQuickCard(container, entries) {
     if (uci === card.uci || alsoMine) {
       board.setPosition(played.fen, { lastMove: uci, playSound: true, captured: played.captured });
       sound.right();
-      let note = 'Right.';
-      if (uci !== card.uci) note = 'Right — that is one of your repertoire moves here.';
+      let note = 'Correct.';
+      if (uci !== card.uci) note = 'Correct: that is one of your repertoire moves here.';
       if (current.due && uci === card.uci) {
         const next = gradeCard(current.state, true, state.settings, now);
         await saveCards(rep.id, { [card.key]: next }, { correct: 1 });

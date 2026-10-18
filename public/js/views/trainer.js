@@ -6,7 +6,7 @@
 //           moves you already know play themselves.
 // Practise: every move, no effect on the schedule.
 
-import { h, clear, sound, fig, sanLabel, uciLineToSan, formatSanLine, plural, action } from '../ui.js';
+import { h, clear, sound, fig, sanLabel, uciLineToSan, formatSanLine, plural, action, keyed, panelSection, toolList } from '../ui.js';
 import { refresh } from '../nav.js';
 import { state, getRep, modelFor, saveCards } from '../store.js';
 import { cardKey } from '../repertoire.js';
@@ -17,6 +17,7 @@ import { passPlan, resultForCorrectMove, resultAfterHint, firstResult, judgeWron
 import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci } from '../board.js';
 import { evaluate, analyse, formatScore, evalBarShare } from '../engine-client.js';
 import { openMistakeFinder } from './finder.js';
+import { playOutTool, sparTool, finderTool as findTool, exploreTool } from './tools.js';
 
 const MODE_NAMES = { learn: 'Learn', review: 'Review', practice: 'Practise' };
 
@@ -70,7 +71,15 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   const feedback = h('div.feedback', { 'aria-live': 'polite' });
   const controls = h('div.controls');
   const sheet = h('ol.scoresheet', { 'aria-label': 'Moves played' });
-  const panel = h('aside.panel', crumbs, lineHead, dots, prompt, feedback, notes, controls, h('div.sheet-wrap', sheet));
+  const toolsSection = panelSection('From this position', null, toolList([]));
+  const panel = h('aside.panel',
+    crumbs,
+    lineHead,
+    dots,
+    h('div.task', prompt, feedback, controls),
+    notes,
+    panelSection('Moves', null, h('div.sheet-wrap', sheet)),
+    toolsSection);
   page.append(boardCol, panel);
   root.append(page);
 
@@ -110,10 +119,11 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     renderDots();
     renderSheet();
     clear(feedback);
-    clear(controls, hintButton(), skipButton(), finderButton());
+    clear(controls, hintButton(), skipButton());
+    setTools([finderTool()]);
     showNotes(line.startComment ? [line.startComment] : []);
-    if (phase === 'guided') setPrompt('Watch and repeat', 'New moves are shown with an arrow. Play them on the board.');
-    else if (phase === 'recall') setPrompt('Now from memory', 'Same line, no arrows.');
+    if (phase === 'guided') setPrompt('Learn the line', 'Play each new move the arrow shows.');
+    else if (phase === 'recall') setPrompt('Play it from memory', 'The same line, without arrows.');
     later(step, 350);
   }
 
@@ -176,7 +186,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       playNode(node);
       const nags = nagGlyphs(node.nags);
       if (run.phase !== 'guided') {
-        setFeedback(clean ? 'good' : 'neutral', clean ? `${moveText(node)}${nags} — right.` : `${moveText(node)} — now you have it.`);
+        setFeedback(clean ? 'good' : 'neutral', clean ? `${moveText(node)}${nags} is correct.` : `${moveText(node)} is correct, after a retry or a hint.`);
       }
       run.ply++;
       renderDots();
@@ -281,26 +291,31 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     const finalEval = h('p.final-eval.muted', 'Stockfish is looking at the final position…');
     feedback.append(finalEval);
     clear(controls,
-      next ? h('button.btn.primary', { type: 'button', on: { click: () => startLine(next, phaseFor()) }, 'data-key': 'Enter' }, 'Next line') : h('button.btn.primary', { type: 'button', on: { click: showSessionDone }, 'data-key': 'Enter' }, 'Finish session'),
-      h('button.btn', { type: 'button', on: { click: () => startLine(line, 'practice') } }, 'Retry line'),
-      h('a.btn', { href: sparLink(run.fen, { goal: 'hold' }), title: `Play ${settings.playOutMoves} more moves and try to keep the position` }, 'Play it out'),
-      h('a.btn.ghost', { href: sparLink(run.fen) }, 'Spar from here'),
-      finderButton(),
-      h('a.btn.ghost', { href: `#/explore/${rep.id}?line=${line.id}` }, 'Explore'));
+      next
+        ? h('button.btn.primary', { type: 'button', on: { click: () => startLine(next, phaseFor()) }, 'data-key': 'Enter', 'aria-keyshortcuts': 'Enter' }, keyed('Next line', '↵'))
+        : h('button.btn.primary', { type: 'button', on: { click: showSessionDone }, 'data-key': 'Enter', 'aria-keyshortcuts': 'Enter' }, keyed('Finish session', '↵')),
+      h('button.btn', { type: 'button', on: { click: () => startLine(line, 'practice') } }, 'Retry line'));
+    setTools([
+      playOutTool(sparLink(run.fen, { goal: 'hold' }), settings),
+      sparTool(sparLink(run.fen), settings),
+      finderTool(),
+      exploreTool(`#/explore/${rep.id}?line=${line.id}`),
+    ]);
     controls.firstChild.focus();
     if (next && settings.autoNext > 0) {
       // Count down to the next line; any click on the board or panel stops it.
       let left = settings.autoNext;
       const btn = controls.firstChild;
-      const label = btn.textContent;
+      const labelEl = btn.querySelector('.btn-label');
+      const label = labelEl.textContent;
       const tick = () => {
         if (!btn.isConnected || btn.dataset.stopped) return;
         if (left <= 0) { btn.click(); return; }
-        btn.textContent = `${label} (${left})`;
+        labelEl.textContent = `${label} (${left})`;
         left--;
         later(tick, 1000);
       };
-      const stop = () => { btn.dataset.stopped = '1'; btn.textContent = label; };
+      const stop = () => { btn.dataset.stopped = '1'; labelEl.textContent = label; };
       page.addEventListener('pointerdown', (e) => { if (e.target !== btn) stop(); }, { once: true });
       tick();
     }
@@ -313,7 +328,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       evalBar.update(evalBarShare(top.score), formatScore(top.score), rep.color === 'black');
       const pov = side === 'w' ? 1 : -1;
       const cp = scoreToCp(top.score) * pov;
-      const verdict = cp > 150 ? 'you are clearly better' : cp > 50 ? 'you have a pull' : cp > -50 ? 'roughly level' : cp > -150 ? 'you are a little worse' : 'you are worse';
+      const verdict = cp > 150 ? 'clearly better for you' : cp > 50 ? 'slightly better for you' : cp > -50 ? 'roughly equal' : cp > -150 ? 'slightly worse for you' : 'worse for you';
       clear(finalEval, `Final position: ${formatScore(top.score)} at depth ${top.depth} — ${verdict}. Best: ${formatSanLine(uciLineToSan(run.fen, top.pv, 6))}`);
       if (final) finalEval.classList.remove('muted');
     }, () => {
@@ -333,6 +348,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       ? `${plural(tally.lines, 'line')}, ${tally.right} moves right, ${tally.wrong} to revisit.`
       : mode === 'review' ? 'Nothing is due right now.' : mode === 'learn' ? 'No new lines left to learn.' : 'No lines to practise yet — learn some first.');
     clear(feedback);
+    setTools([]);
     clear(controls,
       mode === 'review' && st ? h('a.btn.primary', { href: `#/train/${rep.id}/review`, on: { click: (e) => { if (location.hash === e.currentTarget.getAttribute('href')) { e.preventDefault(); refresh(); } } } }, `Review ${st} more`) : null,
       h('a.btn', { href: `#/rep/${rep.id}` }, 'Back to repertoire'),
@@ -368,6 +384,10 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
 
   function setFeedback(kind, text, ...extra) {
     clear(feedback, h(`p.fb.fb-${kind}`, text), ...extra);
+  }
+
+  function setTools(items) {
+    toolsSection.lastChild.replaceWith(toolList(items));
   }
 
   function showNotes(texts, node) {
@@ -429,8 +449,8 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   function hintButton() {
     return h('button.btn', {
       type: 'button',
-      title: 'Hint (H)',
       'data-key': 'h',
+      'aria-keyshortcuts': 'H',
       on: {
         click: () => {
           if (!run || !run.waiting) return;
@@ -449,7 +469,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
           }
         },
       },
-    }, 'Hint');
+    }, keyed('Hint', 'H'));
   }
 
   function skipButton() {
@@ -468,24 +488,18 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     }, 'Skip line');
   }
 
-  function finderButton() {
-    return h('button.btn.ghost', {
-      type: 'button',
-      title: 'Search the Lichess database for common opponent mistakes from the current position',
-      on: {
-        click: action(() => {
-          if (!run) return undefined;
-          const moves = run.played.map((n) => n.uci);
-          const sans = uciLineToSan(run.line.startFen, moves, 80);
-          return openMistakeFinder({
-            rep,
-            fen: run.fen,
-            prefix: { startFen: run.line.startFen, moves },
-            where: sans.length ? `From ${formatSanLine(sans.slice(-6))}` : `From the start of ${run.line.chapter.name}`,
-          });
-        }),
-      },
-    }, 'Opponent mistakes');
+  function finderTool() {
+    return findTool(action(() => {
+      if (!run) return undefined;
+      const moves = run.played.map((n) => n.uci);
+      const sans = uciLineToSan(run.line.startFen, moves, 80);
+      return openMistakeFinder({
+        rep,
+        fen: run.fen,
+        prefix: { startFen: run.line.startFen, moves },
+        where: sans.length ? `From ${formatSanLine(sans.slice(-6))}` : `From the start of ${run.line.chapter.name}`,
+      });
+    }));
   }
 
   function sparLink(fen, { goal = null } = {}) {

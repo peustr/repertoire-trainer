@@ -70,7 +70,7 @@ export async function openMistakeFinder({ rep, fen, prefix, where }) {
   const offNotice = onLichessNotice((msg) => {
     if (!msg.until) return;
     notice.hidden = false;
-    notice.textContent = `Lichess asked us to slow down. The search carries on at ${new Date(msg.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}.`;
+    notice.textContent = `Lichess asked the app to slow down. The search resumes at ${new Date(msg.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}.`;
   });
 
   search = searchMistakes({ repId: rep.id, fen, prefix }, (msg) => {
@@ -98,7 +98,7 @@ export async function openMistakeFinder({ rep, fen, prefix, where }) {
     const res = await search.promise;
     progressLabel.textContent = `${res.stats.positions} positions checked${res.stats.lookups ? `, ${res.stats.lookups} from Lichess` : ''}`;
     looking.textContent = res.cancelled ? 'Stopped.' : res.exhausted ? 'Searched every popular line within reach.' : 'Search budget used up. Run it again from a deeper position to go further.';
-    if (!found.length) empty.textContent = 'No clear mistakes among the popular replies here. Your opponents mostly play well in this line — or try a lower rating band.';
+    if (!found.length) empty.textContent = 'No clear mistakes among the popular replies here. Opponents mostly play this line well; a lower rating band may find more.';
   } catch (err) {
     notice.hidden = false;
     notice.textContent = err.message;

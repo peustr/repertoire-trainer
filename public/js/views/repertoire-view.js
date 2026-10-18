@@ -1,6 +1,6 @@
 // One repertoire: memory state, chapters and lines, PGN tools and the Stockfish audit.
 
-import { h, add, clear, levelBar, plural, toast, confirmDialog, downloadText, useFigurines, action } from '../ui.js';
+import { h, add, clear, levelBar, plural, toast, confirmDialog, downloadText, useFigurines, action, icon } from '../ui.js';
 import { state, getRep, modelFor, putRep, dropRep } from '../store.js';
 import { refresh } from '../nav.js';
 import { repertoireStats, lineStatus, describeWait, MAX_LEVEL } from '../srs.js';
@@ -22,7 +22,7 @@ export async function renderRepertoire(root, { id }) {
   root.append(page);
 
   const side = rep.color === 'black' ? 'Black' : 'White';
-  const auditBox = h('section.audit', { 'aria-live': 'polite' });
+  const auditBox = h('div.audit', { 'aria-live': 'polite' });
   const pz = puzzleStats(rep, now);
 
   add(page,
@@ -30,35 +30,82 @@ export async function renderRepertoire(root, { id }) {
     h('header.rep-head',
       h('div',
         h('h1.page-title', rep.name),
-        h('p.rep-sub', h('span.side-chip', { class: rep.color }), ` You play ${side}. ${plural(model.chapters.length, 'chapter')}, ${plural(stats.lines, 'line')}, ${plural(stats.cards, 'move')} to remember.`)),
-      h('div.rep-actions',
-        stats.dueLines ? h('a.btn.primary', { href: `#/train/${id}/review` }, `Review ${stats.dueLines} due`) : null,
-        stats.newLines ? h(`a.btn${stats.dueLines ? '' : '.primary'}`, { href: `#/train/${id}/learn` }, `Learn ${Math.min(stats.newLines, state.settings.learnBatch)} new`) : null,
-        stats.learnedLines ? h('a.btn', { href: `#/train/${id}/practice` }, 'Practise all') : null,
-        pz.ready ? h('a.btn', { href: `#/puzzles/${id}` }, `Puzzles (${pz.ready})`) : null,
-        stats.lines ? h('a.btn', { href: `#/surprise/${id}`, title: 'Your opponent leaves your book with a move you have not prepared: find a good answer' }, 'Surprise me') : null,
-        h('a.btn.ghost', { href: `#/explore/${id}` }, 'Explore'))),
-    memoryPanel(rep, stats),
-    opponentsPanel(rep, model, pz),
+        h('p.rep-sub', h('span.side-chip', { class: rep.color }), `You play ${side} · ${plural(model.chapters.length, 'chapter')} · ${plural(stats.lines, 'line')} · ${plural(stats.cards, 'move')} to remember`))),
     model.errors.length ? h('section.notice.warn',
       h('h2.section-title', 'Some moves could not be read'),
       h('ul', model.errors.slice(0, 8).map((e) => h('li', e))),
       model.errors.length > 8 ? h('p', `…and ${model.errors.length - 8} more.`) : null) : null,
-    auditBox,
-    h('section.chapters', model.chapters.map((ch) => chapterBlock(rep, model, ch, now))),
+    h('section.rep-section', h('h2.caption', 'Train'), modeCards(rep, stats, pz)),
+    h('section.rep-section', h('h2.caption', 'Memory'), memoryPanel(rep, stats)),
+    h('section.rep-section', h('h2.caption', 'Opponent mistakes and gaps'), opponentsPanel(rep, model, pz)),
+    h('section.rep-section', h('h2.caption', 'Stockfish audit'), auditBox),
+    h('section.rep-section', h('h2.caption', 'Chapters and lines'), h('div.chapters', model.chapters.map((ch) => chapterBlock(rep, model, ch, now)))),
     toolsPanel(rep));
 
   renderAuditSummary(auditBox, rep, model);
   return null;
 }
 
+/** Every way to train this repertoire, each saying what it does and what is waiting. */
+function modeCards(rep, stats, pz) {
+  const id = rep.id;
+  const wait = isFinite(stats.nextDue) ? describeWait(stats.nextDue - Date.now()) : null;
+  const gaps = Object.keys(rep.gaps || {}).length;
+  const batch = Math.min(stats.newLines, state.settings.learnBatch);
+  const modes = [
+    {
+      icon: 'review', name: 'Review', href: stats.dueLines ? `#/train/${id}/review` : null,
+      stat: stats.dueLines ? `${plural(stats.dueLines, 'line')} due` : wait ? `Next in ${wait}` : 'Nothing learned yet',
+      desc: 'Lines with moves you are about to forget. The moves you still know play themselves.',
+    },
+    {
+      icon: 'learn', name: 'Learn', href: stats.newLines ? `#/train/${id}/learn` : null,
+      stat: stats.newLines ? plural(stats.newLines, 'new line') : 'All learned',
+      desc: stats.newLines
+        ? `New lines play out with arrows and comments, then you repeat them from memory. ${plural(batch, 'line')} per session.`
+        : 'New lines play out with arrows and comments, then you repeat them from memory.',
+    },
+    {
+      icon: 'practise', name: 'Practise', href: stats.learnedLines ? `#/train/${id}/practice` : null,
+      stat: stats.learnedLines ? plural(stats.learnedLines, 'line') : 'Learn lines first',
+      desc: 'Every learned line, every move quizzed, in shuffled or chapter order. Your schedule is not touched.',
+    },
+    {
+      icon: 'puzzle', name: 'Puzzles', href: pz.ready ? `#/puzzles/${id}` : null,
+      stat: pz.ready ? `${pz.ready} ready` : pz.total ? 'None due' : 'None yet',
+      desc: pz.total ? 'Punish the mistakes Lichess players make in your lines, on their own review schedule.' : 'Find opponent mistakes below, and the common ones become puzzles here.',
+    },
+    {
+      icon: 'surprise', name: 'Surprise drills', href: stats.lines ? `#/surprise/${id}` : null,
+      stat: gaps ? plural(gaps, 'saved gap') : '',
+      desc: 'Your opponent leaves your book with a reply you have not prepared. Find a good answer; Stockfish grades it.',
+    },
+    {
+      icon: 'spar', name: 'Spar', href: `#/spar?color=${rep.color}&rep=${id}&back=${encodeURIComponent(`#/rep/${id}`)}`,
+      stat: '',
+      desc: 'A game from the first move against Lichess players at your rating, your prepared lines or Stockfish.',
+    },
+    {
+      icon: 'explore', name: 'Explore', href: `#/explore/${id}`,
+      stat: '',
+      desc: 'Browse your repertoire tree with Stockfish and the Lichess opening explorer, and try your own ideas.',
+    },
+  ];
+  // The one to do next stands out: reviews first, then new lines.
+  const next = modes.find((m) => (m.icon === 'review' || m.icon === 'learn') && m.href);
+  return h('div.modes', modes.map((m) => h(`${m.href ? 'a' : 'div'}.mode${m === next ? '.primary' : ''}${m.href ? '' : '.idle'}`, { href: m.href },
+    icon(m.icon),
+    h('span.mode-name', m.name, m.stat ? h('span.mode-stat', m.stat) : null),
+    h('span.mode-desc', m.desc))));
+}
+
 function memoryPanel(rep, stats) {
   const labels = ['New', ...Array.from({ length: MAX_LEVEL }, (_, i) => `L${i + 1}`)];
   const history = (rep.history || []).slice(-28);
   const max = Math.max(1, ...history.map((d) => d.correct + d.wrong));
-  return h('section.memory',
+  return h('div.memory',
     h('div.memory-bar',
-      h('h2.section-title', 'Memory'),
+      h('h3.section-title', 'Moves by level'),
       levelBar(stats.histogram, { large: true }),
       h('ol.memory-legend', stats.histogram.map((n, i) => h('li', h(`span.swatch.lv${i}`), `${labels[i]} `, h('b', n))))),
     h('div.memory-stats',
@@ -66,7 +113,7 @@ function memoryPanel(rep, stats) {
       stat(stats.newLines, 'lines not yet learned'),
       stat(isFinite(stats.nextDue) ? describeWait(stats.nextDue - Date.now()) : '—', 'until the next review opens')),
     history.length ? h('div.activity',
-      h('h2.section-title', 'Last four weeks'),
+      h('h3.section-title', 'Last four weeks'),
       h('div.activity-bars', { role: 'img', 'aria-label': 'Moves answered per day' }, history.map((d) => h('span.activity-day', {
         title: `${d.date}: ${d.correct} right, ${d.wrong} wrong`,
         style: { height: `${Math.max(8, ((d.correct + d.wrong) / max) * 100)}%`, '--wrong': `${(d.wrong / Math.max(1, d.correct + d.wrong)) * 100}%` },
@@ -123,22 +170,22 @@ function opponentsPanel(rep, model, pz) {
   const start = model.chapters[0];
   const searchAll = action(() => openMistakeFinder({ rep, fen: start.root.fen, prefix: { startFen: start.root.fen, moves: [] }, where: 'Whole repertoire' }));
   if (!list.length && !gaps.length) {
-    return h('section.opponents',
+    return h('div.opponents',
       h('div.audit-head',
         h('div',
-          h('h2.section-title', 'Punish what your opponents actually play'),
-          h('p.muted', 'Search the Lichess database from your lines: popular replies that Stockfish says are mistakes become puzzles, and popular replies you have no answer for are listed as gaps.')),
-        start ? h('button.btn', { type: 'button', on: { click: searchAll } }, 'Find opponent mistakes') : null));
+          h('h3.section-title', 'Punish what your opponents actually play'),
+          h('p.muted', 'Search Lichess games from your lines. Popular replies that Stockfish rates as mistakes become puzzles, and popular replies you have no answer for are listed as gaps.')),
+        start ? h('button.btn.primary', { type: 'button', on: { click: searchAll } }, 'Find opponent mistakes') : null));
   }
   const now = Date.now();
-  return h('section.opponents',
+  return h('div.opponents',
     h('div.audit-head',
       h('div',
-        h('h2.section-title', `${plural(pz.total, 'opponent mistake')} to punish`),
+        h('h3.section-title', `${plural(pz.total, 'opponent mistake')} to punish`),
         h('p.muted', `${pz.due} due for review, ${pz.fresh} not tried yet.`)),
       h('div.tools-row',
         pz.ready ? h('a.btn.primary', { href: `#/puzzles/${rep.id}` }, `Solve ${Math.min(pz.ready, 12)}`) : null,
-        start ? h('button.btn.ghost', { type: 'button', on: { click: searchAll } }, 'Search again') : null)),
+        start ? h('button.btn', { type: 'button', on: { click: searchAll } }, 'Search again') : null)),
     list.length ? h('ul.puzzle-list', list.slice(0, 10).map((p) => {
       const st = puzzleState(rep, p);
       const status = !st ? 'New' : isDue(st, now) ? 'Due' : `Level ${st.level}`;
@@ -182,11 +229,11 @@ function strengthPips(level, isNew) {
 
 function toolsPanel(rep) {
   return h('section.tools',
-    h('h2.section-title', 'Manage'),
+    h('h2.caption', 'Manage'),
     h('div.tools-row',
-      h('a.btn.ghost', { href: `#/edit/${rep.id}` }, 'Edit PGN and name'),
-      h('button.btn.ghost', { type: 'button', on: { click: () => downloadText(`${rep.id}.pgn`, rep.pgn) } }, 'Export PGN'),
-      h('button.btn.ghost', {
+      h('a.btn', { href: `#/edit/${rep.id}` }, 'Edit PGN and name'),
+      h('button.btn', { type: 'button', on: { click: () => downloadText(`${rep.id}.pgn`, rep.pgn) } }, 'Export PGN'),
+      h('button.btn', {
         type: 'button',
         on: {
           click: action(async () => {
@@ -197,7 +244,7 @@ function toolsPanel(rep) {
           }),
         },
       }, 'Reset progress'),
-      h('button.btn.ghost.danger', {
+      h('button.btn.danger', {
         type: 'button',
         on: {
           click: action(async () => {
@@ -220,9 +267,9 @@ function renderAuditSummary(box, rep, model) {
     clear(box,
       h('div.audit-head',
         h('div',
-          h('h2.section-title', 'Check your moves with Stockfish'),
+          h('h3.section-title', 'Check your moves with Stockfish'),
           h('p.muted', `Stockfish looks at every move you play in this repertoire and flags any that give away ${(state.settings.auditThreshold / 100).toFixed(2)} pawns or more compared with its own choice.`)),
-        h('button.btn', { type: 'button', on: { click: start } }, 'Run audit')));
+        h('button.btn.primary', { type: 'button', on: { click: start } }, 'Run audit')));
     return;
   }
   const flags = Object.entries(audit.flags || {})
@@ -231,9 +278,9 @@ function renderAuditSummary(box, rep, model) {
   clear(box,
     h('div.audit-head',
       h('div',
-        h('h2.section-title', flags.length ? `Stockfish doubts ${plural(flags.length, 'move')}` : 'Stockfish found nothing to worry about'),
+        h('h3.section-title', flags.length ? `Stockfish doubts ${plural(flags.length, 'move')}` : 'Stockfish found no weak moves'),
         h('p.muted', `Checked ${plural(audit.checked, 'move')} at depth ${audit.depth} on ${new Date(audit.at).toLocaleDateString()}. Flag threshold ${(audit.threshold / 100).toFixed(2)} pawns.`)),
-      h('button.btn.ghost', { type: 'button', on: { click: start } }, 'Run again')),
+      h('button.btn', { type: 'button', on: { click: start } }, 'Run again')),
     flags.length ? h('ul.audit-list', flags.map((f) => {
       const card = model.cards.get(f.key);
       return h('li',

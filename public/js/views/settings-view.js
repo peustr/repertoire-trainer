@@ -1,5 +1,6 @@
-// Settings: the app's control panel. One section at a time, every option with
-// a plain explanation, its default, and a way back to it. Changes save as you go.
+// Settings: the app's control panel. One section at a time, its options in cards by
+// group, every option with a plain explanation, its default and a way back to it. A dot
+// marks a changed option and the section list counts them. Changes save as you go.
 
 import { h, add, clear, toast, confirmDialog, action } from '../ui.js';
 import { state, saveSettings, loadLichess } from '../store.js';
@@ -43,6 +44,7 @@ export async function renderSettings(root, { section: sectionParam }) {
         }
         refreshDefaults();
         refreshVisibility();
+        renderNav();
       } catch (err) {
         status.textContent = 'Not saved';
         toast(err.message, 'bad');
@@ -55,10 +57,18 @@ export async function renderSettings(root, { section: sectionParam }) {
 
   // ---- navigation -------------------------------------------------------------------
   function renderNav() {
-    clear(nav, sections.map((s) => h(`a.settings-tab${s === current && !search.value ? '.active' : ''}`, {
-      href: `#/settings/${s.id}`,
-      on: { click: (e) => { e.preventDefault(); search.value = ''; current = s; history.replaceState(null, '', `#/settings/${s.id}`); render(); } },
-    }, s.title)));
+    clear(nav, sections.map((s) => {
+      const changed = s.fields.filter((f) => !isDefault(f)).length;
+      return h(`a.settings-tab${s === current && !search.value ? '.active' : ''}`, {
+        href: `#/settings/${s.id}`,
+        'aria-current': s === current && !search.value ? 'page' : null,
+        on: { click: (e) => { e.preventDefault(); search.value = ''; current = s; history.replaceState(null, '', `#/settings/${s.id}`); render(); } },
+      }, h('span', s.title), changed ? h('span.tab-badge', { title: `${changed} changed from the default` }, String(changed)) : null);
+    }));
+  }
+
+  function isDefault(f) {
+    return JSON.stringify(state.settings[f.key]) === JSON.stringify(defaults[f.key]);
   }
 
   function render() {
@@ -70,7 +80,7 @@ export async function renderSettings(root, { section: sectionParam }) {
       clear(body,
         hits.length ? hits.map(({ s, fields }) => h('section.settings-section',
           h('h2.settings-title', s.title),
-          fields.map((f) => fieldRow(f)))) : h('p.muted', `No setting matches “${search.value}”.`));
+          h('div.setting-card', fields.map((f) => fieldRow(f))))) : h('p.muted', `No setting matches “${search.value}”.`));
     } else {
       clear(body, h('section.settings-section',
         h('div.settings-section-head',
@@ -85,13 +95,19 @@ export async function renderSettings(root, { section: sectionParam }) {
     refreshVisibility();
   }
 
+  /** One card per group (the schema keeps each group's fields together), under the group's name. */
   function withGroups(fields) {
     const out = [];
-    let last = null;
+    let card = null;
+    let last;
     for (const f of fields) {
-      if (f.group && f.group !== last) out.push(h('h3.setting-group', f.group));
-      last = f.group;
-      out.push(fieldRow(f));
+      if (!card || f.group !== last) {
+        if (f.group) out.push(h('h3.setting-group', f.group));
+        card = h('div.setting-card');
+        out.push(card);
+        last = f.group;
+      }
+      card.append(fieldRow(f));
     }
     return out;
   }
@@ -123,12 +139,12 @@ export async function renderSettings(root, { section: sectionParam }) {
   }
 
   function refreshDefaults() {
-    for (const { field, defaultNote, setValue } of rows.values()) {
-      const val = state.settings[field.key];
-      const isDefault = JSON.stringify(val) === JSON.stringify(defaults[field.key]);
+    for (const { field, row, defaultNote, setValue } of rows.values()) {
+      const same = isDefault(field);
+      row.classList.toggle('changed', !same);
       clear(defaultNote,
         `Default: ${describe(field, defaults[field.key])}`,
-        isDefault ? null : h('button.linklike.inline', {
+        same ? null : h('button.linklike.inline', {
           type: 'button',
           on: { click: () => { setValue(defaults[field.key]); queueSave(field.key, defaults[field.key], null); } },
         }, 'Use default'));
@@ -173,7 +189,7 @@ export async function renderSettings(root, { section: sectionParam }) {
           input.classList.remove('out-of-range');
         });
         return {
-          el: h('span.num-wrap', input, f.unit ? h('span.unit', f.unit) : null, extra, h('span.range-hint', `${f.min}–${f.max}`)),
+          el: h('span.num-wrap', extra, h('span.num-field', input, f.unit ? h('span.unit', f.unit) : null), h('span.range-hint', `${f.min}–${f.max}`)),
           set: (v) => { input.value = String(v); showExtra(); },
         };
       }

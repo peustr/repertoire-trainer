@@ -1,6 +1,6 @@
 // Explore: walk the repertoire tree with Stockfish alongside, and wander off-book.
 
-import { h, clear, fig, uciLineToSan, formatSanLine, plural, action } from '../ui.js';
+import { h, clear, fig, uciLineToSan, formatSanLine, plural, action, kbd, panelSection, toolList } from '../ui.js';
 import { state, getRep, modelFor, loadLichess } from '../store.js';
 import { cardKey, movesTo } from '../repertoire.js';
 import { nagGlyphs, moveNumber } from '../pgn.js';
@@ -10,6 +10,10 @@ import { analyse, formatScore, evalBarShare } from '../engine-client.js';
 import { api } from '../api.js';
 import { formatGames, formatShare, describeRatings, describeSpeeds } from '../puzzle-utils.js';
 import { openMistakeFinder } from './finder.js';
+import { finderTool, sparTool, practiseTool } from './tools.js';
+
+/** The panel tab last open (Moves or Opening explorer), kept while the app is open. */
+let openTab = 'moves';
 
 export async function renderExplore(root, { id, line: lineParam, moves: movesParam }) {
   const rep = await getRep(id, { fresh: true });
@@ -69,8 +73,10 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   const tree = h('div.tree', { role: 'tree', 'aria-label': 'Repertoire moves' });
   const notes = h('div.notes');
   const engineBox = h('div.engine-box');
-  const engineToggle = h('button.btn.small.ghost', { type: 'button', 'aria-pressed': 'true', on: { click: () => { engineOn = !engineOn; engineToggle.setAttribute('aria-pressed', String(engineOn)); engineToggle.textContent = engineOn ? 'Stockfish on' : 'Stockfish off'; evalBar.hide(!engineOn); refreshEngine(); } } }, 'Stockfish on');
-  const actions = h('div.controls');
+  const engineDepth = h('span.engine-depth');
+  const engineSwitch = h('input', { type: 'checkbox', role: 'switch', checked: true, 'aria-label': 'Stockfish analysis' });
+  engineSwitch.addEventListener('change', () => { engineOn = engineSwitch.checked; evalBar.hide(!engineOn); refreshEngine(); });
+  const toolsSection = panelSection('From this position', null, toolList([]));
   const lichessBox = h('div.lichess-box');
   let explorerSource = state.settings.explorerSource || 'lichess';
   let explorerTimer = null;
@@ -81,25 +87,58 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     on: { click: () => { explorerSource = src; sourceButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(['lichess', 'masters'][i] === src))); refreshExplorer(); } },
   }, src === 'lichess' ? 'Lichess' : 'Masters'));
 
+  // Moves and the opening explorer share the space under Stockfish's lines.
+  const tabs = /** @type {Array<[string, string]>} */ ([['moves', 'Moves'], ['explorer', 'Opening explorer']]);
+  const tabButtons = tabs.map(([key, label]) => h('button.tab', {
+    type: 'button',
+    role: 'tab',
+    id: `tab-${key}`,
+    'aria-controls': `pane-${key}`,
+    'aria-selected': String(key === openTab),
+    on: { click: () => selectTab(key) },
+  }, label));
+  const panes = {
+    moves: h('div.tab-panel#pane-moves', { role: 'tabpanel', 'aria-labelledby': 'tab-moves', hidden: openTab !== 'moves' },
+      h('div.tree-wrap', tree), notes),
+    explorer: h('div.tab-panel#pane-explorer', { role: 'tabpanel', 'aria-labelledby': 'tab-explorer', hidden: openTab !== 'explorer' },
+      h('div.tab-tools', h('span.muted', 'Games played from this position'), h('div.segs', sourceButtons)),
+      lichessBox),
+  };
+
   page.append(
-    h('div.board-col', h('div.board-row', evalHost, boardHost), h('div.nav-buttons',
-      navBtn('⏮', 'Start', () => goTo(chapter.root)),
-      navBtn('◀', 'Back (←)', back),
-      navBtn('▶', 'Forward (→)', forward),
-      navBtn('⏭', 'End of line', toEnd),
-      navBtn('⇅', 'Flip board', () => board.flip()))),
+    h('div.board-col',
+      h('div.board-row', evalHost, boardHost),
+      h('div.nav-buttons',
+        navBtn('⏮', 'Start of the chapter (Home)', () => goTo(chapter.root)),
+        navBtn('◀', 'Back (←)', back),
+        navBtn('▶', 'Forward (→)', forward),
+        navBtn('⏭', 'End of the line (End)', toEnd),
+        navBtn('⇅', 'Flip board (F)', () => board.flip())),
+      h('p.kbd-hint',
+        h('span', kbd('←'), kbd('→'), 'move'),
+        h('span', kbd('↑'), kbd('↓'), 'other variations'),
+        h('span', kbd('F'), 'flip'))),
     h('aside.panel.explore-panel',
       h('div.trainer-crumbs', h('a.backlink', { href: `#/rep/${rep.id}` }, rep.name), h('span.mode-tag', 'Explore')),
       chapterSelect,
       where,
-      h('div.tree-wrap', tree),
-      notes,
-      actions,
-      h('div.engine-head', h('h2.section-title', 'Engine'), engineToggle),
-      engineBox,
-      h('div.engine-head', h('h2.section-title', 'Opening explorer'), h('div.segs', sourceButtons)),
-      lichessBox));
+      panelSection('Stockfish', h('span.psec-aside', engineDepth, h('span.switch', engineSwitch, h('span.switch-track', { 'aria-hidden': 'true' }))), engineBox),
+      h('div.psec',
+        h('div.tabs', { role: 'tablist', 'aria-label': 'Moves and games' }, tabButtons),
+        panes.moves,
+        panes.explorer),
+      toolsSection));
   root.append(page);
+
+  function selectTab(key) {
+    openTab = key;
+    tabs.forEach(([k], i) => {
+      tabButtons[i].setAttribute('aria-selected', String(k === key));
+      panes[k].hidden = k !== key;
+    });
+    if (key === 'explorer') refreshExplorer();
+    else tree.querySelector('.current')?.scrollIntoView({ block: 'nearest' });
+  }
 
   const board = createBoard(boardHost, { orientation: rep.color, onMove });
   const evalBar = createEvalBar(evalHost);
@@ -179,7 +218,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     const n = pos.node;
     if (pos.off.length) {
       clear(where,
-        h('p.where-main.off', 'Off the book — your own analysis'),
+        h('p.where-main.off', 'Off-book analysis'),
         h('p.where-sub', `${formatSanLine(pos.off.map((m, i) => ({ san: m.san, color: m.color, number: +(i === 0 ? n.fen : pos.off[i - 1].fen).split(' ')[5] })))}`),
         h('button.btn.small.ghost', { type: 'button', on: { click: () => goTo(n) } }, 'Back to the repertoire'));
       return;
@@ -198,7 +237,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   function renderNotes() {
     if (pos.off.length) { clear(notes); return; }
     const n = pos.node;
-    const parts = [n.preComment, n.comment].filter(Boolean);
+    const parts = n === chapter.root ? [] : [n.preComment, n.comment].filter(Boolean); // the tree already opens with the chapter's intro
     const flag = n.parent && n.color === side ? flags[cardKey(n.parent.fen, n.uci)] : null;
     clear(notes,
       parts.length ? h('div.note', n.san ? h('span.note-move', label(n)) : null, parts.map((t) => h('p', t))) : null,
@@ -209,10 +248,11 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     const fen = currentFen();
     const line = pos.off.length ? null : lineThrough(pos.node);
     const backHash = encodeURIComponent(location.hash);
-    clear(actions,
-      h('button.btn.primary', { type: 'button', title: 'Search the Lichess database for common opponent mistakes from this position', on: { click: action(findMistakes) } }, 'Find opponent mistakes'),
-      h('a.btn', { href: `#/spar?fen=${encodeURIComponent(fen)}&color=${rep.color}&rep=${rep.id}&back=${backHash}` }, 'Spar from here'),
-      line ? h('a.btn.ghost', { href: `#/train/${rep.id}/practice/${line.id}` }, 'Practise this line') : null);
+    toolsSection.lastChild.replaceWith(toolList([
+      finderTool(action(findMistakes)),
+      sparTool(`#/spar?fen=${encodeURIComponent(fen)}&color=${rep.color}&rep=${rep.id}&back=${backHash}`, state.settings),
+      line ? practiseTool(`#/train/${rep.id}/practice/${line.id}`) : null,
+    ]));
   }
 
   function findMistakes() {
@@ -229,6 +269,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   // ---- Lichess opening explorer -----------------------------------------------------------
   function refreshExplorer() {
     clearTimeout(explorerTimer);
+    if (openTab !== 'explorer') return; // asked for when the tab opens: no Lichess requests for a hidden table
     if (!state.lichess.connected) {
       clear(lichessBox, h('p.muted', 'See what players at your level play here. ', h('a', { href: '#/lichess' }, 'Connect Lichess')));
       return;
@@ -273,7 +314,9 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     });
     clear(lichessBox,
       h('p.ex-head', data.opening ? h('span.ex-opening', `${data.opening.eco} ${data.opening.name}`) : null, h('span.muted', `${formatGames(data.total)} games · ${filter}`)),
-      h('div.ex-table', { role: 'list', 'aria-label': `${whiteToMove ? 'White' : 'Black'} moves played here` }, rows));
+      h('div.ex-table', { role: 'list', 'aria-label': `${whiteToMove ? 'White' : 'Black'} moves played here` },
+        h('div.ex-cols', { 'aria-hidden': 'true' }, h('span', 'Move'), h('span', 'Played'), h('span', 'Games'), h('span', 'White · draw · Black')),
+        rows));
   }
 
   function lineThrough(node) {
@@ -335,7 +378,8 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   function refreshEngine() {
     clearTimeout(engineTimer);
     if (engineRun) { engineRun.stop(); engineRun = null; }
-    if (!engineOn) { clear(engineBox, h('p.muted', 'Turn Stockfish on to see its evaluation.')); return; }
+    engineDepth.textContent = '';
+    if (!engineOn) { clear(engineBox, h('p.muted', 'Stockfish is off. Switch it on to see its lines.')); return; }
     const fen = currentFen();
     clear(engineBox, h('p.muted', 'Thinking…'));
     engineTimer = setTimeout(() => {
@@ -357,8 +401,8 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     }
     const top = lines[0];
     evalBar.update(evalBarShare(top.score), formatScore(top.score), rep.color === 'black');
+    engineDepth.textContent = `Depth ${msg.depth}`;
     clear(engineBox,
-      h('p.engine-depth', `Depth ${msg.depth}`),
       h('ol.pv-list', lines.map((l) => h('li',
         h('button.pv-move', { type: 'button', title: 'Play this move', on: { click: () => playUci(l.pv[0]) } }, h('span.pv-score', formatScore(l.score))),
         h('span.pv-line', formatSanLine(uciLineToSan(fen, l.pv, 10)))))));
