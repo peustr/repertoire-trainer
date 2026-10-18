@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node server.js --open",
     "serve": "node server.js",
-    "test": "c8 node --test test/*.test.mjs",
+    "test": "c8 node --test --test-timeout=30000 --test-force-exit test/*.test.mjs",
     "test:smoke": "node test/smoke-server.mjs",
     "test:e2e": "playwright test",
     "lint": "eslint --max-warnings 0 .",

@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { UciEngine, engineSpec, isNetworkPath } from '../engine.js';
+import { EngineManager, UciEngine, engineSpec, isNetworkPath } from '../engine.js';
 import { START_FEN } from '../public/js/constants.js';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-uci-engine.js', import.meta.url));
@@ -147,6 +147,63 @@ test('a restart during start-up applies to the engine being started', async () =
   engine.restart();
   assert.equal((await pending).bestmove, 'd2d4');
   engine.quit();
+});
+
+// --- what reaches the engine ---------------------------------------------------------
+
+test('an illegal position or a smuggled command is refused before it reaches the engine', async (t) => {
+  const engine = new UciEngine('tasks', () => ({}), { specFor: () => fake('ok') });
+  t.after(() => engine.quit()); // even when an assertion fails, so the fake engine never outlives the test
+  const refused = [
+    { fen: '8/8/8/8/8/8/8/8 w - - 0 1' }, // no kings: Stockfish hangs on it
+    { fen: '4k3/8/8/8/8/8/8/4R1K1 w - - 0 1' }, // Black is in check with White to move
+    { fen: `${START_FEN}\nquit` },
+    { fen: START_FEN, go: 'depth 1\nquit' },
+    { fen: START_FEN, searchmoves: ['e2e4\nquit'] },
+    { fen: START_FEN, moves: ['e2e4 e7e5'] },
+    { fen: START_FEN, options: { MultiPV: '1\nquit' } },
+  ];
+  for (const job of refused) {
+    assert.throws(() => engine.submit({ go: 'depth 1', ...job }), { status: 400 }, JSON.stringify(job));
+  }
+  assert.equal(engine.proc, null, 'no engine was started for them');
+  assert.equal((await search(engine)).bestmove, 'e2e4', 'a good search still runs');
+});
+
+/** An engine manager on fake engines that records each job it submits. */
+function recordingManager() {
+  const engines = new EngineManager();
+  const sent = [];
+  for (const role of /** @type {const} */ (['analysis', 'tasks'])) {
+    const engine = new UciEngine(role, () => ({}), { specFor: () => fake('ok') });
+    const submit = engine.submit.bind(engine);
+    engine.submit = (job) => { sent.push(job); return submit(job); };
+    engines[role] = engine;
+  }
+  return { engines, sent };
+}
+
+test('numbers from the page are kept in range, and illegal moves are not searched', async (t) => {
+  const { engines, sent } = recordingManager();
+  t.after(() => engines.quit());
+
+  await engines.analyse({ fen: START_FEN, depth: '5\nquit', multipv: 'lots' }, () => {}).promise;
+  assert.equal(sent[0].go, 'depth 22');
+  assert.equal(sent[0].options.MultiPV, 3);
+
+  sent.length = 0;
+  const res = await engines.evaluate({ fen: START_FEN, moves: ['e2e4', 'e2e5', 'zz', 7], depth: 99 });
+  assert.deepEqual(sent.map((j) => j.go), ['depth 50', 'depth 50']);
+  assert.deepEqual(sent[1].searchmoves, ['e2e4'], 'only the legal move is searched');
+  assert.deepEqual(res.moves.map((m) => [m.move, m.score]), [['e2e4', { cp: 30 }], ['e2e5', null], ['zz', null], ['7', null]]);
+
+  sent.length = 0;
+  await engines.bestmove({ fen: START_FEN, elo: '1500', movetime: 'soon' });
+  await engines.bestmove({ fen: START_FEN, elo: null, movetime: 1e9 });
+  assert.equal(sent[0].options.UCI_Elo, 1500);
+  assert.equal(sent[0].go, 'movetime 800');
+  assert.equal(sent[1].options.UCI_LimitStrength, 'false');
+  assert.equal(sent[1].go, 'movetime 10000');
 });
 
 // --- engine paths --------------------------------------------------------------------

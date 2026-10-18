@@ -75,3 +75,22 @@ test('a message that is not a request object is ignored, and the server keeps go
   assert.equal((await next((m) => m.id === 9, 'status result after the junk')).type, REPLY.RESULT);
   ws.close();
 });
+
+test('an illegal position is refused at once instead of tying up Stockfish', async (t) => {
+  const res = await fetch(`${server.base}/api/repertoires`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Bad positions', color: 'white', pgn: '1. e4 e5 *' }),
+  });
+  const rep = await res.json();
+  const { ws, next, send } = await connect();
+  t.after(() => ws.close()); // an open socket would keep the test process alive after a failure
+  const kingless = '8/8/8/8/8/8/8/8 w - - 0 1';
+  send({ type: REQUEST.ANALYSE, id: 10, fen: kingless, depth: 5 });
+  send({ type: REQUEST.PUZZLE_SEARCH, id: 11, repId: rep.id, fen: kingless });
+  for (const id of [10, 11]) {
+    const answer = await next((m) => m.id === id && m.type !== REPLY.INFO, `answer to request ${id}`);
+    assert.equal(answer.type, REPLY.ERROR);
+    assert.match(answer.message, /not a legal chess position/);
+  }
+});

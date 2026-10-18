@@ -5,8 +5,8 @@
   "reporter": ["text"],
   "reports-dir": "coverage",
   "check-coverage": true,
-  "lines": 85,
-  "statements": 85,
-  "branches": 72,
-  "functions": 84
+  "lines": 88,
+  "statements": 88,
+  "branches": 74,
+  "functions": 86
 }
