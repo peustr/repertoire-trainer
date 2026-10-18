@@ -28,3 +28,19 @@ test('answers survive an unreachable server and a reload', async ({ page, app })
   await expect.poll(progressOf, { timeout: 20000 }).toBe(line.cardKeys.length);
   await expect(page.locator('.toast')).toContainText('Your progress is saved');
 });
+
+test('answers are saved when the browser storage will not take them', async ({ page, app }) => {
+  await app.api('PUT', '/api/settings', { learnRecall: false });
+  const rep = await app.seedSample('italian-game-white.pgn', 'Italian');
+  const line = buildRepertoire(rep).lines[0];
+  const progressOf = async () => Object.keys((await app.api('GET', `/api/repertoires/${rep.id}`)).cards || {}).length;
+
+  // A full localStorage: every write is refused, as Chrome does once the quota is used.
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); };
+  });
+
+  await app.open(`#/train/${rep.id}/learn/${line.id}`);
+  await playLine(page, line.nodes.filter((n) => n.color === 'w').map((n) => n.uci));
+  await expect.poll(progressOf, { timeout: 10000 }).toBe(line.cardKeys.length);
+});

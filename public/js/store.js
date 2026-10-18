@@ -3,7 +3,7 @@
 import { api } from './api.js';
 import { buildRepertoire, hash } from './repertoire.js';
 import { setFigurines, setSounds, toast } from './ui.js';
-import { createOutbox, applyCards } from './outbox.js';
+import { createOutbox, applyCards, webStorage } from './outbox.js';
 import { setBoardPrefs } from './board.js';
 
 export const state = {
@@ -95,18 +95,9 @@ function today() {
 // has them, so a server restart, a sleeping laptop or a locked file loses nothing.
 
 const OUTBOX_KEY = 'repertoire-trainer.unsaved-progress';
-let outboxMemory = []; // used when localStorage is unavailable (private window, blocked storage)
 
 const outbox = createOutbox({
-  storage: {
-    get() {
-      try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch (err) { return outboxMemory; }
-    },
-    set(entries) {
-      outboxMemory = entries;
-      try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(entries)); } catch (err) { /* kept in memory */ }
-    },
-  },
+  storage: webStorage(() => localStorage, OUTBOX_KEY), // in memory while localStorage is full or blocked
   send: (e) => api.progress(e.repId, { cards: e.cards, tally: e.tally, saveId: e.saveId }),
   onChange({ error, recovered, dropped }) {
     if (dropped) toast(`Some progress could not be saved: ${error.message}`, 'bad');

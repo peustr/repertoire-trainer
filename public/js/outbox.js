@@ -15,6 +15,34 @@ function newId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * The outbox's storage in localStorage (or anything shaped like it), shared between tabs.
+ * When the browser will not take a write (storage full, blocked, a private window), the
+ * queue carries on in memory from then on: reading the older copy back from storage
+ * would lose every save made since. Memory mode ends once a write succeeds again.
+ * @param {() => { getItem(key: string): string | null, setItem(key: string, value: string): void } | null} backend
+ *   a function, because merely touching localStorage can throw
+ * @param {string} key
+ * @returns {{ get(): any[], set(entries: any[]): void }}
+ */
+export function webStorage(backend, key) {
+  let memory = null; // the queue, while storage will not take it
+  return {
+    get() {
+      if (memory) return memory;
+      try { return JSON.parse(backend().getItem(key) || '[]'); } catch (err) { return []; }
+    },
+    set(entries) {
+      try {
+        backend().setItem(key, JSON.stringify(entries));
+        memory = null;
+      } catch (err) {
+        memory = entries;
+      }
+    },
+  };
+}
+
 /** Apply card updates in place: a null state removes the card. */
 export function applyCards(target, cards) {
   for (const [key, state] of Object.entries(cards || {})) {
@@ -62,16 +90,20 @@ export function createOutbox({ storage, send, onChange = () => {}, setTimer = se
     return flushing;
   }
 
+  /**
+   * Saves for one repertoire go in order (a later one may overwrite an earlier card).
+   * When one fails, the rest of that repertoire's saves wait for the retry, but other
+   * repertoires' saves still go: a repertoire whose file cannot be written must not
+   * hold up everything else.
+   */
   async function run() {
     clearTimer(timer);
     timer = null;
+    const held = new Set(); // repertoires whose next save failed in this round
+    let lastError = null;
     for (;;) {
-      const [next] = read();
-      if (!next) {
-        if (failing) { failing = false; onChange({ recovered: true }); }
-        attempt = 0;
-        return;
-      }
+      const next = read().find((e) => !held.has(e.repId));
+      if (!next) break;
       try {
         await send(next);
       } catch (err) {
@@ -80,13 +112,20 @@ export function createOutbox({ storage, send, onChange = () => {}, setTimer = se
           onChange({ dropped: next, error: err });
           continue;
         }
-        if (!failing) { failing = true; onChange({ error: err }); }
-        timer = setTimer(flush, RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
-        attempt++;
-        return;
+        held.add(next.repId);
+        lastError = err;
+        continue;
       }
       remove(next.saveId);
     }
+    if (held.size) {
+      if (!failing) { failing = true; onChange({ error: lastError }); }
+      timer = setTimer(flush, RETRY_DELAYS[Math.min(attempt, RETRY_DELAYS.length - 1)]);
+      attempt++;
+      return;
+    }
+    if (failing) { failing = false; onChange({ recovered: true }); }
+    attempt = 0;
   }
 
   return { add, flush, pendingCards, size: () => read().length };
