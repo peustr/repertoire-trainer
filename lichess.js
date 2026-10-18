@@ -1,3 +1,4 @@
+// @ts-check
 // Lichess API client.
 //
 // - Opening explorer (explorer.lichess.org) — needs a token since 2025, no scopes.
@@ -89,11 +90,16 @@ function enqueue(task) {
   return run;
 }
 
+/**
+ * @param {string} url
+ * @param {{ auth?: boolean, accept?: string, method?: string, body?: any, headers?: Record<string, string>, retries?: number }} [options]
+ */
 async function request(url, { auth = true, accept = 'application/json', method = 'GET', body, headers = {}, retries = 2 } = {}) {
   return enqueue(async () => {
     for (let attempt = 0; ; attempt++) {
       const wait = pausedUntil - Date.now();
       if (wait > 0) await sleep(wait);
+      /** @type {Record<string, string>} */
       const h = { 'User-Agent': USER_AGENT, Accept: accept, ...headers };
       const t = auth ? token() : null;
       if (t) h.Authorization = `Bearer ${t}`;

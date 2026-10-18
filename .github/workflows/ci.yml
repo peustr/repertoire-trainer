@@ -43,6 +43,26 @@ jobs:
       - name: Server and engine smoke test
         run: npm run test:smoke
 
+  check:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript (files with // @ts-check)
+        run: npm run typecheck
+
   e2e:
     name: Browser tests (Chromium)
     runs-on: ubuntu-latest

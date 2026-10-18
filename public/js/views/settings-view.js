@@ -231,7 +231,7 @@ export async function renderSettings(root, { section: sectionParam }) {
     const rowsEl = h('ol.intervals', { id });
     const draw = () => {
       clear(rowsEl, hours.map((hrs, i) => {
-        const [unit, per] = UNIT_HOURS.find(([, p]) => hrs >= p && Math.abs(hrs / p - Math.round(hrs / p)) < 1e-9) || ['hours', 1];
+        const [, per] = UNIT_HOURS.find(([, p]) => hrs >= p && Math.abs(hrs / p - Math.round(hrs / p)) < 1e-9) || ['hours', 1];
         const num = h('input.num.small', { type: 'number', min: 1, max: 999, step: 1, value: String(Math.round(hrs / per)), 'aria-label': `Level ${i + 1} wait` });
         const sel = h('select.unit-select', { 'aria-label': `Level ${i + 1} unit` }, UNIT_HOURS.map(([u, p]) => h('option', { value: String(p), selected: p === per }, u)));
         const update = () => {
@@ -296,8 +296,14 @@ export async function renderSettings(root, { section: sectionParam }) {
 function describe(f, v) {
   switch (f.type) {
     case 'bool': return v ? 'on' : 'off';
-    case 'select': return (f.options.find(([k]) => k === v) || [, v])[1];
-    case 'chips': return String(v).split(',').map((k) => (f.options.find(([o]) => o === k) || [, k])[1]).join(', ');
+    case 'select': {
+      const option = f.options.find(([k]) => k === v);
+      return option ? option[1] : v;
+    }
+    case 'chips': return String(v).split(',').map((k) => {
+      const option = f.options.find(([o]) => o === k);
+      return option ? option[1] : k;
+    }).join(', ');
     case 'text': return v ? v : 'empty';
     case 'month': return v || 'all games';
     case 'intervals': return v.map((hrs) => {

@@ -10,6 +10,9 @@
     "test": "node --test test/*.test.mjs",
     "test:smoke": "node test/smoke-server.mjs",
     "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run lint && npm run typecheck",
     "mock-lichess": "node test/mock-lichess.js"
   },
   "engines": {
@@ -26,6 +29,12 @@
   },
   "license": "GPL-3.0-or-later",
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.5",
+    "eslint": "10.12.0",
+    "globals": "17.13.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0"
   }
 }

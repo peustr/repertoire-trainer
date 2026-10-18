@@ -139,7 +139,7 @@ export async function renderSpar(root, { fen, color, id, back }) {
     if (prepared.length && !prepared.some((n) => n.uci === uci)) {
       toast(`Your repertoire move here was ${prepared.map((n) => fig(n.san)).join(' or ')}.`);
     }
-    engineTurn();
+    void engineTurn();
   }
 
   function noteBookExit(fen, res, replies) {
@@ -190,7 +190,7 @@ export async function renderSpar(root, { fen, color, id, back }) {
     if (!history.length) return;
     history.pop();
     while (history.length && !myTurn()) history.pop();
-    if (!myTurn()) { render(); engineTurn(); return; }
+    if (!myTurn()) { render(); void engineTurn(); return; }
     recomputeBookExit();
     render();
   }
@@ -210,7 +210,7 @@ export async function renderSpar(root, { fen, color, id, back }) {
     history = [];
     leftBookAt = null;
     render();
-    if (!myTurn()) engineTurn();
+    if (!myTurn()) void engineTurn();
   }
 
   function refreshEval() {

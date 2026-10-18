@@ -163,7 +163,7 @@ export async function renderPuzzles(root, { id, ids }) {
     if (quiet) setFeedback('neutral', `${opponent} replies ${sanLabel(cur.fenBefore, uci)}.`);
   }
 
-  async function finish() {
+  function finish() {
     cur.waiting = false;
     stopAll();
     const { p } = cur;
@@ -173,7 +173,7 @@ export async function renderPuzzles(root, { id, ids }) {
     const next = gradeCard(prev, success, state.settings, now);
     if (success) tally.solved++; else tally.missed++;
     if (next !== prev) {
-      saveCards(rep.id, { [puzzleKey(p.id)]: next }, success ? { correct: 1 } : { wrong: 1 });
+      void saveCards(rep.id, { [puzzleKey(p.id)]: next }, success ? { correct: 1 } : { wrong: 1 }); // never rejects: see the outbox
     }
     if (success) sound.done();
     const title = head.querySelector('.line-title');

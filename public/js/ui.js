@@ -1,3 +1,4 @@
+// @ts-check
 // Small DOM and formatting helpers shared by every view.
 
 import { Chess } from 'chess.js';
@@ -127,7 +128,7 @@ export function setSounds(on, vol) { soundsOn = !!on; if (vol != null) volume = 
 function tone(freqs, { dur = 0.09, type = 'sine', gain = 0.06, gap = 0.07 } = {}) {
   if (!soundsOn || !unlocked) return;
   try {
-    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    audio = audio || new (window.AudioContext || /** @type {any} */ (window).webkitAudioContext)();
     const t0 = audio.currentTime;
     freqs.forEach((f, i) => {
       const osc = audio.createOscillator();

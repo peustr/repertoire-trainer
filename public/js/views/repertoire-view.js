@@ -10,7 +10,7 @@ import { api } from '../api.js';
 import { runAudit } from './audit.js';
 import { openMistakeFinder } from './finder.js';
 import { puzzleStats, puzzleList, puzzleState, formatShare, formatGames, describeReach } from '../puzzle-utils.js';
-import { sanLabel, uciLineToSan, formatSanLine, lineTail } from '../ui.js';
+import { uciLineToSan, formatSanLine, lineTail } from '../ui.js';
 import { isDue } from '../srs.js';
 
 export async function renderRepertoire(root, { id }) {
@@ -83,7 +83,7 @@ function chapterBlock(rep, model, chapter, now) {
     h('summary',
       h('span.chapter-name', chapter.name),
       h('span.chapter-meta', plural(chapter.lines.length, 'line')),
-      h('button.btn.small.ghost', { type: 'button', title: 'Search Lichess games for common opponent mistakes in this chapter', on: { click: (e) => { e.preventDefault(); e.stopPropagation(); findInChapter(rep, chapter); } } }, 'Find mistakes'),
+      h('button.btn.small.ghost', { type: 'button', title: 'Search Lichess games for common opponent mistakes in this chapter', on: { click: action((e) => { e.preventDefault(); e.stopPropagation(); return findInChapter(rep, chapter); }) } }, 'Find mistakes'),
       h('a.btn.small.ghost', { href: `#/train/${rep.id}/practice?chapter=${chapter.index}`, on: { click: (e) => e.stopPropagation() } }, 'Practise chapter')),
     h('table.lines',
       h('colgroup', h('col.c-num'), h('col.c-moves'), h('col.c-strength'), h('col.c-when'), h('col.c-actions')),
@@ -108,7 +108,7 @@ function findInChapter(rep, chapter) {
   const moves = [];
   while (n.children.length === 1) { n = n.children[0]; moves.push(n.uci); }
   const sans = uciLineToSan(chapter.root.fen, moves, 80);
-  openMistakeFinder({
+  return openMistakeFinder({
     rep,
     fen: n.fen,
     prefix: { startFen: chapter.root.fen, moves },
@@ -120,7 +120,7 @@ function opponentsPanel(rep, model, pz) {
   const list = puzzleList(rep).sort((a, b) => (b.reach || 0) - (a.reach || 0));
   const gaps = Object.entries(rep.gaps || {}).map(([key, g]) => ({ key, ...g })).sort((a, b) => (b.reach || 0) - (a.reach || 0));
   const start = model.chapters[0];
-  const searchAll = () => openMistakeFinder({ rep, fen: start.root.fen, prefix: { startFen: start.root.fen, moves: [] }, where: 'Whole repertoire' });
+  const searchAll = action(() => openMistakeFinder({ rep, fen: start.root.fen, prefix: { startFen: start.root.fen, moves: [] }, where: 'Whole repertoire' }));
   if (!list.length && !gaps.length) {
     return h('section.opponents',
       h('div.audit-head',

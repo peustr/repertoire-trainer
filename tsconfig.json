@@ -1,0 +1,19 @@
+{
+  // Type-checks the plain JavaScript files that start with // @ts-check (npm run check). Nothing is compiled: what is in
+  // public/ is still exactly what the browser loads.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false, // files opt in with // @ts-check at the top
+    "noEmit": true,
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": false
+  },
+  "include": ["*.js", "*.mjs", "public/js/**/*.js", "test/**/*.mjs", "test/**/*.js"],
+  "exclude": ["node_modules", "data"]
+}

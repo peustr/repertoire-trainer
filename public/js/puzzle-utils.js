@@ -1,3 +1,4 @@
+// @ts-check
 // Helpers for opponent-mistake puzzles and Lichess explorer data.
 
 import { Chess } from 'chess.js';
@@ -89,7 +90,11 @@ export function cpFor(score, side) {
   return side === 'w' ? raw : -raw;
 }
 
-/** A PGN game for "add the punishment to my repertoire". */
+/**
+ * A PGN game for "add the punishment to my repertoire".
+ * @param {any} puzzle
+ * @param {{ title?: string }} [options]
+ */
 export function puzzleToPgn(puzzle, { title } = {}) {
   const c = new Chess();
   const start = puzzle.startFen || DEFAULT_FEN;

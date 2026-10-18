@@ -1,3 +1,4 @@
+// @ts-check
 // Personalised puzzles: find the mistakes real opponents make against your
 // repertoire, and turn each one into a "punish it" puzzle.
 //
@@ -33,6 +34,10 @@ const DEFAULTS = {
   beyondBook: 2,      // opponent moves to keep following after your repertoire line ends
   maxPuzzles: 15,     // stop once this many puzzles are found
   gapShare: 0.1,      // unprepared replies at least this popular are reported as gaps
+  speeds: 'blitz,rapid,classical', // explorer time controls (as lichess.cleanSpeeds falls back to)
+  ratings: '1600,1800,2000',       // explorer rating bands (as lichess.cleanRatings falls back to)
+  since: '',          // only games since this month (YYYY-MM); '' for all
+  cacheDays: 30,      // how long explorer answers are reused
 };
 
 function positionKey(fen) {
@@ -169,6 +174,9 @@ function puzzleId(fen, uci) {
  *   options: overrides for DEFAULTS plus { speeds, ratings }
  *   onEvent: progress callback
  *   cancelled(): returns true to stop early
+ *
+ * @param {{ rep: any, model: any, fen: string, prefix?: { startFen?: string, moves?: string[] },
+ *   options?: Partial<typeof DEFAULTS>, engines: any, onEvent?: (event: any) => void, cancelled?: () => boolean }} args
  */
 async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, onEvent = () => {}, cancelled = () => false }) {
   const opts = { ...DEFAULTS, ...options };
@@ -196,7 +204,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
       // Our move: follow the repertoire, or Stockfish once we're out of book.
       const key = positionKey(node.fen);
       let moves = [...((model.myMovesAt.get(key)) || [])];
-      let inBook = moves.length > 0;
+      const inBook = moves.length > 0;
       if (!moves.length) {
         let best = node.hint;
         if (!best) {

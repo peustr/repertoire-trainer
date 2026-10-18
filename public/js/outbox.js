@@ -1,3 +1,4 @@
+// @ts-check
 // Progress saves that survive a server hiccup.
 //
 // Every save is queued in storage (localStorage in the browser, so it also survives
@@ -25,10 +26,13 @@ export function applyCards(target, cards) {
 }
 
 /**
- * storage: { get() -> entries[], set(entries) }
- * send(entry) -> Promise, rejecting with err.status for an HTTP error
- * onChange({ error?, recovered?, dropped? }) reports when saving starts failing,
- *   when it recovers, and when a save is given up for good.
+ * @param {object} options
+ * @param {{ get(): any[] | null, set(entries: any[]): void }} options.storage
+ * @param {(entry: any) => Promise<unknown>} options.send rejects with err.status for an HTTP error
+ * @param {(event: { error?: any, recovered?: boolean, dropped?: any }) => void} [options.onChange]
+ *   hears when saving starts failing, when it recovers, and when a save is given up for good
+ * @param {(fn: () => void, ms: number) => any} [options.setTimer]
+ * @param {(timer: any) => void} [options.clearTimer]
  */
 export function createOutbox({ storage, send, onChange = () => {}, setTimer = setTimeout, clearTimer = clearTimeout }) {
   let flushing = null;

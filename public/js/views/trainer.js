@@ -6,7 +6,7 @@
 //           moves you already know play themselves.
 // Practise: every move, no effect on the schedule.
 
-import { h, clear, sound, fig, sanLabel, uciLineToSan, formatSanLine, plural } from '../ui.js';
+import { h, clear, sound, fig, sanLabel, uciLineToSan, formatSanLine, plural, action } from '../ui.js';
 import { refresh } from '../nav.js';
 import { state, getRep, modelFor, saveCards } from '../store.js';
 import { cardKey } from '../repertoire.js';
@@ -215,7 +215,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     renderDots();
     const verdict = h('p.verdict.muted', 'Asking Stockfish about your move…');
     setFeedback('bad', `Not ${sanLabel(fenBefore, uci)}. The book move is ${moveText(node)} — play it to continue.`, verdict);
-    explainMistake(verdict, fenBefore, node.uci, uci);
+    void explainMistake(verdict, fenBefore, node.uci, uci); // shows its own errors
   }
 
   async function explainMistake(el, fen, book, played) {
@@ -264,7 +264,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     tally.wrong += wrong;
     done.add(line.id);
     if (Object.keys(updates).length || mode !== 'practice') {
-      saveCards(rep.id, updates, mode === 'practice' ? null : { correct: right, wrong, lines: 1 });
+      void saveCards(rep.id, updates, mode === 'practice' ? null : { correct: right, wrong, lines: 1 }); // never rejects: see the outbox
     }
     if (!wrong) sound.done();
     renderDots();
@@ -471,17 +471,17 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       type: 'button',
       title: 'Search the Lichess database for common opponent mistakes from the current position',
       on: {
-        click: () => {
-          if (!run) return;
+        click: action(() => {
+          if (!run) return undefined;
           const moves = run.played.map((n) => n.uci);
           const sans = uciLineToSan(run.line.startFen, moves, 80);
-          openMistakeFinder({
+          return openMistakeFinder({
             rep,
             fen: run.fen,
             prefix: { startFen: run.line.startFen, moves },
             where: sans.length ? `From ${formatSanLine(sans.slice(-6))}` : `From the start of ${run.line.chapter.name}`,
           });
-        },
+        }),
       },
     }, 'Opponent mistakes');
   }

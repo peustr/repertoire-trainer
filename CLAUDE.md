@@ -13,13 +13,14 @@ npm run serve          # same, without opening the browser
 npm test               # every test/*.test.mjs (node:test): parser, scheduler, store, engine, Lichess, mistake search, ...
 npm run test:smoke     # boots the real server on a free port with a temp data dir, hits the API and Stockfish
 npm run test:e2e       # Playwright browser tests in test/e2e (first time: npx playwright install chromium)
+npm run check          # ESLint over everything + TypeScript over files that start with // @ts-check
 npm run mock-lichess   # fake Lichess on :9099 (set LICHESS_URL and LICHESS_EXPLORER_URL to use it)
 node --test test/store.test.mjs   # one node:test file
 ```
 
-Run both `npm test` and `npm run test:smoke` before finishing a change. New tests go in `test/<area>.test.mjs` using `node:test`, which `npm test` picks up automatically. Shared helpers live in `test/helpers/`: `startServer()` boots the real server on a free port with a temp data dir. Fixtures live in `test/fixtures/`, including `fake-uci-engine.js`, a Stockfish stand-in for `UciEngine`'s `specFor` option. Browser behaviour is tested with Playwright in `test/e2e/*.spec.mjs`. The `app` fixture there gives each test its own server and data folder, with seeding helpers, and `playMove()` plays a move on the board. Bug fixes land with a test that fails without the fix. CI (`.github/workflows/ci.yml`) runs them on Node 22/24/26 (Ubuntu) and Node 24 (Windows), plus the browser tests in Chromium, a secrets scan and a check that nothing under `data/` is tracked.
+Run `npm run check`, `npm test` and `npm run test:smoke` before finishing a change. New tests go in `test/<area>.test.mjs` using `node:test`, which `npm test` picks up automatically. Shared helpers live in `test/helpers/`: `startServer()` boots the real server on a free port with a temp data dir. Fixtures live in `test/fixtures/`, including `fake-uci-engine.js`, a Stockfish stand-in for `UciEngine`'s `specFor` option. Browser behaviour is tested with Playwright in `test/e2e/*.spec.mjs`. The `app` fixture there gives each test its own server and data folder, with seeding helpers, and `playMove()` plays a move on the board. Bug fixes land with a test that fails without the fix. CI (`.github/workflows/ci.yml`) runs them on Node 22/24/26 (Ubuntu) and Node 24 (Windows), plus lint and type check, the browser tests in Chromium, a secrets scan and a check that nothing under `data/` is tracked.
 
-There is no build step, bundler, TypeScript, or linter. What is in `public/` is exactly what the browser loads.
+There is no build step or bundler. What is in `public/` is exactly what the browser loads. TypeScript only *checks* the JavaScript: files opt in with `// @ts-check` on their first line, and JSDoc supplies types where inference falls short. The server, storage, engine, Lichess, mistake-search and shared modules are checked; views and tests are not yet. Start new modules with `// @ts-check`. Lint flags any promise that is neither awaited, returned nor caught: user actions go through `action()`, and deliberate fire-and-forget calls are written `void promise`. On the server, an unhandled rejection stops the app.
 
 ## Environment variables
 

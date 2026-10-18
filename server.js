@@ -1,3 +1,4 @@
+// @ts-check
 // Repertoire Trainer — local server.
 // Serves the web app, stores repertoires as JSON files, and bridges the
 // browser to Stockfish over a WebSocket.
@@ -330,7 +331,7 @@ server.listen(PORT, HOST, () => {
   if (process.argv.includes('--open')) openBrowser(url);
 });
 
-server.on('error', (err) => {
+server.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`Port ${PORT} is already in use. Is the trainer already running? Try http://localhost:${PORT}`);
   } else {

@@ -59,7 +59,7 @@ export async function renderImport(root, { id }) {
     if (!name.value.trim() && files[0]) name.value = files[0].name.replace(/\.(pgn|txt)$/i, '').replace(/[_-]+/g, ' ');
     refresh();
   }
-  file.addEventListener('change', () => readFiles(file.files));
+  file.addEventListener('change', () => readFiles(file.files).catch((err) => toast(err.message, 'bad')));
   for (const el of [pgn, sideWhite, sideBlack]) el.addEventListener('input', refresh);
 
   const drop = h('div.dropzone',
@@ -73,7 +73,7 @@ export async function renderImport(root, { id }) {
   drop.addEventListener('drop', (e) => {
     e.preventDefault();
     drop.classList.remove('over');
-    if (e.dataTransfer.files.length) readFiles(e.dataTransfer.files);
+    if (e.dataTransfer.files.length) readFiles(e.dataTransfer.files).catch((err) => toast(err.message, 'bad'));
   });
 
   const form = h('form.import-form', {
