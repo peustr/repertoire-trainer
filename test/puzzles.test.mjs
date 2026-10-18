@@ -37,7 +37,7 @@ const uci = (m) => m.from + m.to + (m.promotion || '');
  * A scripted engine: at `blunderAt`, the second reply it is asked about leaves White
  * 4 pawns up; everything else is level. Scores are from White's side, as from engine.js.
  */
-function scriptedEngines(blunderAt) {
+function scriptedEngines(blunderAt, { bestScore = { cp: 0 } } = {}) {
   const seen = { blunder: null };
   return {
     seen,
@@ -45,7 +45,7 @@ function scriptedEngines(blunderAt) {
       const blunder = blunderAt && positionKey(fen) === positionKey(blunderAt) ? moves[1] : null;
       if (blunder) seen.blunder = blunder;
       return {
-        best: { move: moves[0], score: { cp: 0 }, pv: [moves[0]] },
+        best: { move: moves[0], score: bestScore, pv: [moves[0]] },
         moves: moves.map((m) => ({ move: m, score: { cp: m === blunder ? 400 : 0 }, pv: [m] })),
       };
     },
@@ -74,6 +74,14 @@ test('a popular reply that throws the game away becomes a puzzle', async () => {
   assert.equal(p.solution.length, 1);
   assert.ok(p.theme.label);
   assert.deepEqual(found.map((x) => x.id), [p.id], 'reported as it was found');
+});
+
+test('a position the engine could not score is skipped, not taken as level', async () => {
+  const engines = scriptedEngines(AFTER_E4, { bestScore: null });
+  const res = await searchMistakes({ rep: white, model: whiteModel, fen: START, engines, options: OPTIONS });
+  assert.equal(engines.seen.blunder !== null, true, 'the search reached the position');
+  assert.deepEqual(res.puzzles, [], 'no score for the best move means nothing to compare the reply with');
+  assert.ok(res.stats.skipped >= 1);
 });
 
 test('popular replies your repertoire does not answer are reported as gaps', async () => {

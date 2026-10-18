@@ -210,11 +210,10 @@ export async function renderPuzzles(root, { id, ids }) {
     const title = `Punishing ${plainLabel(p.beforeFen, p.mistake.uci)}`;
     const game = puzzleToPgn(p, { title });
     try {
-      const fresh = await getRep(rep.id, { fresh: true });
-      const updated = await api.update(rep.id, { pgn: `${fresh.pgn.trimEnd()}\n\n${game}` });
-      p.addedAt = new Date().toISOString();
-      await api.addPuzzles(rep.id, [p]);
-      putRep({ ...updated, puzzles: { ...(updated.puzzles || {}), [p.id]: p } });
+      // One request: the server appends the chapter and marks the puzzle in the same save.
+      const updated = await api.addPuzzleLine(rep.id, p.id, game);
+      p.addedAt = updated.puzzles[p.id].addedAt;
+      putRep(updated);
       rep.pgn = updated.pgn;
       btn.textContent = 'In your repertoire';
       toast(`Added the chapter “${title}”. It will show up in Learn.`);

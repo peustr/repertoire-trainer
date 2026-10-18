@@ -39,8 +39,9 @@ export function applySettings() {
   applyTheme();
 }
 
+/** Save only what changed: the server merges it, so another tab's changes are kept. */
 export async function saveSettings(patch) {
-  state.settings = await api.saveSettings({ ...state.settings, ...patch });
+  state.settings = await api.saveSettings(patch);
   applySettings();
   return state.settings;
 }

@@ -169,6 +169,7 @@ app.post('/api/repertoires/:id/puzzles', wrap((req) => {
   const out = store.addPuzzles(req.params.id, (req.body || {}).puzzles || []);
   return out ? out.rep : null;
 }));
+app.post('/api/repertoires/:id/puzzles/:pid/add-line', wrap((req) => store.addPuzzleLine(req.params.id, req.params.pid, (req.body || {}).pgn)));
 app.delete('/api/repertoires/:id/puzzles/:pid', wrap((req) => store.deletePuzzle(req.params.id, req.params.pid)));
 app.delete('/api/repertoires/:id/gaps', wrap((req) => store.deleteGap(req.params.id, String(req.query.key || ''))));
 
@@ -327,6 +328,7 @@ server.listen(PORT, HOST, () => {
   console.log('  Press Ctrl+C to stop.');
   console.log('');
   store.sweepTempFiles();
+  void lichess.pruneCache(store.getSettings().cacheDays);
   engines.warmUp();
   if (process.argv.includes('--open')) openBrowser(url);
 });

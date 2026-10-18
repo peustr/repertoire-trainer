@@ -25,6 +25,7 @@ const CLIENT_ID = 'repertoire-trainer-local';
 const CACHE_DIR = path.join(store.DATA_DIR, 'cache', 'explorer');
 const TOKEN_FILE = path.join(store.DATA_DIR, 'lichess.json');
 const CACHE_TTL = 30 * 24 * 3600 * 1000; // explorer stats move slowly
+const CACHE_MAX_FILES = 20000; // a few kB each
 // Lichess asks for a full minute after a 429. Tests shorten it with this variable.
 const RATE_LIMIT_PAUSE = Number(process.env.LICHESS_RATE_LIMIT_PAUSE_MS) || 61000;
 const SPEEDS = ['ultraBullet', 'bullet', 'blitz', 'rapid', 'classical', 'correspondence'];
@@ -168,6 +169,41 @@ function cachePut(url, data) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
     fs.writeFileSync(path.join(CACHE_DIR, `${key}.json`), JSON.stringify({ at: Date.now(), url, data }));
   } catch (err) { /* cache is best-effort */ }
+}
+
+/**
+ * Delete explorer answers saved more than maxAgeDays ago, damaged ones, and the oldest
+ * beyond maxFiles, so the cache cannot grow without end. Best-effort: never rejects.
+ * @param {number} maxAgeDays
+ * @param {{ maxFiles?: number }} [options]
+ * @returns {Promise<{ removed: number, kept: number }>}
+ */
+async function pruneCache(maxAgeDays, { maxFiles = CACHE_MAX_FILES } = {}) {
+  let names = [];
+  try { names = await fs.promises.readdir(CACHE_DIR); } catch (err) { /* no cache yet */ }
+  const cutoff = Date.now() - maxAgeDays * 24 * 3600 * 1000;
+  const keep = [];
+  let removed = 0;
+  const remove = async (name) => {
+    try {
+      await fs.promises.rm(path.join(CACHE_DIR, name), { force: true });
+      removed++;
+    } catch (err) { /* in use; try again next start */ }
+  };
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    let text;
+    try { text = await fs.promises.readFile(path.join(CACHE_DIR, name), 'utf8'); } catch (err) { continue; }
+    let at = NaN;
+    try { at = JSON.parse(text).at; } catch (err) { /* damaged */ }
+    if (Number.isFinite(at) && at >= cutoff) keep.push({ name, at });
+    else await remove(name);
+  }
+  if (keep.length > maxFiles) {
+    keep.sort((a, b) => b.at - a.at);
+    for (const { name } of keep.splice(maxFiles)) await remove(name);
+  }
+  return { removed, kept: keep.length };
 }
 
 /**
@@ -351,6 +387,7 @@ module.exports = {
   events,
   status,
   explorer,
+  pruneCache,
   account,
   connectWithToken,
   disconnect,

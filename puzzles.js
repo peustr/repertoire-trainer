@@ -260,6 +260,12 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
 
     const ev = await engines.evaluate({ fen: node.fen, moves: candidates.map((c) => c.uci), depth: opts.depth });
     stats.evaluations++;
+    // No score for the best move (the search was cut short): there is nothing to measure
+    // the replies against, and treating it as level would invent mistakes.
+    if (!ev.best || !ev.best.score) {
+      stats.skipped++;
+      continue;
+    }
     const bestForUs = cp(ev.best.score) * pov; // what the opponent's best move leaves us with
     // Did you prepare replies for the opponent here? Then a popular reply outside your lines is a gap.
     const prepared = inTree(node.fen) && (model.nodesByPosition.get(positionKey(node.fen)) || []).some((n) => n.children.some((ch) => ch.color !== side));
