@@ -1,7 +1,7 @@
 // Settings: the app's control panel. One section at a time, every option with
 // a plain explanation, its default, and a way back to it. Changes save as you go.
 
-import { h, add, clear, toast, confirmDialog } from '../ui.js';
+import { h, add, clear, toast, confirmDialog, action } from '../ui.js';
 import { state, saveSettings, loadLichess } from '../store.js';
 import { api } from '../api.js';
 
@@ -74,7 +74,7 @@ export async function renderSettings(root, { section: sectionParam }) {
       clear(body, h('section.settings-section',
         h('div.settings-section-head',
           h('h2.settings-title', current.title),
-          h('button.btn.small.ghost', { type: 'button', on: { click: () => resetSection(current) } }, 'Restore defaults')),
+          h('button.btn.small.ghost', { type: 'button', on: { click: action(() => resetSection(current)) } }, 'Restore defaults')),
         h('p.settings-intro', current.intro),
         current.id === 'engine' ? engineCard() : null,
         current.id === 'opponents' ? lichessCard() : null,

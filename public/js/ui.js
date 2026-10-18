@@ -152,6 +152,28 @@ export const sound = {
   done: () => tone([523, 659, 784], { dur: 0.16, gap: 0.09 }),
 };
 
+/**
+ * Wrap an event handler or callback that does async work: a clicked button is
+ * disabled while it runs, and a failure is shown to the user instead of vanishing.
+ * Read e.currentTarget before the first await; the browser clears it afterwards.
+ */
+export function action(fn) {
+  return async (...args) => {
+    const event = args[0];
+    const button = event instanceof Event && event.currentTarget instanceof HTMLButtonElement ? event.currentTarget : null;
+    if (button) button.disabled = true;
+    try {
+      return await fn(...args);
+    } catch (err) {
+      console.error(err);
+      toast(err && err.message ? err.message : String(err), 'bad');
+      return undefined;
+    } finally {
+      if (button) button.disabled = false;
+    }
+  };
+}
+
 // --- modal -------------------------------------------------------------------------
 
 export function modal(title, body, actions = []) {

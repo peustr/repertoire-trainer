@@ -160,6 +160,7 @@ samples/             Two sample repertoires
 test/run-tests.mjs   Parser, scheduler and puzzle checks (npm test)
 test/*.test.mjs      Storage, engine and server-security tests (npm test)
 test/smoke-server.mjs Boots the server and checks the API and engine (npm run test:smoke)
+test/e2e/            Playwright browser tests (npm run test:e2e)
 test/mock-lichess.js Offline stand-in for the Lichess API
 test/helpers/, test/fixtures/  Test server launcher, fake Stockfish
 ```

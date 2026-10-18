@@ -2,6 +2,7 @@
 // position you are learning.
 
 import { h, clear, sanLabel, fig, plural, sound, lineTail } from '../ui.js';
+import { refresh } from '../nav.js';
 import { state, loadLichess } from '../store.js';
 import { searchMistakes, onLichessNotice } from '../engine-client.js';
 import { formatGames, formatShare, describeRatings, describeSpeeds, describeReach } from '../puzzle-utils.js';
@@ -12,7 +13,7 @@ export async function openMistakeFinder({ rep, fen, prefix, where }) {
     if (search) search.stop();
     dlg.close();
     dlg.remove();
-    if (found.length || gapCount) dispatchEvent(new HashChangeEvent('hashchange'));
+    if (found.length || gapCount) refresh();
   };
   let search = null;
   const found = [];
