@@ -8,6 +8,11 @@
 // Explorer answers are made up but deterministic: the legal moves in a
 // position get fixed pseudo-random popularity, castling comes back as
 // king-takes-rook (e1h1) like the real explorer, and a token is required.
+//
+// Test controls (not part of the real API):
+//   MOCK_DELAY=ms                     answer explorer requests after this long
+//   GET  /__stats                     { explorerCalls, inFlight, maxInFlight, revoked }
+//   POST /__fail-next?status=429      the next explorer request answers with that status
 
 'use strict';
 
@@ -16,6 +21,9 @@ const crypto = require('crypto');
 const { Chess } = require('chess.js');
 
 const PORT = Number(process.env.MOCK_PORT) || 9099;
+const DELAY = Number(process.env.MOCK_DELAY) || 0;
+const stats = { explorerCalls: 0, inFlight: 0, maxInFlight: 0, revoked: 0 };
+let failNext = 0;
 const SHARES = [0.42, 0.21, 0.13, 0.09, 0.07, 0.05, 0.02, 0.01];
 
 // Popular book moves get a boost so the mock follows real openings for a while.
@@ -67,9 +75,28 @@ const server = http.createServer((req, res) => {
   const json = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
   console.log(req.method, url.pathname, auth ? '(auth)' : '');
 
+  if (url.pathname === '/__stats') return json(200, stats);
+  if (url.pathname === '/__fail-next' && req.method === 'POST') {
+    failNext = Number(url.searchParams.get('status')) || 500;
+    return json(200, { failNext });
+  }
   if (url.pathname === '/lichess' || url.pathname === '/masters') {
     if (!auth.startsWith('Bearer ')) return json(401, { error: 'Authorization required' });
-    try { return json(200, explorer(url.searchParams.get('fen'))); } catch (err) { return json(400, { error: 'Invalid fen' }); }
+    stats.explorerCalls++;
+    stats.inFlight++;
+    stats.maxInFlight = Math.max(stats.maxInFlight, stats.inFlight);
+    const answer = () => {
+      stats.inFlight--;
+      if (failNext) {
+        const status = failNext;
+        failNext = 0;
+        return json(status, { error: 'Mock failure' });
+      }
+      try { return json(200, explorer(url.searchParams.get('fen'))); } catch (err) { return json(400, { error: 'Invalid fen' }); }
+    };
+    if (DELAY) setTimeout(answer, DELAY);
+    else answer();
+    return undefined;
   }
   if (url.pathname === '/api/account') {
     if (!auth.startsWith('Bearer ')) return json(401, { error: 'No such token' });
@@ -94,7 +121,10 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/token' && req.method === 'POST') {
     return json(200, { token_type: 'Bearer', access_token: 'lio_mockOAuthToken123', expires_in: 31536000 }); // gitleaks:allow (fake token)
   }
-  if (url.pathname === '/api/token' && req.method === 'DELETE') return json(204, {});
+  if (url.pathname === '/api/token' && req.method === 'DELETE') {
+    stats.revoked++;
+    return json(204, {});
+  }
   json(404, { error: 'Not found' });
 });
 

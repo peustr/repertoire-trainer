@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-function freePort() {
+export function freePort() {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
     srv.once('error', reject);
