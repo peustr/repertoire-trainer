@@ -24,6 +24,8 @@ const CLIENT_ID = 'repertoire-trainer-local';
 const CACHE_DIR = path.join(store.DATA_DIR, 'cache', 'explorer');
 const TOKEN_FILE = path.join(store.DATA_DIR, 'lichess.json');
 const CACHE_TTL = 30 * 24 * 3600 * 1000; // explorer stats move slowly
+// Lichess asks for a full minute after a 429. Tests shorten it with this variable.
+const RATE_LIMIT_PAUSE = Number(process.env.LICHESS_RATE_LIMIT_PAUSE_MS) || 61000;
 const SPEEDS = ['ultraBullet', 'bullet', 'blitz', 'rapid', 'classical', 'correspondence'];
 const RATING_GROUPS = [0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500];
 
@@ -102,7 +104,7 @@ async function request(url, { auth = true, accept = 'application/json', method =
         throw new LichessError(`Could not reach Lichess (${err.cause ? err.cause.code || err.cause.message : err.message}). Check your internet connection.`, 502);
       }
       if (res.status === 429) {
-        pausedUntil = Date.now() + 61000;
+        pausedUntil = Date.now() + RATE_LIMIT_PAUSE;
         events.emit('ratelimit', pausedUntil);
         if (attempt < retries) continue;
         throw new LichessError('Lichess asked us to slow down. Try again in a minute.', 429);

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js --open",
     "serve": "node server.js",
-    "test": "node test/run-tests.mjs && node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs",
     "test:smoke": "node test/smoke-server.mjs",
     "test:e2e": "playwright test",
     "mock-lichess": "node test/mock-lichess.js"

@@ -1,6 +1,7 @@
-// Quick checks for the PGN parser, line builder and scheduler.
-// Run with:  npm test
+// The PGN parser, lines and cards, the scheduler, puzzle helpers and the settings schema.
+// Run with:  npm test  (or: node --test test/core.test.mjs)
 
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,17 +16,6 @@ const puzzles = require('../puzzles.js');
 const lichess = require('../lichess.js');
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-let passed = 0;
-function test(name, fn) {
-  try {
-    fn();
-    passed++;
-    console.log(`  ok  ${name}`);
-  } catch (err) {
-    console.error(`  FAIL ${name}\n       ${err.message}`);
-    process.exitCode = 1;
-  }
-}
 
 test('tokenizer handles numbers, NAGs, castling with zeros and results', () => {
   const t = tokenize('1.e4!? e5 2. Nf3 $1 Nc6 3... 0-0 {x} ; rest\n 1/2-1/2');
@@ -95,7 +85,6 @@ for (const file of ['italian-game-white.pgn', 'caro-kann-black.pgn']) {
     const model = buildRepertoire({ pgn, color });
     assert.deepEqual(model.errors, []);
     assert.ok(model.lines.length >= 4, `only ${model.lines.length} lines`);
-    console.log(`       ${model.chapters.length} chapters, ${model.lines.length} lines, ${model.cards.size} cards`);
   });
 }
 
@@ -195,15 +184,16 @@ test('settings schema: defaults, clamping and bad values', () => {
   assert.ok(schema.ENGINE_KEYS.includes('analysisHash'));
 });
 
-test('scheduler follows custom intervals and step-back size', () => {
+test('scheduler follows custom intervals and step-back size', (t) => {
   srs.setIntervals([1, 2, 3, 4, 5, 6, 7, 8]);
   srs.setStepback(3);
+  t.after(() => { // the scheduler's settings are module-wide: put the defaults back
+    srs.setIntervals([4, 24, 72, 168, 336, 720, 2160, 4320]);
+    srs.setStepback(2);
+  });
   const now = 0;
   const s = srs.promote({ level: 4, due: 0 }, now);
   assert.equal(s.due, 5 * 3600e3);
   assert.equal(srs.demote({ level: 6, due: 0 }, now, 'stepback').level, 3);
-  srs.setIntervals([4, 24, 72, 168, 336, 720, 2160, 4320]);
-  srs.setStepback(2);
 });
 
-console.log(`\n${passed} passed${process.exitCode ? ', some failed' : ''}`);

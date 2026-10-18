@@ -10,7 +10,7 @@ See `README.md` for the user-facing feature tour and a file-by-file project layo
 npm install            # or `npm ci` for a clean install from the lockfile
 npm start              # server on http://localhost:3210, opens the browser
 npm run serve          # same, without opening the browser
-npm test               # test/run-tests.mjs (parser, scheduler, puzzles, schema) + every test/*.test.mjs (node:test)
+npm test               # every test/*.test.mjs (node:test): parser, scheduler, store, engine, Lichess, mistake search, ...
 npm run test:smoke     # boots the real server on a free port with a temp data dir, hits the API and Stockfish
 npm run test:e2e       # Playwright browser tests in test/e2e (first time: npx playwright install chromium)
 npm run mock-lichess   # fake Lichess on :9099 (set LICHESS_URL and LICHESS_EXPLORER_URL to use it)

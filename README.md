@@ -157,8 +157,8 @@ public/
   js/views/          Library, repertoire, import, trainer, explore, spar, audit,
                      lichess, finder (search dialog), puzzles, settings
 samples/             Two sample repertoires
-test/run-tests.mjs   Parser, scheduler and puzzle checks (npm test)
-test/*.test.mjs      Storage, engine and server-security tests (npm test)
+test/*.test.mjs      Unit and integration tests: parser, scheduler, storage, engine,
+                     server security, Lichess client, mistake search (npm test)
 test/smoke-server.mjs Boots the server and checks the API and engine (npm run test:smoke)
 test/e2e/            Playwright browser tests (npm run test:e2e)
 test/mock-lichess.js Offline stand-in for the Lichess API
