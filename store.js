@@ -86,7 +86,7 @@ function recoverDamaged(file, fallback) {
 /** Remove temp files left by saves that were interrupted. */
 function sweepTempFiles() {
   for (const dir of [DATA_DIR, REP_DIR]) {
-    let names = [];
+    let names;
     try { names = fs.readdirSync(dir); } catch (err) { continue; }
     for (const name of names) {
       if (!/\.json\.\d+\.\d+\.tmp$/.test(name)) continue;

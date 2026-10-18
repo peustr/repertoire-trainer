@@ -186,7 +186,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     }
     const mineHere = n.children.filter((c) => c.color === side);
     const theirsHere = n.children.filter((c) => c.color !== side);
-    let sub = '';
+    let sub;
     if (!n.children.length) sub = 'End of the line.';
     else if (mineHere.length) sub = `Your move: ${mineHere.map((c) => fig(c.san)).join(' or ')}`;
     else sub = `Prepared for ${plural(theirsHere.length, 'reply', 'replies')}: ${theirsHere.map((c) => fig(c.san)).join(', ')}`;
