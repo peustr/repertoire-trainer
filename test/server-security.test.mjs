@@ -1,4 +1,3 @@
-// @ts-check
 // Other websites open in the same browser must not be able to use the local server:
 // not by DNS rebinding (a foreign Host header), not by cross-site requests, and not
 // by opening the engine WebSocket.

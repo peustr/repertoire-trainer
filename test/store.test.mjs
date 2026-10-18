@@ -1,4 +1,3 @@
-// @ts-check
 // Storage under stress: damaged files, files held open by other programs,
 // interrupted saves. Runs against a temp data folder, never ./data.
 

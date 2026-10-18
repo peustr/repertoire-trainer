@@ -1,4 +1,3 @@
-// @ts-check
 // Personalised puzzles: find the mistakes real opponents make against your
 // repertoire, and turn each one into a "punish it" puzzle.
 //

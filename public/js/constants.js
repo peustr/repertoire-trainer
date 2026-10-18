@@ -1,4 +1,3 @@
-// @ts-check
 // Chess and Lichess constants shared by the browser and the server. It imports
 // nothing, so it loads anywhere.
 

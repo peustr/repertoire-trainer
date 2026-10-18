@@ -1,4 +1,3 @@
-// @ts-check
 // Spar: play a position out against Stockfish at a chosen strength.
 // While the game is still inside your repertoire, the opponent can pick from
 // the replies you prepared for — so you also practise what happens after them.

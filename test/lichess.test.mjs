@@ -1,4 +1,3 @@
-// @ts-check
 // The Lichess client (lichess.js) against the mock Lichess: tokens, the explorer
 // and its cache, one request at a time, the 429 pause, studies and OAuth.
 // Tests run in order and share the client's state, like the app does.

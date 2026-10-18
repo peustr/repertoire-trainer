@@ -1,4 +1,3 @@
-// @ts-check
 // The PGN parser, lines and cards, the scheduler, puzzle helpers and the settings schema.
 // Run with:  npm test  (or: node --test test/core.test.mjs)
 

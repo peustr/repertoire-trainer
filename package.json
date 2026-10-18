@@ -8,10 +8,10 @@
   "scripts": {
     "start": "node server.js --open",
     "serve": "node server.js",
-    "test": "node --test test/*.test.mjs",
+    "test": "c8 node --test test/*.test.mjs",
     "test:smoke": "node test/smoke-server.mjs",
     "test:e2e": "playwright test",
-    "lint": "eslint .",
+    "lint": "eslint --max-warnings 0 .",
     "typecheck": "tsc -p tsconfig.json",
     "check": "npm run lint && npm run typecheck",
     "mock-lichess": "node test/mock-lichess.js"
@@ -33,6 +33,7 @@
     "@eslint/js": "9.39.5",
     "@playwright/test": "1.63.0",
     "@types/node": "22.20.5",
+    "c8": "12.0.0",
     "eslint": "10.12.0",
     "globals": "17.13.0",
     "typescript": "6.0.3",

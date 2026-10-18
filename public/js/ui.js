@@ -1,4 +1,3 @@
-// @ts-check
 // Small DOM and formatting helpers shared by every view.
 
 import { Chess } from 'chess.js';

@@ -1,4 +1,3 @@
-// @ts-check
 // Opponent-mistake puzzles: solving one and adding its line to the repertoire.
 
 import { test, expect, playMove } from './fixtures.mjs';

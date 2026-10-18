@@ -1,4 +1,3 @@
-// @ts-check
 // Progress saves that survive a server hiccup.
 //
 // Every save is queued in storage (localStorage in the browser, so it also survives

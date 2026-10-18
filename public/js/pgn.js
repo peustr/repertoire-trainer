@@ -1,4 +1,3 @@
-// @ts-check
 // PGN → move tree.
 //
 // Handles multi-game files (each game becomes a chapter), nested variations,

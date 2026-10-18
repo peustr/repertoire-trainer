@@ -18,7 +18,7 @@ test('an analysis the engine never answers ends with a message', async ({ page, 
   const rep = await app.seedSample('italian-game-white.pgn', 'Italian');
   await fakeEngineSocket(page, () => {}); // silence
   await app.open('#/');
-  await page.evaluate(() => import('/js/engine-client.js').then((m) => m.setRequestLimits({ request: 1000 })));
+  await page.evaluate((url) => import(url).then((m) => m.setRequestLimits({ request: 1000 })), '/js/engine-client.js');
   await page.evaluate((id) => { location.hash = `#/explore/${id}`; }, rep.id);
 
   await expect(page.locator('.engine-box')).toContainText('did not answer in time', { timeout: 10000 });

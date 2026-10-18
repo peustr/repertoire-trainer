@@ -1,4 +1,3 @@
-// @ts-check
 // Every setting the app understands: its default, allowed range and the help
 // text shown in the Settings panel. The server validates against this, and the
 // browser builds the Settings page from it. A field with `search` is also an option

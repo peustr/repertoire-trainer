@@ -1,4 +1,3 @@
-// @ts-check
 // Starts the real server for a test, on a free port with a throwaway data folder.
 // Never touches ./data or the network: TRAINER_DATA_DIR is a temp folder and the
 // Lichess URLs point at a closed local port.
@@ -38,20 +37,32 @@ export async function startServer({ env = {}, timeout = 30000 } = {}) {
       LICHESS_EXPLORER_URL: 'http://127.0.0.1:9',
       ...env,
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'], // closing the IPC channel asks it to stop
   });
   let output = '';
   proc.stdout.on('data', (d) => { output += d; });
   proc.stderr.on('data', (d) => { output += d; });
 
-  function stop() {
+  function kill() {
+    // The server spawns Stockfish; on Windows kill() would orphan it.
+    if (process.platform === 'win32') {
+      try { execFileSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' }); } catch (err) { /* already gone */ }
+    } else {
+      proc.kill('SIGKILL');
+    }
+  }
+
+  /**
+   * Shut the server down the way Ctrl+C does (it stops Stockfish first) and wait until it
+   * has exited, so nothing outlives the test and coverage tools see its run. Forced after 5 s.
+   */
+  async function stop() {
     if (proc.exitCode === null && proc.signalCode === null) {
-      // The server spawns Stockfish; on Windows kill() would orphan it.
-      if (process.platform === 'win32') {
-        try { execFileSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' }); } catch (err) { /* already gone */ }
-      } else {
-        proc.kill('SIGTERM');
-      }
+      const exited = new Promise((resolve) => proc.once('exit', resolve));
+      const force = setTimeout(kill, 5000);
+      if (proc.connected) proc.disconnect(); else kill();
+      await exited;
+      clearTimeout(force);
     }
     fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
@@ -63,7 +74,7 @@ export async function startServer({ env = {}, timeout = 30000 } = {}) {
       proc.once('exit', (code) => { clearTimeout(timer); reject(new Error(`Server exited with code ${code}`)); });
     });
   } catch (err) {
-    stop();
+    await stop();
     err.message += `\nServer output:\n${output}`;
     throw err;
   }

@@ -1,4 +1,3 @@
-// @ts-check
 // Chessboard: lichess's chessground for the UI, chess.js for the rules.
 
 import { Chessground } from '@lichess-org/chessground';

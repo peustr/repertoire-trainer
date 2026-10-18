@@ -1,4 +1,3 @@
-// @ts-check
 // Repertoire audit: ask Stockfish about every move you are expected to play.
 
 import { h, clear, sanLabel, toast } from '../ui.js';

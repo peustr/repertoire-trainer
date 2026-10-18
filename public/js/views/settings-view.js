@@ -5,6 +5,7 @@ import { h, add, clear, toast, confirmDialog, action } from '../ui.js';
 import { state, saveSettings, loadLichess } from '../store.js';
 import { api } from '../api.js';
 
+/** @type {Array<[string, number]>} */
 const UNIT_HOURS = [['months', 720], ['weeks', 168], ['days', 24], ['hours', 1]];
 
 export async function renderSettings(root, { section: sectionParam }) {
@@ -277,7 +278,7 @@ export async function renderSettings(root, { section: sectionParam }) {
   }
 
   function lichessCard() {
-    const lc = state.lichess || {};
+    const lc = state.lichess;
     return h('div.engine-card',
       lc.connected
         ? h('p', 'Connected to Lichess as ', h('b', lc.username), '. ', h('a', { href: '#/lichess' }, 'Account and studies'))

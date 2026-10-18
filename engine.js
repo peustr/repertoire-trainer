@@ -1,4 +1,3 @@
-// @ts-check
 // UCI engine bridge.
 //
 // Talks to Stockfish over the Universal Chess Interface (plain text over

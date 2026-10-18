@@ -1,4 +1,3 @@
-// @ts-check
 // Spaced repetition, MoveTrainer-style: eight levels with growing waits.
 // A correct answer on a due card moves it up one level; a mistake sends it
 // back down (to level 1 by default).

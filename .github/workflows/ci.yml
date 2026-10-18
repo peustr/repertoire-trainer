@@ -37,7 +37,7 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
 
-      - name: Unit tests
+      - name: Unit tests, with coverage thresholds (.c8rc.json)
         run: npm test
 
       - name: Server and engine smoke test
@@ -60,7 +60,7 @@ jobs:
       - name: ESLint
         run: npm run lint
 
-      - name: TypeScript (files with // @ts-check)
+      - name: TypeScript (every file)
         run: npm run typecheck
 
   e2e:

@@ -1,4 +1,3 @@
-// @ts-check
 // Lichess API client.
 //
 // - Opening explorer (explorer.lichess.org) — needs a token since 2025, no scopes.
@@ -56,6 +55,13 @@ let chain = Promise.resolve();
 let pausedUntil = 0;
 let pending = 0;
 
+/**
+ * What /api/lichess/status answers. Never the token.
+ * @typedef {{ connected: boolean, username: string | null, via: string | null,
+ *   ratingSuggestion: { speed: string, rating: number, groups: number[] } | null, pausedUntil: number | null, pending: number }} LichessStatus
+ */
+
+/** @returns {LichessStatus} */
 function status() {
   const auth = readAuth();
   return {
