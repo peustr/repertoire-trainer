@@ -286,10 +286,11 @@ table.lines tr.is-due td.when { color: var(--flame-ink); font-weight: 800; }
 .gaps { margin-top: 18px; }
 .gaps .puzzle-list li { grid-template-columns: 210px 150px minmax(0, 1fr) 160px auto; }
 .gap-actions { display: inline-flex; gap: 4px; }
+.gaps-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 /* ---- trainer / explore / spar / puzzles -------------------------------------------------- */
 
-.trainer, .explore, .spar { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 44px; align-items: start; max-width: 1320px; }
+.trainer, .explore, .spar, .surprise { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 44px; align-items: start; max-width: 1320px; }
 .board-col { width: min(100%, calc(100vh - 120px)); justify-self: center; }
 .panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .trainer-crumbs { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
@@ -407,6 +408,13 @@ table.lines tr.is-due td.when { color: var(--flame-ink); font-weight: 800; }
 .book-note { margin: 0; color: var(--muted); font-size: 14px; }
 .check { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .check input { width: 17px; height: 17px; accent-color: var(--flame); }
+.goal-box .verdict { margin-top: 8px; }
+.controls:empty { display: none; }
+.spar[data-goal] .mode-tag, .surprise .mode-tag { background: var(--flame-soft); color: var(--flame-ink); }
+.sheet-move.slip { color: var(--bad); text-decoration: underline wavy; text-underline-offset: 3px; }
+
+/* surprise drills */
+.surprise-facts { margin: 0; font-size: 14px; color: var(--muted); }
 
 /* puzzles */
 .puzzle-context { border-top: 1px solid var(--line-soft); padding-top: 12px; }
@@ -590,7 +598,7 @@ dialog.modal.finder { width: min(680px, calc(100vw - 32px)); overflow: auto; }
 }
 
 @media (max-width: 900px) {
-  .trainer, .explore, .spar { grid-template-columns: 1fr; gap: 24px; }
+  .trainer, .explore, .spar, .surprise { grid-template-columns: 1fr; gap: 24px; }
   .board-col { width: 100%; }
   .import-grid, .lc-layout { grid-template-columns: 1fr; }
   .preview { position: static; }

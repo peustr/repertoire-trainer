@@ -283,6 +283,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     clear(controls,
       next ? h('button.btn.primary', { type: 'button', on: { click: () => startLine(next, phaseFor()) }, 'data-key': 'Enter' }, 'Next line') : h('button.btn.primary', { type: 'button', on: { click: showSessionDone }, 'data-key': 'Enter' }, 'Finish session'),
       h('button.btn', { type: 'button', on: { click: () => startLine(line, 'practice') } }, 'Retry line'),
+      h('a.btn', { href: sparLink(run.fen, { goal: 'hold' }), title: `Play ${settings.playOutMoves} more moves and try to keep the position` }, 'Play it out'),
       h('a.btn.ghost', { href: sparLink(run.fen) }, 'Spar from here'),
       finderButton(),
       h('a.btn.ghost', { href: `#/explore/${rep.id}?line=${line.id}` }, 'Explore'));
@@ -487,9 +488,9 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     }, 'Opponent mistakes');
   }
 
-  function sparLink(fen) {
+  function sparLink(fen, { goal = null } = {}) {
     const back = encodeURIComponent(`#/rep/${rep.id}`);
-    return `#/spar?fen=${encodeURIComponent(fen)}&color=${rep.color}&rep=${rep.id}&back=${back}`;
+    return `#/spar?fen=${encodeURIComponent(fen)}&color=${rep.color}&rep=${rep.id}&back=${back}${goal ? `&goal=${goal}` : ''}`;
   }
 
   // ---- keyboard ------------------------------------------------------------------------

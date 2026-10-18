@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildRepertoire } from '../public/js/repertoire.js';
-import { passPlan, resultForCorrectMove, resultAfterHint, firstResult, judgeWrongMove, gradePass, gradeCard } from '../public/js/session.js';
+import { passPlan, resultForCorrectMove, resultAfterHint, firstResult, judgeWrongMove, gradePass, gradeCard, gradeSurprise, surprisePassed, gradePlayout, biggestSlip } from '../public/js/session.js';
 import { buildSchema } from '../settings-schema.js';
 
 const HOUR = 3600e3;
@@ -169,4 +169,55 @@ test("the memory schedule comes from the settings passed in, not from what a pag
   assert.equal(g.updates[k2].level, 4);
 
   assert.equal(gradeCard(undefined, true, {}, NOW).due, NOW + 4 * HOUR, 'without the settings, the default schedule');
+});
+
+test('grading an answer to a surprise by what it gives away', () => {
+  /** @type {Array<[{ loss: number, isBest?: boolean }, { surpriseTolerance?: number }, string]>} */
+  const cases = [
+    [{ loss: 0, isBest: true }, {}, 'best'],
+    [{ loss: 25, isBest: true }, {}, 'best'], // Stockfish's own move, whatever the noise between searches
+    [{ loss: 10 }, {}, 'best'],
+    [{ loss: 11 }, {}, 'good'],
+    [{ loss: 50 }, {}, 'good'],
+    [{ loss: 51 }, {}, 'inaccuracy'],
+    [{ loss: 150 }, {}, 'inaccuracy'],
+    [{ loss: 151 }, {}, 'mistake'],
+    [{ loss: 90 }, { surpriseTolerance: 100 }, 'good'],
+    [{ loss: 190 }, { surpriseTolerance: 100 }, 'inaccuracy'],
+    [{ loss: 201 }, { surpriseTolerance: 100 }, 'mistake'],
+  ];
+  for (const [answer, settings, grade] of cases) assert.equal(gradeSurprise(answer, settings), grade, JSON.stringify([answer, settings]));
+  assert.deepEqual(['best', 'good', 'inaccuracy', 'mistake'].map(surprisePassed), [true, true, false, false]);
+});
+
+test('a play-out passes if the position holds', () => {
+  /** @type {Array<[{ startCp: number, endCp: number, result?: 'win' | 'loss' | 'draw' | null }, { playOutTolerance?: number }, boolean, string]>} */
+  const cases = [
+    [{ startCp: 80, endCp: 60 }, {}, true, 'held'],
+    [{ startCp: 80, endCp: 10 }, {}, true, 'held'], // exactly the tolerance
+    [{ startCp: 80, endCp: 9 }, {}, false, 'slipped'],
+    [{ startCp: 80, endCp: 200 }, {}, true, 'improved'],
+    [{ startCp: -40, endCp: -100 }, {}, true, 'held'], // a worse position kept about as it was
+    [{ startCp: 900, endCp: 500 }, {}, true, 'held'], // still clearly winning
+    [{ startCp: 900, endCp: 250 }, {}, false, 'slipped'],
+    [{ startCp: 80, endCp: -30 }, { playOutTolerance: 120 }, true, 'held'],
+    [{ startCp: 80, endCp: 10000, result: 'win' }, {}, true, 'won'],
+    [{ startCp: 80, endCp: -10000, result: 'loss' }, {}, false, 'lost'],
+    [{ startCp: 50, endCp: 0, result: 'draw' }, {}, true, 'drawn'],
+    [{ startCp: 250, endCp: 0, result: 'draw' }, {}, false, 'drawn'],
+  ];
+  for (const [playout, settings, pass, verdict] of cases) {
+    const graded = gradePlayout(playout, settings);
+    assert.equal(graded.pass, pass, JSON.stringify(playout));
+    assert.equal(graded.verdict, verdict, JSON.stringify(playout));
+  }
+  assert.equal(gradePlayout({ startCp: 80, endCp: 9 }).drop, 71);
+  assert.equal(gradePlayout({ startCp: 80, endCp: -10000, result: 'loss' }).drop, 10080);
+});
+
+test('the biggest slip is the move that gave away the most', () => {
+  const moves = [{ san: 'e4', loss: 0 }, { san: 'Bc4', loss: 120 }, { san: 'h3' }, { san: 'Qh5', loss: 300 }, { san: 'd3', loss: 40 }];
+  assert.equal(biggestSlip(moves).san, 'Qh5');
+  assert.equal(biggestSlip(moves, 400), null, 'nothing that bad');
+  assert.equal(biggestSlip([{ san: 'd3', loss: 40 }, { san: 'h3' }]), null, 'small losses and unchecked moves are not slips');
 });

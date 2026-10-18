@@ -41,6 +41,16 @@ test('a damaged settings file is set aside and the previous version restored', (
   assert.equal(readFile(SETTINGS).reviewBatch, 77, 'an unrelated save keeps the restored values');
 });
 
+test('settings saved by an older trainer are read in today’s terms and saved that way', () => {
+  fs.writeFileSync(SETTINGS, JSON.stringify({ reviewBatch: 33, sparFollowBook: false }));
+  assert.equal(store.getSettings().sparOpponent, 'engine');
+  store.saveSettings({ theme: 'dark' });
+  const saved = readFile(SETTINGS);
+  assert.equal(saved.sparOpponent, 'engine');
+  assert.equal(saved.reviewBatch, 33);
+  assert.equal('sparFollowBook' in saved, false);
+});
+
 test('without a backup, a damaged settings file is kept rather than overwritten', (t) => {
   t.mock.method(console, 'warn', () => {});
   fs.rmSync(`${SETTINGS}.bak`);

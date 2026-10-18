@@ -203,6 +203,19 @@ test('settings schema: defaults, clamping and bad values', () => {
   assert.ok(schema.ENGINE_KEYS.includes('analysisHash'));
 });
 
+test('settings from before the sparring opponent choice keep their meaning', () => {
+  const upgraded = (saved) => schema.validate(schema.defaults(), schema.upgrade(saved)).sparOpponent;
+  assert.equal(upgraded({ sparFollowBook: false }), 'engine', 'it never followed the book: Stockfish from the first move');
+  assert.equal(upgraded({ sparFollowBook: true }), 'lichess', 'it did: the new default');
+  assert.equal(upgraded({ sparFollowBook: false, sparOpponent: 'book' }), 'book', 'a choice already made wins');
+  assert.equal(upgraded({}), 'lichess');
+  assert.equal(schema.upgrade(null), null);
+  assert.equal(schema.validate(schema.defaults(), { sparFollowBook: false }).sparFollowBook, undefined, 'the old setting is gone');
+  const sparring = schema.buildSchema().find((s) => s.id === 'sparring');
+  assert.deepEqual(sparring.fields.map((f) => f.key), ['sparOpponent', 'sparElo', 'sparMoveTime', 'playOutMoves', 'playOutTolerance', 'surpriseBatch', 'surpriseMinShare', 'surpriseTolerance']);
+  assert.ok(!sparring.fields.some((f) => f.restart), 'changing them does not restart Stockfish');
+});
+
 test('scheduler follows custom intervals and step-back size', () => {
   const sched = { intervals: [1, 2, 3, 4, 5, 6, 7, 8], stepbackLevels: 3 };
   const now = 0;

@@ -78,7 +78,7 @@ export async function renderSettings(root, { section: sectionParam }) {
           h('button.btn.small.ghost', { type: 'button', on: { click: action(() => resetSection(current)) } }, 'Restore defaults')),
         h('p.settings-intro', current.intro),
         current.id === 'engine' ? engineCard() : null,
-        current.id === 'opponents' ? lichessCard() : null,
+        current.id === 'opponents' || current.id === 'sparring' ? lichessCard() : null,
         withGroups(current.fields)));
     }
     refreshDefaults();
@@ -282,7 +282,7 @@ export async function renderSettings(root, { section: sectionParam }) {
     return h('div.engine-card',
       lc.connected
         ? h('p', 'Connected to Lichess as ', h('b', lc.username), '. ', h('a', { href: '#/lichess' }, 'Account and studies'))
-        : h('p', 'Not connected yet. The explorer and the mistake finder need a Lichess sign-in. ', h('a', { href: '#/lichess' }, 'Connect Lichess')));
+        : h('p', 'Not connected yet. The explorer, the mistake finder and the Lichess-players opponent need a Lichess sign-in. ', h('a', { href: '#/lichess' }, 'Connect Lichess')));
   }
 
   search.addEventListener('input', render);

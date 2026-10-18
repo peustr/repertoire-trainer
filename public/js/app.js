@@ -10,6 +10,7 @@ import { renderImport } from './views/import-view.js';
 import { renderTrainer } from './views/trainer.js';
 import { renderExplore } from './views/explore.js';
 import { renderSpar } from './views/spar.js';
+import { renderSurprise } from './views/surprise.js';
 import { renderPuzzles } from './views/puzzles-view.js';
 import { renderLichess } from './views/lichess-view.js';
 import { renderSettings } from './views/settings-view.js';
@@ -29,7 +30,8 @@ const routes = [
   [/^#\/puzzles\/([\w-]+)$/, (m, q, root) => renderPuzzles(root, { id: m[1], ids: q.get('ids') })],
   [/^#\/settings(?:\/(\w+))?$/, (m, q, root) => renderSettings(root, { section: m[1] })],
   [/^#\/lichess$/, (m, q, root) => renderLichess(root, { connected: q.get('connected'), error: q.get('error') })],
-  [/^#\/spar$/, (m, q, root) => renderSpar(root, { fen: q.get('fen'), color: q.get('color'), id: q.get('rep'), back: q.get('back') })],
+  [/^#\/spar$/, (m, q, root) => renderSpar(root, { fen: q.get('fen'), color: q.get('color'), id: q.get('rep'), back: q.get('back'), goal: q.get('goal') })],
+  [/^#\/surprise\/([\w-]+)$/, (m, q, root) => renderSurprise(root, { id: m[1] })],
 ];
 
 function runCleanup(fn) {
