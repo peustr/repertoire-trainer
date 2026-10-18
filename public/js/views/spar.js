@@ -223,6 +223,8 @@ export async function renderSpar(root, { fen, color, id, back }) {
       if (!top || fenNow() !== fen) return;
       evalBar.update(evalBarShare(top.score), formatScore(top.score), me === 'black');
       evalText.textContent = `${formatScore(top.score)} at depth ${top.depth}: ${formatSanLine(uciLineToSan(fen, top.pv, 6))}`;
+    }, (err) => {
+      if (fenNow() === fen) evalText.textContent = err.message;
     });
   }
 

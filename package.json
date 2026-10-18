@@ -13,7 +13,7 @@
     "mock-lichess": "node test/mock-lichess.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "dependencies": {
     "@fontsource/nunito": "^5.3.0",

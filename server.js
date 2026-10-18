@@ -4,6 +4,8 @@
 
 'use strict';
 
+require('./check-node'); // first: a friendly message on a too-old Node.js
+
 const express = require('express');
 const http = require('http');
 const path = require('path');

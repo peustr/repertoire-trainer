@@ -6,7 +6,7 @@
 //           moves you already know play themselves.
 // Practise: every move, no effect on the schedule.
 
-import { h, clear, sound, toast, fig, sanLabel, uciLineToSan, formatSanLine, plural } from '../ui.js';
+import { h, clear, sound, fig, sanLabel, uciLineToSan, formatSanLine, plural } from '../ui.js';
 import { refresh } from '../nav.js';
 import { state, getRep, modelFor, saveCards } from '../store.js';
 import { cardKey } from '../repertoire.js';
@@ -303,8 +303,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     tally.wrong += wrong;
     done.add(line.id);
     if (Object.keys(updates).length || mode !== 'practice') {
-      saveCards(rep.id, updates, mode === 'practice' ? null : { correct: right, wrong, lines: 1 })
-        .catch((err) => toast(`Could not save progress: ${err.message}`, 'bad'));
+      saveCards(rep.id, updates, mode === 'practice' ? null : { correct: right, wrong, lines: 1 });
     }
     if (!wrong) sound.done();
     renderDots();
@@ -354,6 +353,8 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       const verdict = cp > 150 ? 'you are clearly better' : cp > 50 ? 'you have a pull' : cp > -50 ? 'roughly level' : cp > -150 ? 'you are a little worse' : 'you are worse';
       clear(finalEval, `Final position: ${formatScore(top.score)} at depth ${top.depth} — ${verdict}. Best: ${formatSanLine(uciLineToSan(run.fen, top.pv, 6))}`);
       if (final) finalEval.classList.remove('muted');
+    }, () => {
+      finalEval.textContent = 'Stockfish is not available right now.';
     });
   }
 

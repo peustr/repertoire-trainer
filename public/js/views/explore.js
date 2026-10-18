@@ -342,6 +342,8 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
       engineRun = analyse(fen, { multipv: state.settings.analysisLines, depth: state.settings.analysisDepth }, (msg) => {
         if (currentFen() !== fen) return;
         renderEngine(fen, msg);
+      }, (err) => {
+        if (currentFen() === fen) clear(engineBox, h('p.bad', err.message));
       });
     }, 150);
   }

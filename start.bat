@@ -13,6 +13,12 @@ if errorlevel 1 (
   exit /b 1
 )
 
+node check-node.js
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
+
 if not exist "node_modules\" (
   echo.
   echo   First run: installing dependencies. This takes a minute.

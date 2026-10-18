@@ -72,6 +72,15 @@ export async function playMove(page, uci, orientation = 'white') {
   await page.mouse.click(to.x, to.y);
 }
 
+/** In the trainer, play your moves of a line (UCI), waiting for each prompt. */
+export async function playLine(page, moves, orientation = 'white') {
+  for (let i = 0; i < moves.length; i++) {
+    await expect(page.locator('.move-dots li.current')).toHaveCount(1);
+    await playMove(page, moves[i], orientation);
+    await expect(page.locator('.move-dots li.right')).toHaveCount(i + 1);
+  }
+}
+
 /** Count document-level keydown handlers that are still attached (views add and remove these). */
 export async function trackKeyHandlers(page) {
   await page.addInitScript(() => {

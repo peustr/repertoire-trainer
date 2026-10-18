@@ -1,7 +1,7 @@
 // App shell: header and routing.
 
 import { h, clear, toast } from './ui.js';
-import { loadSettings } from './store.js';
+import { loadSettings, flushProgress } from './store.js';
 import { setRenderer } from './nav.js';
 import { onEngineStatus, engineReady } from './engine-client.js';
 import { renderLibrary } from './views/library.js';
@@ -118,6 +118,7 @@ async function boot() {
     clear(main, h('div.page', h('div.empty', h('h1.page-title', 'The local server is not responding'), h('p', 'Start it with start.bat (or "npm start") and reload this page.'))));
     return;
   }
+  await flushProgress(); // answers saved while the server was away, before any page loads its data
   engineReady();
   window.addEventListener('hashchange', route);
   route();
