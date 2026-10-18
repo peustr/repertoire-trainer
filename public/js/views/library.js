@@ -1,6 +1,6 @@
 // Library: a one-move warm-up card, then every repertoire with its memory state.
 
-import { h, clear, levelBar, plural, toast, sound, fig, sanLabel } from '../ui.js';
+import { h, clear, levelBar, plural, toast, sound, fig, sanLabel, action } from '../ui.js';
 import { state, loadReps, modelFor, saveCards } from '../store.js';
 import { repertoireStats, describeWait, isDue, promote, demote } from '../srs.js';
 import { createBoard, isPromotion, choosePromotion, applyUci } from '../board.js';
@@ -84,7 +84,7 @@ async function emptyLibrary() {
       h('p.lede', 'Paste a PGN of the lines you want to play. The trainer turns every move you need to remember into a quiz and brings it back just before you would forget it. Stockfish checks your moves along the way.'),
       h('div.welcome-actions',
         h('a.btn.primary', { href: '#/import' }, 'Add your first repertoire'),
-        samples.map((s) => h('button.btn', { type: 'button', on: { click: () => add(s) } }, `Try ${s.name}`)))),
+        samples.map((s) => h('button.btn', { type: 'button', on: { click: action(() => add(s)) } }, `Try ${s.name}`)))),
     h('div', boardHost, h('p.welcome-caption', 'After 3.Bc4 the bishop already eyes f7. Lines like this become quizzes.')));
   // Board must be in the DOM before chessground measures it.
   let board = null;
@@ -126,7 +126,7 @@ function renderQuickCard(container, entries) {
   const nextBtn = h('button.btn.ghost.small', { type: 'button' }, 'Another position');
   container.append(boardHost, h('div.quick-side', caption, feedback, nextBtn));
 
-  const board = createBoard(boardHost, { orientation: 'white', onMove });
+  const board = createBoard(boardHost, { orientation: 'white', onMove: action(onMove) });
   let current = null;
   let answered = false;
 

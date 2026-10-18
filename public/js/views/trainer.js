@@ -7,6 +7,7 @@
 // Practise: every move, no effect on the schedule.
 
 import { h, clear, sound, toast, fig, sanLabel, uciLineToSan, formatSanLine, plural } from '../ui.js';
+import { refresh } from '../nav.js';
 import { state, getRep, modelFor, saveCards } from '../store.js';
 import { cardKey } from '../repertoire.js';
 import { positionKey, nagGlyphs, moveNumber } from '../pgn.js';
@@ -323,7 +324,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       h('button.btn', { type: 'button', on: { click: () => startLine(line, 'practice') } }, 'Retry line'),
       h('a.btn.ghost', { href: sparLink(run.fen) }, 'Spar from here'),
       finderButton(),
-      h('a.btn.ghost', { href: `#/explore/${rep.id}?node=${line.nodes[line.nodes.length - 1].id}` }, 'Explore'));
+      h('a.btn.ghost', { href: `#/explore/${rep.id}?line=${line.id}` }, 'Explore'));
     controls.firstChild.focus();
     if (next && settings.autoNext > 0) {
       // Count down to the next line; any click on the board or panel stops it.
@@ -369,7 +370,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       : mode === 'review' ? 'Nothing is due right now.' : mode === 'learn' ? 'No new lines left to learn.' : 'No lines to practise yet — learn some first.');
     clear(feedback);
     clear(controls,
-      mode === 'review' && st ? h('a.btn.primary', { href: `#/train/${rep.id}/review`, on: { click: () => setTimeout(() => dispatchEvent(new HashChangeEvent('hashchange')), 0) } }, `Review ${st} more`) : null,
+      mode === 'review' && st ? h('a.btn.primary', { href: `#/train/${rep.id}/review`, on: { click: (e) => { if (location.hash === e.currentTarget.getAttribute('href')) { e.preventDefault(); refresh(); } } } }, `Review ${st} more`) : null,
       h('a.btn', { href: `#/rep/${rep.id}` }, 'Back to repertoire'),
       h('a.btn.ghost', { href: '#/' }, 'Library'));
   }

@@ -1,7 +1,7 @@
 // Personalised puzzles: punish the mistakes real opponents make in your lines.
 // Each puzzle is a spaced-repetition card like any move in your repertoire.
 
-import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, confirmDialog } from '../ui.js';
+import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, confirmDialog, action } from '../ui.js';
 import { state, getRep, putRep, saveCards } from '../store.js';
 import { learned, promote, demote, describeWait, isDue } from '../srs.js';
 import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci } from '../board.js';
@@ -198,7 +198,7 @@ export async function renderPuzzles(root, { id, ids }) {
       h('button.btn', { type: 'button', disabled: added, on: { click: (e) => addToRepertoire(p, e.currentTarget) } }, added ? 'In your repertoire' : 'Add line to repertoire'),
       h('a.btn.ghost', { href: `#/explore/${rep.id}?moves=${encodeURIComponent([...p.lineMoves, ...p.solution].join(','))}` }, 'Explore'),
       h('a.btn.ghost', { href: `#/spar?fen=${encodeURIComponent(cur.fen)}&color=${rep.color}&rep=${rep.id}&back=${encodeURIComponent(location.hash)}` }, 'Spar from here'),
-      h('button.btn.ghost.danger', { type: 'button', on: { click: () => removePuzzle(p) } }, 'Remove'));
+      h('button.btn.ghost.danger', { type: 'button', on: { click: action(() => removePuzzle(p)) } }, 'Remove'));
     controls.firstChild.focus();
 
     evalBar.hide(false);

@@ -1,7 +1,8 @@
 // Lichess: connect an account, pick who your opponents are, tune the mistake
 // search, and import studies.
 
-import { h, add, clear, toast } from '../ui.js';
+import { h, add, clear, toast, action } from '../ui.js';
+import { refresh } from '../nav.js';
 import { state, loadLichess, saveSettings, putRep } from '../store.js';
 import { api } from '../api.js';
 import { describeRatings, describeSpeeds } from '../puzzle-utils.js';
@@ -25,12 +26,12 @@ export async function renderLichess(root, { connected, error }) {
       h('h2.section-title', 'Account'),
       h('p', 'Connected as ', h('b', lc.username), lc.via === 'oauth' ? ' (signed in with Lichess).' : ' (personal token).'),
       sug && sug.groups.length ? h('p.muted', `Your ${sug.speed} rating is ${sug.rating}. `,
-        h('button.linklike.inline', { type: 'button', on: { click: async () => { await saveSettings({ lichessRatings: sug.groups.join(',') }); toast(`Opponents set to ${describeRatings(sug.groups)}`); dispatchEvent(new HashChangeEvent('hashchange')); } } },
+        h('button.linklike.inline', { type: 'button', on: { click: action(async () => { await saveSettings({ lichessRatings: sug.groups.join(',') }); toast(`Opponents set to ${describeRatings(sug.groups)}`); refresh(); }) } },
           `Use opponents rated ${describeRatings(sug.groups)}`)) : null,
       h('div.tools-row',
         h('button.btn.ghost', {
           type: 'button',
-          on: { click: async () => { await api.lichess.disconnect(); toast('Disconnected from Lichess'); location.hash = '#/lichess'; dispatchEvent(new HashChangeEvent('hashchange')); } },
+          on: { click: action(async () => { await api.lichess.disconnect(); toast('Disconnected from Lichess'); if (location.hash === '#/lichess') refresh(); else location.hash = '#/lichess'; }) },
         }, 'Disconnect')));
   } else {
     const tokenInput = h('input', { type: 'password', placeholder: 'lip_…', autocomplete: 'off', 'aria-label': 'Personal access token' });
@@ -48,7 +49,7 @@ export async function renderLichess(root, { connected, error }) {
               try {
                 const st = await api.lichess.connect(tokenInput.value);
                 toast(`Connected as ${st.username}`);
-                dispatchEvent(new HashChangeEvent('hashchange'));
+                refresh();
               } catch (err) { toast(err.message, 'bad'); }
             },
           },

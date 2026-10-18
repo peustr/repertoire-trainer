@@ -1,9 +1,11 @@
 // One repertoire: memory state, chapters and lines, PGN tools and the Stockfish audit.
 
-import { h, add, clear, levelBar, plural, toast, confirmDialog, downloadText, useFigurines } from '../ui.js';
+import { h, add, clear, levelBar, plural, toast, confirmDialog, downloadText, useFigurines, action } from '../ui.js';
 import { state, getRep, modelFor, putRep, dropRep } from '../store.js';
+import { refresh } from '../nav.js';
 import { repertoireStats, lineStatus, describeWait, MAX_LEVEL } from '../srs.js';
 import { formatSequence } from '../pgn.js';
+import { movesTo } from '../repertoire.js';
 import { api } from '../api.js';
 import { runAudit } from './audit.js';
 import { openMistakeFinder } from './finder.js';
@@ -156,7 +158,18 @@ function opponentsPanel(rep, model, pz) {
         h('span.pz-status', g.reach ? describeReach(g.reach).replace(/ from here$/, '') : ''),
         h('span.gap-actions',
           h('a.btn.small.ghost', { href: `#/explore/${rep.id}?moves=${encodeURIComponent(g.lineMoves.join(','))}` }, 'Explore'),
-          h('button.btn.small.ghost', { type: 'button', title: 'Dismiss', 'aria-label': 'Dismiss', on: { click: async (e) => { await api.deleteGap(rep.id, g.key); e.currentTarget.closest('li').remove(); } } }, '×')))))) : null);
+          h('button.btn.small.ghost', {
+            type: 'button',
+            title: 'Dismiss',
+            'aria-label': 'Dismiss',
+            on: {
+              click: action(async (e) => {
+                const row = e.currentTarget.closest('li');
+                await api.deleteGap(rep.id, g.key);
+                row.remove();
+              }),
+            },
+          }, '×')))))) : null);
 }
 
 function strengthPips(level, isNew) {
@@ -173,24 +186,24 @@ function toolsPanel(rep) {
       h('button.btn.ghost', {
         type: 'button',
         on: {
-          click: async () => {
+          click: action(async () => {
             if (!(await confirmDialog('Reset progress?', 'Every move goes back to new. The PGN stays as it is.', 'Reset progress', true))) return;
             putRep(await api.resetProgress(rep.id));
             toast('Progress reset');
-            dispatchEvent(new HashChangeEvent('hashchange'));
-          },
+            refresh();
+          }),
         },
       }, 'Reset progress'),
       h('button.btn.ghost.danger', {
         type: 'button',
         on: {
-          click: async () => {
+          click: action(async () => {
             if (!(await confirmDialog('Delete this repertoire?', `${rep.name} and its review history will be removed from the data folder.`, 'Delete', true))) return;
             await api.remove(rep.id);
             dropRep(rep.id);
             toast('Repertoire deleted');
             location.hash = '#/';
-          },
+          }),
         },
       }, 'Delete')));
 }
@@ -199,7 +212,7 @@ function toolsPanel(rep) {
 
 function renderAuditSummary(box, rep, model) {
   const audit = rep.audit;
-  const start = () => runAudit(box, rep, model, () => dispatchEvent(new HashChangeEvent('hashchange')));
+  const start = action(() => runAudit(box, rep, model, refresh));
   if (!audit) {
     clear(box,
       h('div.audit-head',
@@ -224,6 +237,6 @@ function renderAuditSummary(box, rep, model) {
         h('span.audit-move', f.label),
         h('span.audit-loss', `−${(f.loss / 100).toFixed(2)}`),
         h('span.audit-alt', `Stockfish prefers ${f.bestLabel}`),
-        card ? h('a.btn.small.ghost', { href: `#/explore/${rep.id}?node=${card.node.id}` }, 'Show') : h('span.muted', 'no longer in the PGN'));
+        card ? h('a.btn.small.ghost', { href: `#/explore/${rep.id}?moves=${encodeURIComponent(movesTo(card.node).join(','))}` }, 'Show') : h('span.muted', 'no longer in the PGN'));
     })) : null);
 }

@@ -92,6 +92,16 @@ export function lineIsMine(model, node) {
   return node.color === model.side;
 }
 
+/**
+ * The moves (UCI) from the chapter start to this node. Link to a node with these
+ * (#/explore/<id>?moves=...), not with node.id: ids depend on what else was parsed.
+ */
+export function movesTo(node) {
+  const moves = [];
+  for (let n = node; n && n.uci; n = n.parent) moves.unshift(n.uci);
+  return moves;
+}
+
 /** Find the node for a position + move inside any chapter (used by Explore and the audit). */
 export function findNode(model, fen, uci) {
   const nodes = model.nodesByPosition.get(positionKey(fen)) || [];

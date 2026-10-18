@@ -24,6 +24,9 @@ engine/*
 npm-debug.log*
 *.tmp
 coverage/
+test-results/
+playwright-report/
+blob-report/
 
 # --- Release archives -----------------------------------------------------------
 *.zip

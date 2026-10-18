@@ -2,7 +2,7 @@
 
 import { h, clear, fig, uciLineToSan, formatSanLine, plural } from '../ui.js';
 import { state, getRep, modelFor, loadLichess } from '../store.js';
-import { cardKey } from '../repertoire.js';
+import { cardKey, movesTo } from '../repertoire.js';
 import { nagGlyphs, moveNumber, positionKey } from '../pgn.js';
 import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci, sanToUci } from '../board.js';
 import { analyse, formatScore, evalBarShare } from '../engine-client.js';
@@ -10,7 +10,7 @@ import { api } from '../api.js';
 import { formatGames, formatShare, describeRatings, describeSpeeds } from '../puzzle-utils.js';
 import { openMistakeFinder } from './finder.js';
 
-export async function renderExplore(root, { id, node: nodeParam, line: lineParam, moves: movesParam }) {
+export async function renderExplore(root, { id, line: lineParam, moves: movesParam }) {
   const rep = await getRep(id, { fresh: true });
   const model = modelFor(rep);
   await loadLichess();
@@ -26,9 +26,6 @@ export async function renderExplore(root, { id, node: nodeParam, line: lineParam
   if (lineParam) {
     const line = model.lines.find((l) => l.id === lineParam);
     if (line) { chapter = line.chapter; pos = { node: line.nodes[line.nodes.length - 1], off: [] }; }
-  } else if (nodeParam) {
-    const found = findById(model, +nodeParam);
-    if (found) { chapter = found.chapter; pos = { node: found.node, off: [] }; }
   } else if (movesParam && chapter) {
     // Follow a move list through whichever chapter matches it furthest, then continue off-book.
     const ucis = movesParam.split(',').filter(Boolean);
@@ -219,9 +216,7 @@ export async function renderExplore(root, { id, node: nodeParam, line: lineParam
   }
 
   function findMistakes() {
-    const path = [];
-    for (let n = pos.node; n && n.uci; n = n.parent) path.unshift(n.uci);
-    const moves = [...path, ...pos.off.map((m) => m.uci)];
+    const moves = [...movesTo(pos.node), ...pos.off.map((m) => m.uci)];
     const sans = uciLineToSan(chapter.root.fen, moves, 80);
     openMistakeFinder({
       rep,
@@ -384,16 +379,4 @@ export async function renderExplore(root, { id, node: nodeParam, line: lineParam
     document.removeEventListener('keydown', onKey);
     board.destroy();
   };
-}
-
-function findById(model, id) {
-  for (const chapter of model.chapters) {
-    const stack = [chapter.root];
-    while (stack.length) {
-      const n = stack.pop();
-      if (n.id === id) return { chapter, node: n };
-      stack.push(...n.children);
-    }
-  }
-  return null;
 }
