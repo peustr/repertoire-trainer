@@ -122,11 +122,13 @@ export function parseComment(raw) {
 
 // --- tree building ---------------------------------------------------------------
 
-let nodeSeq = 0;
-
-function makeNode(fields) {
+/**
+ * @param {() => number} nextId numbers the nodes of one parse (see parsePgn)
+ * @param {object} fields
+ */
+function makeNode(nextId, fields) {
   return {
-    id: ++nodeSeq,
+    id: nextId(),
     san: null,
     uci: null,
     fen: null,
@@ -200,7 +202,8 @@ export function toFigurine(san) {
   return san.replace(/^[KQRBN]/, (p) => FIGURINES[p] + '︎').replace(/=([QRBN])/, (_, p) => `=${FIGURINES[p]}︎`);
 }
 
-function buildGame(tokens, headers, chapterIndex) {
+/** @param {() => number} nextId */
+function buildGame(tokens, headers, chapterIndex, nextId) {
   const errors = [];
   let startFen = START_FEN;
   if (headers.FEN) {
@@ -211,7 +214,7 @@ function buildGame(tokens, headers, chapterIndex) {
       errors.push(`Invalid [FEN] header: ${headers.FEN}`);
     }
   }
-  const root = makeNode({ fen: startFen, ply: 0 });
+  const root = makeNode(nextId, { fen: startFen, ply: 0 });
   let cur = root;
   let dead = false;
   let pendingPre = '';
@@ -231,7 +234,7 @@ function buildGame(tokens, headers, chapterIndex) {
         }
         let next = cur.children.find((c) => c.uci === mv.uci);
         if (!next) {
-          next = makeNode({ ...mv, ply: cur.ply + 1, parent: cur });
+          next = makeNode(nextId, { ...mv, ply: cur.ply + 1, parent: cur });
           cur.children.push(next);
         }
         if (pendingPre) { appendComment(next, 'preComment', pendingPre); pendingPre = ''; }
@@ -280,9 +283,14 @@ function buildGame(tokens, headers, chapterIndex) {
   return { headers, root, errors, moves, index: chapterIndex };
 }
 
-/** Split tokens into games: a header after movetext, or a result at depth 0, starts a new game. */
+/**
+ * Split tokens into games: a header after movetext, or a result at depth 0, starts a new game.
+ * Node ids count up from 1 across the games of this parse, so the same text gives the same ids.
+ */
 export function parsePgn(text) {
   const tokens = tokenize(String(text || ''));
+  let seq = 0;
+  const nextId = () => ++seq;
   const games = [];
   /** @type {Record<string, string>} */
   let headers = {};
@@ -292,7 +300,7 @@ export function parsePgn(text) {
 
   const flush = () => {
     if (sawMoves || Object.keys(headers).length) {
-      games.push(buildGame(body, headers, games.length));
+      games.push(buildGame(body, headers, games.length, nextId));
     }
     headers = {};
     body = [];

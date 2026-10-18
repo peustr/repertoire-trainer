@@ -8,22 +8,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startMockLichess } from './helpers/mock-lichess.mjs';
+import { createLichessClient } from '../lichess.js';
 import { START_FEN as START } from '../public/js/constants.js';
 
 const mock = await startMockLichess({ delay: 80 }); // slow enough to see overlapping requests
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-lichess-'));
-Object.assign(process.env, {
-  TRAINER_DATA_DIR: dataDir,
-  LICHESS_URL: mock.url,
-  LICHESS_EXPLORER_URL: mock.url,
-  LICHESS_RATE_LIMIT_PAUSE_MS: '300',
-});
-const lichess = await import('../lichess.js'); // after the environment is set: it is read on load
+const otherDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-lichess-other-'));
+const client = (dir) => createLichessClient({ dataDir: dir, baseUrl: mock.url, explorerUrl: mock.url, rateLimitPauseMs: 300 });
+const lichess = client(dataDir);
 const TOKEN_FILE = path.join(dataDir, 'lichess.json');
 
 after(() => {
   mock.stop();
-  fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  for (const dir of [dataDir, otherDir]) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
@@ -160,4 +157,14 @@ test('OAuth sign-in with PKCE, and sign-out revokes the token', async () => {
   const before = (await mock.stats()).revoked;
   await lichess.disconnect();
   assert.equal((await mock.stats()).revoked, before + 1, 'tokens we created are revoked');
+});
+
+test('each client keeps its own token and cache, in its own data folder', async () => {
+  await lichess.connectWithToken('lip_testToken123');
+  await lichess.explorer({ fen: CAN_CASTLE, speeds: 'blitz', ratings: '1600' });
+  const other = client(otherDir);
+  assert.equal(other.status().connected, false, 'signed in only where the token was saved');
+  await assert.rejects(other.explorer({ fen: CAN_CASTLE, speeds: 'blitz', ratings: '1600' }), { status: 401 }, 'no answers from the first client\'s cache');
+  assert.equal(fs.existsSync(path.join(otherDir, 'lichess.json')), false);
+  await lichess.disconnect();
 });

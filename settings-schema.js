@@ -5,6 +5,7 @@
 
 import os from 'node:os';
 import { SPEEDS as SPEED_KEYS, SPEED_NAMES, RATING_GROUPS, ratingGroupLabel } from './public/js/constants.js';
+import { DEFAULT_SCHEDULE } from './public/js/srs.js';
 
 const WASM_HASH_MAX = 512; // the built-in WebAssembly engine fails to start above this
 
@@ -66,9 +67,9 @@ function buildSchema() {
       title: 'Memory schedule',
       intro: 'Each move you learn climbs eight levels. A correct answer on a due move moves it up one level; the wait before it comes back grows with each level.',
       fields: [
-        { key: 'srsIntervals', type: 'intervals', default: [4, 24, 72, 168, 336, 720, 2160, 4320], label: 'Wait after reaching each level', help: 'The defaults follow Chessable’s MoveTrainer: 4 hours, 1 day, 3 days, 1 week, 2 weeks, 1 month, 3 months, 6 months. Each wait should be longer than the one before.' },
+        { key: 'srsIntervals', type: 'intervals', default: [...DEFAULT_SCHEDULE.intervals], label: 'Wait after reaching each level', help: 'The defaults follow Chessable’s MoveTrainer: 4 hours, 1 day, 3 days, 1 week, 2 weeks, 1 month, 3 months, 6 months. Each wait should be longer than the one before.' },
         { key: 'mistakePolicy', type: 'select', default: 'reset', label: 'After a mistake', help: 'What happens to a move you get wrong in a review.', options: [['reset', 'Back to level 1'], ['stepback', 'Drop a few levels']] },
-        { key: 'stepbackLevels', type: 'int', min: 1, max: 7, default: 2, unit: 'levels', label: 'Levels to drop', help: 'Only used when “After a mistake” is set to “Drop a few levels”.', showIf: ['mistakePolicy', 'stepback'] },
+        { key: 'stepbackLevels', type: 'int', min: 1, max: 7, default: DEFAULT_SCHEDULE.stepbackLevels, unit: 'levels', label: 'Levels to drop', help: 'Only used when “After a mistake” is set to “Drop a few levels”.', showIf: ['mistakePolicy', 'stepback'] },
       ],
     },
     {

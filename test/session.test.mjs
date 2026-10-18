@@ -156,3 +156,17 @@ test('a single card (puzzles, warm-up)', () => {
   for (const [prev, success, check, why] of cases) assert.ok(check(gradeCard(prev, success, {}, NOW)), why);
   assert.equal(gradeCard(later(5), false, { mistakePolicy: 'stepback' }, NOW).level, 3);
 });
+
+test("the memory schedule comes from the settings passed in, not from what a page set earlier", () => {
+  const settings = { srsIntervals: [1, 2, 3, 4, 5, 6, 7, 8], mistakePolicy: 'stepback', stepbackLevels: 3 };
+  assert.equal(gradeCard(undefined, true, settings, NOW).due, NOW + 1 * HOUR, 'level 1 waits 1 hour');
+  assert.equal(gradeCard(due(4), true, settings, NOW).due, NOW + 5 * HOUR, 'level 5 waits 5 hours');
+  assert.equal(gradeCard(later(6), false, settings, NOW).level, 3, 'a miss drops three levels');
+
+  const pass = { line, phase: 'review', quiz: new Set([k1, k2]), dueAtStart: new Set([k1, k2]), results: new Map([[k1, 'right'], [k2, 'wrong']]), cards: { [k1]: due(2), [k2]: due(7) }, now: NOW };
+  const g = gradePass(pass, settings);
+  assert.equal(g.updates[k1].due, NOW + 3 * HOUR, 'promoted to level 3, which waits 3 hours');
+  assert.equal(g.updates[k2].level, 4);
+
+  assert.equal(gradeCard(undefined, true, {}, NOW).due, NOW + 4 * HOUR, 'without the settings, the default schedule');
+});

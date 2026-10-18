@@ -10,14 +10,15 @@ import { Chess } from 'chess.js';
 import { startMockLichess } from './helpers/mock-lichess.mjs';
 import { buildRepertoire } from '../public/js/repertoire.js';
 import { START_FEN as START, positionKey } from '../public/js/constants.js';
+import { createLichessClient } from '../lichess.js';
+import { searchMistakes } from '../puzzles.js';
 
 const mock = await startMockLichess();
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-puzzles-'));
-Object.assign(process.env, { TRAINER_DATA_DIR: dataDir, LICHESS_URL: mock.url, LICHESS_EXPLORER_URL: mock.url });
-// Imported after the environment is set: the Lichess client reads it on load.
-const lichess = await import('../lichess.js');
-const { searchMistakes } = await import('../puzzles.js');
+const lichess = createLichessClient({ dataDir, baseUrl: mock.url, explorerUrl: mock.url });
 await lichess.connectWithToken('lip_testToken123');
+/** The search, with this file's Lichess client. */
+const search = (args) => searchMistakes({ lichess, ...args });
 
 after(() => {
   mock.stop();
@@ -61,7 +62,7 @@ const whiteModel = buildRepertoire({ color: 'white', pgn: '1. e4 e5 2. Nf3 *' })
 test('a popular reply that throws the game away becomes a puzzle', async () => {
   const engines = scriptedEngines(AFTER_E4);
   const found = [];
-  const res = await searchMistakes({
+  const res = await search({
     rep: white, model: whiteModel, fen: START, prefix: { startFen: START, moves: [] }, engines, options: OPTIONS,
     onEvent: (ev) => { if (ev.kind === 'found') found.push(ev.puzzle); },
   });
@@ -77,14 +78,14 @@ test('a popular reply that throws the game away becomes a puzzle', async () => {
 
 test('a position the engine could not score is skipped, not taken as level', async () => {
   const engines = scriptedEngines(AFTER_E4, { bestScore: null });
-  const res = await searchMistakes({ rep: white, model: whiteModel, fen: START, engines, options: OPTIONS });
+  const res = await search({ rep: white, model: whiteModel, fen: START, engines, options: OPTIONS });
   assert.equal(engines.seen.blunder !== null, true, 'the search reached the position');
   assert.deepEqual(res.puzzles, [], 'no score for the best move means nothing to compare the reply with');
   assert.ok(res.stats.skipped >= 1);
 });
 
 test('popular replies your repertoire does not answer are reported as gaps', async () => {
-  const res = await searchMistakes({ rep: white, model: whiteModel, fen: START, engines: scriptedEngines(AFTER_E4), options: OPTIONS });
+  const res = await search({ rep: white, model: whiteModel, fen: START, engines: scriptedEngines(AFTER_E4), options: OPTIONS });
   assert.ok(res.gaps.length >= 1);
   for (const g of res.gaps) {
     assert.notEqual(g.san, 'e5', 'e5 is prepared');
@@ -93,11 +94,11 @@ test('popular replies your repertoire does not answer are reported as gaps', asy
 });
 
 test('the search stays within its budget, and stops when asked', async () => {
-  const res = await searchMistakes({ rep: white, model: whiteModel, fen: START, engines: scriptedEngines(null), options: { ...OPTIONS, maxPositions: 2 } });
+  const res = await search({ rep: white, model: whiteModel, fen: START, engines: scriptedEngines(null), options: { ...OPTIONS, maxPositions: 2 } });
   assert.ok(res.stats.positions <= 2);
 
   let progress = 0;
-  const stopped = await searchMistakes({
+  const stopped = await search({
     rep: white, model: whiteModel, fen: START, engines: scriptedEngines(null), options: OPTIONS,
     onEvent: (ev) => { if (ev.kind === 'progress') progress++; },
     cancelled: () => progress > 0,
@@ -111,7 +112,7 @@ test('without a Lichess account the search stops with that message', async () =>
   const black = { id: 'b', color: 'black' };
   const blackModel = buildRepertoire({ color: 'black', pgn: '1. e4 e5 *' });
   await assert.rejects(
-    searchMistakes({ rep: black, model: blackModel, fen: START, engines: scriptedEngines(null), options: OPTIONS }),
+    search({ rep: black, model: blackModel, fen: START, engines: scriptedEngines(null), options: OPTIONS }),
     { status: 401 },
   );
 });
