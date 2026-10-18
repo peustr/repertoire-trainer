@@ -28,6 +28,40 @@ const schema = require('./settings-schema');
 const engines = new EngineManager(() => store.getSettings());
 
 const app = express();
+
+// --- only this computer's own pages may use the server ------------------------
+//
+// Listening on 127.0.0.1 keeps other computers out, but not other websites open in
+// the same browser: they can reach localhost too, and DNS rebinding can make the
+// browser treat them as this server. So only answer requests addressed to a local
+// name, and refuse cross-site requests (and WebSockets) from other pages.
+
+const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]',
+  ...String(process.env.ALLOWED_HOSTS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)]);
+if (!['0.0.0.0', '::'].includes(HOST)) ALLOWED_HOSTS.add(HOST.toLowerCase());
+
+function parseUrl(url) {
+  try { return new URL(url); } catch (err) { return null; }
+}
+
+/** Why a request must be refused, or null if it may go ahead. */
+function refusal(req) {
+  const host = String(req.headers.host || '').toLowerCase();
+  const target = parseUrl(`http://${host}`);
+  if (!target || !ALLOWED_HOSTS.has(target.hostname)) return `Unexpected host "${host}"`;
+  const origin = req.headers.origin;
+  if (origin === undefined) return null; // not sent by a page (curl, top-level navigation)
+  const from = parseUrl(origin);
+  if (!from || !['http:', 'https:'].includes(from.protocol) || from.host !== target.host) return `Cross-site request from ${origin}`;
+  return null;
+}
+
+app.use((req, res, next) => {
+  const why = refusal(req);
+  if (!why) return next();
+  res.status(403).json({ error: `${why}. Open the trainer at http://localhost:${PORT}.` });
+});
+
 app.use(express.json({ limit: '20mb' }));
 
 // --- static files ----------------------------------------------------------
@@ -164,7 +198,15 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API route' 
 //   { type: 'error', id, message }
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({
+  server,
+  path: '/ws',
+  // Browsers let any page open a WebSocket to localhost; only our own pages may.
+  verifyClient: ({ req }, done) => {
+    const why = refusal(req);
+    done(!why, 403, why || undefined);
+  },
+});
 
 const clients = new Set();
 lichess.events.on('ratelimit', (until) => {
@@ -281,6 +323,7 @@ server.listen(PORT, HOST, () => {
   for (const w of a.warnings) console.log(`  Note: ${w}`);
   console.log('  Press Ctrl+C to stop.');
   console.log('');
+  store.sweepTempFiles();
   engines.warmUp();
   if (process.argv.includes('--open')) openBrowser(url);
 });

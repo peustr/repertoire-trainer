@@ -17,17 +17,82 @@ function ensureDirs() {
   fs.mkdirSync(REP_DIR, { recursive: true });
 }
 
+// Sync clients (OneDrive, Dropbox) and virus scanners briefly hold files open, and on
+// Windows that makes a rename or read fail with EPERM/EBUSY. Waiting a moment fixes it.
+const TRANSIENT = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const RETRY_DELAYS = [10, 20, 40, 80, 160, 320]; // about 0.6 s in all
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function withRetry(fn) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return fn();
+    } catch (err) {
+      if (!TRANSIENT.has(err.code) || attempt >= RETRY_DELAYS.length) throw err;
+      sleepSync(RETRY_DELAYS[attempt]);
+    }
+  }
+}
+
+/** Write via a temp file and rename, keeping the previous version as <file>.bak. */
 function writeJsonAtomic(file, data) {
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(tmp, file);
+  try {
+    if (fs.existsSync(file)) withRetry(() => fs.copyFileSync(file, `${file}.bak`));
+    withRetry(() => fs.renameSync(tmp, file));
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch (e) { /* already gone */ }
+    throw err;
+  }
 }
 
+/** Parsed JSON, or the fallback if the file does not exist. Other read errors are thrown. */
 function readJson(file, fallback) {
+  let text;
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    text = withRetry(() => fs.readFileSync(file, 'utf8'));
   } catch (err) {
-    return fallback;
+    if (err.code === 'ENOENT') return fallback;
+    throw err;
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return recoverDamaged(file, fallback);
+  }
+}
+
+/**
+ * A file that no longer parses (a crash, a full disk, a sync conflict) is never
+ * overwritten: it is kept as <file>.corrupt-<time>, and the previous version comes
+ * back from <file>.bak if there is one.
+ */
+function recoverDamaged(file, fallback) {
+  const aside = `${file}.corrupt-${Date.now()}`;
+  withRetry(() => fs.renameSync(file, aside));
+  let restored = null;
+  try { restored = JSON.parse(fs.readFileSync(`${file}.bak`, 'utf8')); } catch (err) { /* no usable backup */ }
+  if (restored !== null) {
+    try { withRetry(() => fs.copyFileSync(`${file}.bak`, file)); } catch (err) { /* the next save writes it */ }
+  }
+  console.warn(`[store] ${path.basename(file)} could not be read. It is kept as ${path.basename(aside)}`
+    + `${restored ? '; the previous version was restored.' : '.'}`);
+  return restored === null ? fallback : restored;
+}
+
+/** Remove temp files left by saves that were interrupted. */
+function sweepTempFiles() {
+  for (const dir of [DATA_DIR, REP_DIR]) {
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch (err) { continue; }
+    for (const name of names) {
+      if (!/\.json\.\d+\.\d+\.tmp$/.test(name)) continue;
+      try { fs.unlinkSync(path.join(dir, name)); } catch (err) { /* still in use; next start */ }
+    }
   }
 }
 
@@ -51,7 +116,14 @@ function listRepertoires() {
   return fs
     .readdirSync(REP_DIR)
     .filter((f) => f.endsWith('.json'))
-    .map((f) => readJson(path.join(REP_DIR, f), null))
+    .map((f) => {
+      try {
+        return readJson(path.join(REP_DIR, f), null);
+      } catch (err) {
+        console.warn(`[store] Skipped ${f}: ${err.message}`);
+        return null;
+      }
+    })
     .filter(Boolean)
     .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
 }
@@ -194,7 +266,8 @@ function resetProgress(id) {
 function deleteRepertoire(id) {
   const file = repFile(id);
   if (!fs.existsSync(file)) return false;
-  fs.unlinkSync(file);
+  withRetry(() => fs.unlinkSync(file));
+  try { fs.unlinkSync(`${file}.bak`); } catch (err) { /* no backup yet */ }
   return true;
 }
 
@@ -212,6 +285,7 @@ function saveSettings(patch) {
 
 module.exports = {
   DATA_DIR,
+  sweepTempFiles,
   listRepertoires,
   getRepertoire,
   createRepertoire,

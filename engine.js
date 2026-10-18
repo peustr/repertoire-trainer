@@ -129,10 +129,16 @@ function toWhitePov(score, fen) {
 let jobCounter = 0;
 
 class UciEngine extends EventEmitter {
-  constructor(role, getConfig = () => ({})) {
+  /**
+   * options.specFor(role, config): how to launch the engine (tests pass a fake one).
+   * options.startTimeout: ms to wait for the engine's uciok/readyok.
+   */
+  constructor(role, getConfig = () => ({}), { specFor = engineSpec, startTimeout = 60000 } = {}) {
     super();
     this.role = role;
     this.getConfig = getConfig;
+    this.specFor = specFor;
+    this.startTimeout = startTimeout;
     this.proc = null;
     this.ready = null; // Promise resolved after uciok/readyok
     this.name = null;
@@ -146,11 +152,10 @@ class UciEngine extends EventEmitter {
 
   start() {
     if (this.ready) return this.ready;
-    const spec = engineSpec(this.role, this.getConfig());
+    const spec = this.specFor(this.role, this.getConfig());
     if (!spec) {
-      this.ready = Promise.reject(new Error('No Stockfish engine found. Run "npm install" or put stockfish.exe in the engine folder.'));
-      this.ready.catch(() => {});
-      return this.ready;
+      // Not remembered: the next job looks again, in case an engine was installed since.
+      return Promise.reject(new Error('No Stockfish engine found. Run "npm install" or put stockfish.exe in the engine folder.'));
     }
     this.spec = spec;
     this.optionState = {};
@@ -164,17 +169,26 @@ class UciEngine extends EventEmitter {
     proc.on('exit', (code) => { if (this.proc === proc) this._onExit(new Error(`Engine exited (code ${code})`)); });
     this.buffer = '';
 
-    this.ready = (async () => {
+    const ready = (async () => {
       this.send('uci');
       await this._waitFor((l) => {
         if (l.startsWith('id name ')) this.name = l.slice(8).trim();
         return l === 'uciok';
-      }, 60000);
+      }, this.startTimeout);
       for (const [name, value] of Object.entries(spec.options)) this._setOption(name, value);
       await this.isReady();
     })();
-    this.ready.catch(() => {});
-    return this.ready;
+    this.ready = ready;
+    // A failed start (no answer in time) must not stick: drop this process so the
+    // next job starts a fresh one instead of getting the same error forever.
+    ready.catch(() => {
+      if (this.proc !== proc) return; // already handled by _onExit or a restart
+      this.proc = null;
+      this.ready = null;
+      this.spec = null;
+      try { proc.kill(); } catch (err) { /* already gone */ }
+    });
+    return ready;
   }
 
   send(cmd) {
@@ -183,7 +197,7 @@ class UciEngine extends EventEmitter {
 
   async isReady() {
     this.send('isready');
-    await this._waitFor((l) => l === 'readyok', 60000);
+    await this._waitFor((l) => l === 'readyok', this.startTimeout);
   }
 
   _setOption(name, value) {
@@ -326,7 +340,7 @@ class UciEngine extends EventEmitter {
   }
 
   info() {
-    const spec = this.spec || engineSpec(this.role, this.getConfig()) || {};
+    const spec = this.spec || this.specFor(this.role, this.getConfig()) || {};
     return {
       role: this.role,
       running: !!this.proc,
