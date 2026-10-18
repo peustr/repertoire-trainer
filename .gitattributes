@@ -1,0 +1,6 @@
+# Text files use LF everywhere, on every platform.
+* text=auto eol=lf
+
+# Except batch files: cmd.exe needs CRLF to parse them reliably.
+*.bat text eol=crlf
+*.cmd text eol=crlf

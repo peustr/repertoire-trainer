@@ -1,0 +1,27 @@
+{
+  "name": "repertoire-trainer",
+  "version": "0.3.0",
+  "description": "A local, MoveTrainer-style opening trainer with spaced repetition and Stockfish.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js --open",
+    "serve": "node server.js",
+    "test": "node test/run-tests.mjs",
+    "test:smoke": "node test/smoke-server.mjs",
+    "mock-lichess": "node test/mock-lichess.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fontsource/nunito": "^5.3.0",
+    "@fontsource/shantell-sans": "^5.3.0",
+    "@lichess-org/chessground": "^10.1.1",
+    "chess.js": "^1.4.0",
+    "express": "^5.3.0",
+    "stockfish": "^19.0.1",
+    "ws": "^8.22.0"
+  },
+  "license": "GPL-3.0-or-later"
+}

@@ -1,0 +1,200 @@
+// Small DOM and formatting helpers shared by every view.
+
+import { Chess } from 'chess.js';
+import { toFigurine } from './pgn.js';
+
+/** h('div.class#id', {attrs, on: {click}}, ...children) */
+export function h(tag, attrs, ...children) {
+  const [, name = 'div', rest = ''] = tag.match(/^([a-z0-9-]*)(.*)$/i);
+  const el = document.createElement(name || 'div');
+  for (const part of rest.match(/[.#][^.#]+/g) || []) {
+    if (part[0] === '.') el.classList.add(part.slice(1));
+    else el.id = part.slice(1);
+  }
+  if (attrs && (typeof attrs !== 'object' || attrs instanceof Node || Array.isArray(attrs))) {
+    children.unshift(attrs);
+    attrs = null;
+  }
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'on') for (const [ev, fn] of Object.entries(v)) el.addEventListener(ev, fn);
+    else if (k === 'class') el.className += ` ${v}`;
+    else if (k === 'style' && typeof v === 'object') {
+      for (const [prop, val] of Object.entries(v)) {
+        if (prop.startsWith('--')) el.style.setProperty(prop, val);
+        else el.style[prop] = val;
+      }
+    }
+    else if (k === 'html') el.innerHTML = v;
+    else if (k === 'value') el.value = v;
+    else if (k in el && typeof v !== 'string') el[k] = v;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  append(el, children);
+  return el;
+}
+
+/** Like el.append(), but skips null/false so conditional children are easy. */
+export function add(el, ...children) {
+  append(el, children);
+  return el;
+}
+
+function append(el, children) {
+  for (const c of children.flat(Infinity)) {
+    if (c == null || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+}
+
+export function clear(el, ...children) {
+  el.replaceChildren();
+  append(el, children);
+  return el;
+}
+
+// --- notation ------------------------------------------------------------------
+
+let figurines = true;
+export function setFigurines(on) { figurines = !!on; }
+export function useFigurines() { return figurines; }
+export function fig(san) { return figurines ? toFigurine(san) : san; }
+
+const scratch = new Chess();
+/** Convert a list of UCI moves to SAN from a FEN. Stops at the first illegal move. */
+export function uciLineToSan(fen, ucis, max = 12) {
+  const out = [];
+  try {
+    scratch.load(fen, { skipValidation: true });
+    for (const u of ucis.slice(0, max)) {
+      const before = scratch.fen().split(' ');
+      const mv = scratch.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
+      out.push({ san: mv.san, color: mv.color, number: +before[5] });
+    }
+  } catch (err) { /* stop at illegal move */ }
+  return out;
+}
+
+export function formatSanLine(moves) {
+  return moves.map((m, i) => (m.color === 'w' ? `${m.number}.${fig(m.san)}` : i === 0 ? `${m.number}...${fig(m.san)}` : fig(m.san))).join(' ');
+}
+
+export function uciToSan(fen, uci) {
+  const [m] = uciLineToSan(fen, [uci], 1);
+  return m ? m.san : uci;
+}
+
+/** "4...h6 5.c3 Nxe4" — the last few moves of a line, ending at the move that matters. */
+export function lineTail(startFen, ucis, plies = 3) {
+  const all = uciLineToSan(startFen, ucis, 200);
+  return formatSanLine(all.slice(-plies));
+}
+
+/** Like sanLabel, but always in letters (for PGN text and titles). */
+export function plainLabel(fen, uci) {
+  const [m] = uciLineToSan(fen, [uci], 1);
+  if (!m) return uci;
+  return m.color === 'w' ? `${m.number}.${m.san}` : `${m.number}...${m.san}`;
+}
+
+export function sanLabel(fen, uci) {
+  const [m] = uciLineToSan(fen, [uci], 1);
+  if (!m) return uci;
+  return m.color === 'w' ? `${m.number}.${fig(m.san)}` : `${m.number}...${fig(m.san)}`;
+}
+
+// --- feedback --------------------------------------------------------------------
+
+let toastTimer = null;
+export function toast(message, kind = '') {
+  let el = document.querySelector('.toast');
+  if (!el) {
+    el = h('div.toast', { role: 'status', 'aria-live': 'polite' });
+    document.body.append(el);
+  }
+  el.textContent = message;
+  el.className = `toast show ${kind}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+let soundsOn = true;
+let audio = null;
+let unlocked = false; // browsers only allow audio after the first click or key press
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { unlocked = true; }, { once: true, capture: true });
+let volume = 0.6;
+export function setSounds(on, vol) { soundsOn = !!on; if (vol != null) volume = Math.max(0, Math.min(1, vol / 100)); }
+function tone(freqs, { dur = 0.09, type = 'sine', gain = 0.06, gap = 0.07 } = {}) {
+  if (!soundsOn || !unlocked) return;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = audio.currentTime;
+    freqs.forEach((f, i) => {
+      const osc = audio.createOscillator();
+      const g = audio.createGain();
+      osc.type = type;
+      osc.frequency.value = f;
+      const start = t0 + i * gap;
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(Math.max(0.0002, gain * volume * 1.6), start + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      osc.connect(g).connect(audio.destination);
+      osc.start(start);
+      osc.stop(start + dur + 0.02);
+    });
+  } catch (err) { /* audio unavailable */ }
+}
+export const sound = {
+  move: () => tone([220], { dur: 0.05, type: 'triangle', gain: 0.08 }),
+  capture: () => tone([180, 140], { dur: 0.06, type: 'triangle', gain: 0.08, gap: 0.03 }),
+  right: () => tone([660, 880], { dur: 0.12 }),
+  wrong: () => tone([200, 150], { dur: 0.16, type: 'square', gain: 0.03, gap: 0.09 }),
+  done: () => tone([523, 659, 784], { dur: 0.16, gap: 0.09 }),
+};
+
+// --- modal -------------------------------------------------------------------------
+
+export function modal(title, body, actions = []) {
+  const close = () => { dialog.close(); dialog.remove(); };
+  const dialog = h('dialog.modal',
+    h('form.modal-inner', { method: 'dialog' },
+      h('h2.modal-title', title),
+      h('div.modal-body', body),
+      h('div.modal-actions', actions.map((a) => h(`button.btn${a.primary ? '.primary' : ''}${a.danger ? '.danger' : ''}`, {
+        type: 'button',
+        on: { click: async () => { const keep = a.onClick ? await a.onClick() : false; if (keep !== true) close(); } },
+      }, a.label)))));
+  dialog.addEventListener('cancel', () => setTimeout(() => dialog.remove(), 0));
+  document.body.append(dialog);
+  dialog.showModal();
+  return { close, dialog };
+}
+
+export function confirmDialog(title, text, label = 'Confirm', danger = false) {
+  return new Promise((resolve) => {
+    const m = modal(title, h('p', text), [
+      { label: 'Cancel', onClick: () => resolve(false) },
+      { label, primary: !danger, danger, onClick: () => resolve(true) },
+    ]);
+    m.dialog.addEventListener('cancel', () => resolve(false));
+  });
+}
+
+export function downloadText(filename, text) {
+  const blob = new Blob([text], { type: 'application/x-chess-pgn' });
+  const a = h('a', { href: URL.createObjectURL(blob), download: filename });
+  document.body.append(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+/** Tiny stacked bar of card levels 0 (new) … 8. */
+export function levelBar(histogram, { large = false } = {}) {
+  const total = histogram.reduce((a, b) => a + b, 0) || 1;
+  return h(`div.levelbar${large ? '.large' : ''}`, { role: 'img', 'aria-label': `Memory levels: ${histogram.map((n, i) => `${n} at level ${i}`).join(', ')}` },
+    histogram.map((n, i) => (n ? h(`span.lv${i}`, { style: { flexGrow: n / total }, title: `${i === 0 ? 'New' : `Level ${i}`}: ${n}` }) : null)));
+}
+
+export function plural(n, one, many = `${one}s`) {
+  return `${n} ${n === 1 ? one : many}`;
+}

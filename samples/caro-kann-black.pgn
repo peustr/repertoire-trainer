@@ -1,0 +1,32 @@
+[Event "Caro-Kann: Advance"]
+[RepertoireName "Caro-Kann (Black)"]
+[Repertoire "black"]
+[ChapterName "Advance Variation"]
+[Result "*"]
+
+{A solid answer to 1.e4. The light-squared bishop gets out before ...e6, and we hit the centre later with ...c5.}
+1. e4 c6 2. d4 d5 3. e5 Bf5 {Out before the pawn chain locks it in. [%cal Gc8f5]}
+4. Nf3
+(4. Nc3 e6 5. g4 {The aggressive Bayonet idea: chase the bishop.} Bg6 6. Nge2 c5 {Hit the centre while White's kingside is loose. [%cal Gc5d4]})
+(4. Be2 e6 5. Nf3 c5 {Transposes to the main line.})
+4... e6 5. Be2 c5 {The thematic break against the d4 base of White's chain.} 6. Be3 cxd4 7. Nxd4 Ne7 {Heading for c6 or f5 to challenge the strong d4-knight.} *
+
+[Event "Caro-Kann: Classical"]
+[ChapterName "Classical Variation"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. Nc3 (3. Nd2 dxe4 4. Nxe4 {Transposes.}) 3... dxe4 4. Nxe4 Bf5 5. Ng3 Bg6 6. h4 {White grabs kingside space and tries to trap or weaken the bishop.} h6 {Keep a retreat on h7.} 7. Nf3 Nd7 8. h5 Bh7 9. Bd3 Bxd3 10. Qxd3 e6 11. Bd2 Ngf6 12. O-O-O Be7 {Calm development. Black's king usually goes short and the pawn on h5 can become a target.} *
+
+[Event "Caro-Kann: Exchange and Panov"]
+[ChapterName "Exchange and Panov"]
+[Result "*"]
+
+1. e4 c6 2. d4 d5 3. exd5 cxd5 4. Bd3
+(4. c4 {The Panov: White accepts an isolated pawn for activity.} Nf6 5. Nc3 e6 6. Nf3 Bb4 {Pinning the knight that defends d5 and e4. [%cal Gb4c3]})
+4... Nc6 5. c3 Nf6 6. Bf4 Bg4 7. Qb3 Na5 {Chase the queen off the b3–f7 and b-file targets.} 8. Qa4+ Bd7 9. Qc2 e6 *
+
+[Event "Caro-Kann: Two Knights"]
+[ChapterName "Two Knights"]
+[Result "*"]
+
+1. e4 c6 2. Nc3 d5 3. Nf3 Bg4 {Pin, then trade on f3 to keep a solid structure.} 4. h3 Bxf3 5. Qxf3 e6 {White has the bishop pair, Black has a rock-solid centre and quick development.} *

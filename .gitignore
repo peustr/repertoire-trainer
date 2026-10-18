@@ -1,0 +1,42 @@
+# --- Personal data: NEVER commit -------------------------------------------
+# data/ holds your repertoires, training progress, settings, the explorer
+# cache and data/lichess.json, which contains your Lichess access token.
+data/
+
+# --- Dependencies -------------------------------------------------------------
+node_modules/
+
+# --- Native Stockfish binaries (users download their own) ------------------
+engine/*
+!engine/README.txt
+
+# --- Secrets and local environment ------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# --- Logs and temp files --------------------------------------------------------
+*.log
+npm-debug.log*
+*.tmp
+coverage/
+
+# --- Release archives -----------------------------------------------------------
+*.zip
+*.tgz
+
+# --- Editors and OS ---------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Claude Code personal settings ----------------------------------------------
+.claude/settings.local.json
