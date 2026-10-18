@@ -1,0 +1,116 @@
+// The training rules, without the board or the page: which of your moves a pass
+// over a line quizzes, how each answer is graded, and what the results do to the
+// memory schedule. The trainer, the puzzle page and the library's warm-up card use
+// these; test/session.test.mjs pins them down. No DOM code here.
+//
+// A pass has a phase:
+//   guided    Learn, first time through: arrows show the new moves
+//   recall    Learn, from memory straight after
+//   review    due moves are asked; known ones play themselves
+//   practice  every move is asked; the schedule is untouched
+//
+// Results per card key: 'right', 'wrong', 'hint' (used a hint, not counted against
+// you), or 'auto' (played for you because it was not asked).
+
+import { lineStatus, learned, promote, demote, isDue } from './srs.js';
+
+/** Which card keys a pass asks you to play, and which were due when it began. */
+export function passPlan(line, cards, phase, { quizAllMoves = false } = {}, now = Date.now()) {
+  const st = lineStatus(line, cards, now);
+  let quiz;
+  if (phase === 'guided' || phase === 'recall') quiz = st.newKeys;
+  else if (phase === 'review') quiz = quizAllMoves ? line.cardKeys : st.dueKeys;
+  else quiz = line.cardKeys;
+  return { quiz: new Set(quiz), dueAtStart: new Set(st.dueKeys) };
+}
+
+/** The result for the right move, played after `tries` wrong attempts and `hints` hints. */
+export function resultForCorrectMove({ tries, hints }, { hintsCount = true } = {}) {
+  if (tries === 0 && hints === 0) return 'right';
+  // With "a hint counts as a mistake" off, a hinted move neither levels up nor drops.
+  if (tries === 0 && !hintsCount) return 'hint';
+  return 'wrong';
+}
+
+/** The result once a hint is used. The guided pass shows the move anyway, so nothing changes there. */
+export function resultAfterHint(previous, phase, { hintsCount = true } = {}) {
+  if (phase === 'guided') return previous;
+  if (hintsCount) return 'wrong';
+  return previous === 'wrong' ? 'wrong' : 'hint';
+}
+
+/** A move's first real result in a pass is the one that counts. */
+export function firstResult(previous, result) {
+  return previous && previous !== 'auto' ? previous : result;
+}
+
+/**
+ * What playing a move other than the line's means:
+ *   'alternative'   another repertoire move here: try again, no penalty
+ *                   (a mistake with altPolicy 'mistake', except while guided)
+ *   'follow-arrow'  guided pass: just follow the arrow
+ *   'mistake'       counts against you
+ */
+export function judgeWrongMove({ inRepertoire, phase }, { altPolicy = 'retry' } = {}) {
+  if (inRepertoire && (altPolicy !== 'mistake' || phase === 'guided')) return 'alternative';
+  if (phase === 'guided') return 'follow-arrow';
+  return 'mistake';
+}
+
+/**
+ * The end of a pass: new card states for the schedule, and what happened to each move.
+ * A guided pass graded here (Learn with "replay from memory" off) puts the new moves
+ * straight into the schedule: everything not missed counts as right.
+ *
+ * Returns { results, updates, outcomes, right, wrong }
+ *   results:  the pass's results after that conversion (a new Map)
+ *   updates:  { cardKey: state } to save
+ *   outcomes: [{ key, result, change, next }] in line order, where change is
+ *             'learned' | 'promoted' | 'demoted' | 'not-due' | 'hint' | 'practice'
+ */
+export function gradePass({ line, phase, quiz, dueAtStart, results, cards, now = Date.now() }, { mistakePolicy = 'reset' } = {}) {
+  const graded = new Map(results);
+  if (phase === 'guided') {
+    for (const key of quiz) if (graded.get(key) !== 'wrong') graded.set(key, 'right');
+    phase = 'recall';
+  }
+  const updates = {};
+  const outcomes = [];
+  let right = 0;
+  let wrong = 0;
+  for (const key of line.cardKeys) {
+    const result = graded.get(key);
+    const prev = cards[key];
+    if (result === 'right') right++;
+    if (result === 'wrong') wrong++;
+    let change = null;
+    let next = null;
+    if (phase === 'practice') {
+      if (result === 'right' || result === 'wrong' || result === 'hint') change = 'practice';
+    } else if (phase === 'recall') {
+      if (quiz.has(key)) { next = learned(now, result === 'right'); change = 'learned'; }
+    } else if (phase === 'review') {
+      if (result === 'wrong' && prev) { next = demote(prev, now, mistakePolicy); change = 'demoted'; }
+      else if (result === 'right' && prev && dueAtStart.has(key)) { next = promote(prev, now); change = 'promoted'; }
+      else if (result === 'right') change = 'not-due';
+      else if (result === 'hint') change = 'hint';
+    }
+    if (next) updates[key] = next;
+    if (change) outcomes.push({ key, result, change, next });
+  }
+  return { results: graded, updates, outcomes, right, wrong };
+}
+
+/**
+ * One card answered on its own (a puzzle, the library's warm-up). Returns the new
+ * state, or `prev` itself when nothing changes:
+ *   new card: learned (due again at once if missed)
+ *   missed:   demoted, due or not
+ *   solved:   promoted if due, otherwise unchanged
+ */
+export function gradeCard(prev, success, { mistakePolicy = 'reset' } = {}, now = Date.now()) {
+  if (!prev) return learned(now, success);
+  if (!success) return demote(prev, now, mistakePolicy);
+  if (isDue(prev, now)) return promote(prev, now);
+  return prev;
+}

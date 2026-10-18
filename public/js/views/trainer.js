@@ -11,7 +11,8 @@ import { refresh } from '../nav.js';
 import { state, getRep, modelFor, saveCards } from '../store.js';
 import { cardKey } from '../repertoire.js';
 import { positionKey, nagGlyphs, moveNumber } from '../pgn.js';
-import { lineStatus, nextReviewLine, newLines, learned, promote, demote, describeWait } from '../srs.js';
+import { lineStatus, nextReviewLine, newLines, describeWait } from '../srs.js';
+import { passPlan, resultForCorrectMove, resultAfterHint, firstResult, judgeWrongMove, gradePass } from '../session.js';
 import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci } from '../board.js';
 import { evaluate, analyse, scoreToCp, formatScore, evalBarShare } from '../engine-client.js';
 import { openMistakeFinder } from './finder.js';
@@ -88,11 +89,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     clearTimers();
     if (engineRun) { engineRun.stop(); engineRun = null; }
     evalBar.hide(true);
-    const st = lineStatus(line, cards());
-    let quiz;
-    if (phase === 'guided' || phase === 'recall') quiz = new Set(st.newKeys);
-    else if (phase === 'review') quiz = new Set(settings.quizAllMoves ? line.cardKeys : st.dueKeys);
-    else quiz = new Set(line.cardKeys);
+    const { quiz, dueAtStart } = passPlan(line, cards(), phase, settings);
     run = {
       line,
       phase,
@@ -100,7 +97,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       fen: line.startFen,
       lastUci: null,
       quiz,
-      dueAtStart: new Set(st.dueKeys),
+      dueAtStart,
       results: new Map(),
       hint: 0,
       waiting: false,
@@ -171,10 +168,9 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
 
     if (uci === node.uci) {
       run.waiting = false;
-      const clean = run.tries === 0 && run.hint === 0;
-      // With "a hint counts as a mistake" off, a hinted move neither levels up nor drops.
-      const outcome = clean ? 'right' : run.tries === 0 && !settings.hintsCount ? 'hint' : 'wrong';
-      if (!run.results.has(key) || run.results.get(key) === 'auto') run.results.set(key, outcome);
+      const outcome = resultForCorrectMove({ tries: run.tries, hints: run.hint }, settings);
+      const clean = outcome === 'right';
+      run.results.set(key, firstResult(run.results.get(key), outcome));
       if (clean && run.phase !== 'guided') sound.right();
       playNode(node);
       const nags = nagGlyphs(node.nags);
@@ -187,14 +183,15 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       return;
     }
 
-    const alt = (model.myMovesAt.get(positionKey(run.fen)) || new Set()).has(uci);
+    const inRepertoire = (model.myMovesAt.get(positionKey(run.fen)) || new Set()).has(uci);
     const played = applyUci(run.fen, uci);
-    if (alt && (settings.altPolicy !== 'mistake' || run.phase === 'guided')) {
+    const meaning = judgeWrongMove({ inRepertoire, phase: run.phase }, settings);
+    if (meaning === 'alternative') {
       board.setPosition(run.fen, { lastMove: run.lastUci, movable: true });
       setFeedback('neutral', `${sanLabel(run.fen, uci)} is in your repertoire, but this line continues differently. Try again.`);
       return;
     }
-    if (run.phase === 'guided') {
+    if (meaning === 'follow-arrow') {
       board.setPosition(run.fen, { lastMove: run.lastUci, movable: true });
       board.shake();
       setFeedback('neutral', `Follow the arrow: ${moveText(node)}.`);
@@ -213,6 +210,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       board.setPosition(fenBefore, { lastMove: run.lastUci, movable: true });
       board.setShapes([{ orig: node.uci.slice(0, 2), dest: node.uci.slice(2, 4), brush: 'flame' }]);
       run.waiting = true;
+      renderDots(); // mark the move as the current one again
     }, 700);
     renderDots();
     const verdict = h('p.verdict.muted', 'Asking Stockfish about your move…');
@@ -249,55 +247,18 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
 
   function finishPhase() {
     const { line } = run;
-    let { phase } = run;
-    if (phase === 'guided') {
-      if (settings.learnRecall) {
-        later(() => startLine(line, 'recall'), 700);
-        setPrompt('Line shown', 'Now play it from memory.');
-        return;
-      }
-      // Learning without the immediate replay: the new moves go straight into the schedule.
-      for (const k of run.quiz) if (run.results.get(k) !== 'wrong') run.results.set(k, 'right');
-      phase = 'recall';
+    if (run.phase === 'guided' && settings.learnRecall) {
+      later(() => startLine(line, 'recall'), 700);
+      setPrompt('Line shown', 'Now play it from memory.');
+      return;
     }
     run.waiting = false;
     board.setPosition(run.fen, { lastMove: run.lastUci, movable: false });
     const now = Date.now();
-    const updates = {};
-    const outcomes = [];
-    let right = 0;
-    let wrong = 0;
-    for (const key of line.cardKeys) {
-      const r = run.results.get(key);
-      const prev = cards()[key];
-      const node = model.cards.get(key).node;
-      if (r === 'right') right++;
-      if (r === 'wrong') wrong++;
-      if (mode === 'practice' || phase === 'practice') {
-        if (r === 'right' || r === 'wrong' || r === 'hint') outcomes.push({ node, r, text: r === 'hint' ? 'with a hint' : '' });
-        continue;
-      }
-      if (phase === 'recall') {
-        if (!run.quiz.has(key)) continue;
-        const next = learned(now, r === 'right');
-        updates[key] = next;
-        outcomes.push({ node, r, text: r === 'right' ? `level 1, next in ${describeWait(next.due - now)}` : 'level 1, due again now' });
-      } else if (phase === 'review') {
-        if (r === 'wrong' && prev) {
-          const next = demote(prev, now, settings.mistakePolicy);
-          updates[key] = next;
-          outcomes.push({ node, r, text: `back to level ${next.level}, next in ${describeWait(next.due - now)}` });
-        } else if (r === 'right' && prev && run.dueAtStart.has(key)) {
-          const next = promote(prev, now);
-          updates[key] = next;
-          outcomes.push({ node, r, text: `level ${next.level}, next in ${describeWait(next.due - now)}` });
-        } else if (r === 'right') {
-          outcomes.push({ node, r, text: 'not due yet, unchanged' });
-        } else if (r === 'hint') {
-          outcomes.push({ node, r, text: 'hint used, unchanged' });
-        }
-      }
-    }
+    const graded = gradePass({ line, phase: run.phase, quiz: run.quiz, dueAtStart: run.dueAtStart, results: run.results, cards: cards(), now }, settings);
+    run.results = graded.results;
+    const { updates, right, wrong } = graded;
+    const outcomes = graded.outcomes.map((o) => ({ node: model.cards.get(o.key).node, r: o.result, text: outcomeText(o, now) }));
     tally.lines++;
     tally.right += right;
     tally.wrong += wrong;
@@ -377,6 +338,17 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   }
 
   // ---- rendering helpers ------------------------------------------------------------
+  function outcomeText({ change, result, next }, now) {
+    switch (change) {
+      case 'practice': return result === 'hint' ? 'with a hint' : '';
+      case 'learned': return result === 'right' ? `level 1, next in ${describeWait(next.due - now)}` : 'level 1, due again now';
+      case 'promoted': return `level ${next.level}, next in ${describeWait(next.due - now)}`;
+      case 'demoted': return `back to level ${next.level}, next in ${describeWait(next.due - now)}`;
+      case 'not-due': return 'not due yet, unchanged';
+      default: return 'hint used, unchanged';
+    }
+  }
+
   function phaseFor() {
     if (mode === 'learn') return 'guided';
     if (mode === 'practice') return 'practice';
@@ -463,10 +435,8 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
           const node = run.line.nodes[run.ply];
           const key = cardKey(node.parent.fen, node.uci);
           run.hint++;
-          if (run.phase !== 'guided') {
-            if (settings.hintsCount) run.results.set(key, 'wrong');
-            else if (run.results.get(key) !== 'wrong') run.results.set(key, 'hint');
-          }
+          const result = resultAfterHint(run.results.get(key), run.phase, settings);
+          if (result) run.results.set(key, result);
           renderDots();
           if (run.hint === 1) {
             board.setShapes([{ orig: node.uci.slice(0, 2), brush: 'bark' }]);

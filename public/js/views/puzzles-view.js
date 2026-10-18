@@ -3,7 +3,8 @@
 
 import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, confirmDialog, action } from '../ui.js';
 import { state, getRep, putRep, saveCards } from '../store.js';
-import { learned, promote, demote, describeWait, isDue } from '../srs.js';
+import { describeWait, isDue } from '../srs.js';
+import { gradeCard } from '../session.js';
 import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci } from '../board.js';
 import { evaluate, analyse, formatScore, evalBarShare } from '../engine-client.js';
 import { api } from '../api.js';
@@ -169,11 +170,7 @@ export async function renderPuzzles(root, { id, ids }) {
     const success = !cur.failed && cur.hint === 0;
     const now = Date.now();
     const prev = puzzleState(rep, p);
-    let next;
-    if (!prev) next = learned(now, success);
-    else if (!success) next = demote(prev, now, state.settings.mistakePolicy);
-    else if (isDue(prev, now)) next = promote(prev, now);
-    else next = prev;
+    const next = gradeCard(prev, success, state.settings, now);
     if (success) tally.solved++; else tally.missed++;
     if (next !== prev) {
       saveCards(rep.id, { [puzzleKey(p.id)]: next }, success ? { correct: 1 } : { wrong: 1 });
