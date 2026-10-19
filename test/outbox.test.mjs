@@ -228,3 +228,43 @@ test('blocked browser storage keeps the queue in memory', () => {
   storage.set([{ saveId: 'x' }]);
   assert.deepEqual(storage.get(), [{ saveId: 'x' }]);
 });
+
+test('a stored queue that is not a list reads as empty', () => {
+  const storage = webStorage(() => fakeLocalStorage({ outbox: '{"saveId":"x"}' }), 'outbox');
+  assert.deepEqual(storage.get(), []);
+});
+
+test('saves sent while storage refuses every change stay hidden, not sent again', () => {
+  const backend = {
+    getItem: () => JSON.stringify([{ saveId: 'a' }]),
+    setItem() { throw new Error('QuotaExceededError'); },
+    removeItem() { throw new Error('SecurityError'); },
+  };
+  const storage = webStorage(() => backend, 'outbox');
+  storage.set([]);
+  assert.deepEqual(storage.get(), [], 'the stored copy of a sent save is not read again');
+});
+
+test('card updates for nothing change nothing', () => {
+  const target = { a: 1 };
+  assert.equal(applyCards(target, undefined), target);
+  assert.deepEqual(target, { a: 1 });
+});
+
+test('storage that has nothing yet reads as an empty queue', () => {
+  const outbox = createOutbox({ storage: { get: () => null, set: () => {} }, send: async () => {} });
+  assert.equal(outbox.size(), 0);
+  assert.deepEqual(outbox.pendingCards('r'), {});
+});
+
+test('saves still get an id where the browser has no crypto.randomUUID (a page not served securely)', async (t) => {
+  const real = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  Object.defineProperty(globalThis, 'crypto', { value: {}, configurable: true });
+  t.after(() => Object.defineProperty(globalThis, 'crypto', real));
+  const ids = [];
+  const outbox = createOutbox({ storage: memoryStorage(), send: async (e) => { ids.push(e.saveId); } });
+  await outbox.add({ repId: 'r', cards: { a: 1 } });
+  await outbox.add({ repId: 'r', cards: { b: 1 } });
+  assert.match(ids[0], /^[a-z0-9]+-[a-z0-9]+$/);
+  assert.notEqual(ids[0], ids[1]);
+});

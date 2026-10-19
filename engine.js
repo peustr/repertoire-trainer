@@ -264,14 +264,24 @@ class UciEngine extends EventEmitter {
       // Not remembered: the next job looks again, in case an engine was installed since.
       return Promise.reject(new Error('No Stockfish engine found. Run "npm install" or put stockfish.exe in the engine folder.'));
     }
+    let proc;
+    try {
+      proc = spawn(spec.cmd, spec.args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    } catch (err) {
+      // Windows refuses some files at once rather than through 'error' (EFTYPE: not a
+      // program; EINVAL: a .bat or .cmd). Not remembered: the next job tries again.
+      return Promise.reject(new Error(`Could not start ${spec.label} (${err.code}). Check the engine path in Settings.`));
+    }
     this.spec = spec;
     this.optionState = {};
-    const proc = spawn(spec.cmd, spec.args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     this.proc = proc;
     proc.stdout.setEncoding('utf8');
     // Ignore anything from a process we have already replaced (after a settings change).
     proc.stdout.on('data', (chunk) => { if (this.proc === proc) this._onData(chunk); });
     proc.stderr.on('data', () => {});
+    // A write to an engine that has just died fails with EPIPE, and an 'error' nobody
+    // listens for would stop the whole app. Its exit is handled below.
+    proc.stdin.on('error', () => {});
     proc.on('error', (err) => { if (this.proc === proc) this._onExit(err); });
     proc.on('exit', (code) => { if (this.proc === proc) this._onExit(new Error(`Engine exited (code ${code})`)); });
     this.buffer = '';
@@ -294,7 +304,7 @@ class UciEngine extends EventEmitter {
       this.ready = null;
       this.spec = null;
       this.restartPending = false; // the next start uses the current settings anyway
-      try { proc.kill(); } catch (err) { /* already gone */ }
+      proc.kill(); // does not throw, even for a process that has already exited
     });
     return ready;
   }
@@ -407,7 +417,7 @@ class UciEngine extends EventEmitter {
     this.ready = null;
     this.spec = null;
     this.restartPending = false; // the replacement starts with the current settings anyway
-    try { proc.kill(); } catch (e) { /* already gone */ }
+    proc.kill();
     clearTimeout(job.watchdog);
     job.reject(err);
     this._next();
@@ -430,7 +440,6 @@ class UciEngine extends EventEmitter {
   }
 
   _onExit(err) {
-    if (!this.proc) return;
     this.proc = null;
     this.ready = null;
     this.restartPending = false;
@@ -545,8 +554,8 @@ class UciEngine extends EventEmitter {
     this.ready = null;
     this.spec = null;
     if (proc) {
-      try { proc.stdin.write('quit\n'); } catch (err) { /* already closed */ }
-      setTimeout(() => { try { proc.kill(); } catch (err) { /* gone */ } }, 500);
+      proc.stdin.write('quit\n');
+      setTimeout(() => proc.kill(), 500);
     }
     return true;
   }
@@ -555,7 +564,7 @@ class UciEngine extends EventEmitter {
     if (this.proc) {
       this.send('quit');
       const p = this.proc;
-      setTimeout(() => { try { p.kill(); } catch (e) { /* already gone */ } }, 500);
+      setTimeout(() => p.kill(), 500);
     }
   }
 }

@@ -10,7 +10,7 @@ import { parsePgn, tokenize, parseComment, formatSequence } from '../public/js/p
 import { buildRepertoire } from '../public/js/repertoire.js';
 import * as srs from '../public/js/srs.js';
 import { puzzleToPgn, describeRatings, describeSpeeds, puzzleQueue } from '../public/js/puzzle-utils.js';
-import { START_FEN, ratingGroupLabel } from '../public/js/constants.js';
+import { START_FEN, ratingGroupLabel, scoreToCp } from '../public/js/constants.js';
 import * as puzzles from '../puzzles.js';
 import * as lichess from '../lichess.js';
 import * as schema from '../settings-schema.js';
@@ -241,4 +241,13 @@ test('node ids number one parse: the same PGN gives the same ids, unique across 
   parsePgn('1. c4 e5 2. Nc3 *'); // another repertoire parsed in between
   assert.deepEqual(ids(parsePgn(pgn)), first);
   assert.equal(new Set(first).size, first.length, 'no two nodes share an id');
+});
+
+test('scores in centipawns: a missing score is level, mates are large, and mate 0 is level', () => {
+  assert.equal(scoreToCp(null), 0);
+  assert.equal(scoreToCp(undefined), 0);
+  assert.equal(scoreToCp({ cp: -35 }), -35);
+  assert.equal(scoreToCp({ mate: 1 }), 9990);
+  assert.equal(scoreToCp({ mate: -3 }), -9970);
+  assert.equal(scoreToCp({ mate: 0 }), 0);
 });

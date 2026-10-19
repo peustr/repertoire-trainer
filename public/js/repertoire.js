@@ -89,10 +89,6 @@ export function buildRepertoire(rep) {
   return { rep, side, chapters, lines, cards, myMovesAt, nodesByPosition, errors };
 }
 
-export function lineIsMine(model, node) {
-  return node.color === model.side;
-}
-
 /**
  * The moves (UCI) from the chapter start to this node. Link to a node with these
  * (#/explore/<id>?moves=...), not with node.id: ids number the nodes of one parse, so an
@@ -102,14 +98,4 @@ export function movesTo(node) {
   const moves = [];
   for (let n = node; n && n.uci; n = n.parent) moves.unshift(n.uci);
   return moves;
-}
-
-/** Find the node for a position + move inside any chapter (used by Explore and the audit). */
-export function findNode(model, fen, uci) {
-  const nodes = model.nodesByPosition.get(positionKey(fen)) || [];
-  for (const n of nodes) {
-    const child = n.children.find((c) => c.uci === uci);
-    if (child) return child;
-  }
-  return null;
 }

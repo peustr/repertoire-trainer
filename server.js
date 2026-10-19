@@ -13,11 +13,9 @@ import { createRequire } from 'node:module';
 import { WebSocketServer } from 'ws';
 import * as store from './store.js';
 import * as schema from './settings-schema.js';
-import { EngineManager, checkFen } from './engine.js';
+import { EngineManager } from './engine.js';
 import { createLichessClient } from './lichess.js';
-import { searchMistakes } from './puzzles.js';
-import { buildRepertoire } from './public/js/repertoire.js'; // shared with the browser
-import { REQUEST, REPLY } from './public/js/protocol.js';
+import { serveEngineSocket } from './engine-socket.js';
 
 const PORT = Number(process.env.PORT) || 3210;
 const HOST = process.env.HOST || '127.0.0.1'; // only reachable from this computer
@@ -72,10 +70,12 @@ app.use(express.json({ limit: '20mb' }));
 function packageDir(name) {
   // Some packages hide package.json behind an "exports" map, so look on disk, in the
   // node_modules folders Node itself would search.
-  for (const base of createRequire(import.meta.url).resolve.paths(name) || []) {
+  // (resolve.paths gives null only for Node's own modules.)
+  for (const base of createRequire(import.meta.url).resolve.paths(name)) {
     const dir = path.join(base, ...name.split('/'));
     if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
   }
+  /* c8 ignore next: only with an incomplete npm install, which the tests cannot stage */
   throw new Error(`Missing dependency ${name}. Run "npm install" first.`);
 }
 
@@ -86,15 +86,17 @@ app.use('/vendor/fonts/inter', express.static(packageDir('@fontsource-variable/i
 
 // --- REST API ----------------------------------------------------------------
 
+// A handler returns a value for JSON or null for a 404, or throws an error with .status.
+function answer(res, out) {
+  if (out === null) return res.status(404).json({ error: 'Not found' });
+  res.json(out);
+}
+const failure = (res, err) => res.status(err.status || 500).json({ error: err.message });
 const wrap = (fn) => (req, res) => {
-  try {
-    const out = fn(req, res);
-    if (out === undefined) return;
-    if (out === null) return res.status(404).json({ error: 'Not found' });
-    res.json(out);
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
-  }
+  try { answer(res, fn(req)); } catch (err) { failure(res, err); }
+};
+const wrapAsync = (fn) => async (req, res) => {
+  try { answer(res, await fn(req)); } catch (err) { failure(res, err); }
 };
 
 app.get('/api/repertoires', wrap(() => store.listRepertoires()));
@@ -123,13 +125,14 @@ app.get('/api/settings/schema', wrap(() => ({
 
 const SAMPLES_DIR = path.join(import.meta.dirname, 'samples');
 app.get('/api/samples', wrap(() => {
+  /* c8 ignore next: the samples ship with the app; this only covers someone deleting the folder */
   if (!fs.existsSync(SAMPLES_DIR)) return [];
   return fs.readdirSync(SAMPLES_DIR)
     .filter((f) => f.endsWith('.pgn'))
     .map((file) => {
       const pgn = fs.readFileSync(path.join(SAMPLES_DIR, file), 'utf8');
       const color = /\[Repertoire\s+"black"\]/i.test(pgn) ? 'black' : 'white';
-      const name = (pgn.match(/\[RepertoireName\s+"([^"]+)"\]/) || [])[1] || file.replace(/\.pgn$/, '');
+      const name = pgn.match(/\[RepertoireName\s+"([^"]+)"\]/)[1]; // every sample has one (test/server-api.test.mjs)
       return { file, name, color, pgn };
     });
 }));
@@ -137,17 +140,6 @@ app.get('/api/samples', wrap(() => {
 app.get('/api/engine', wrap(() => engines.info()));
 
 // --- Lichess -------------------------------------------------------------------
-
-const wrapAsync = (fn) => async (req, res) => {
-  try {
-    const out = await fn(req, res);
-    if (out === undefined) return;
-    if (out === null) return res.status(404).json({ error: 'Not found' });
-    res.json(out);
-  } catch (err) {
-    res.status(err.status && err.status < 600 ? err.status : 500).json({ error: err.message });
-  }
-};
 
 app.get('/api/lichess/status', wrap(() => lichess.status()));
 app.post('/api/lichess/token', wrapAsync((req) => lichess.connectWithToken((req.body || {}).token, 'personal')));
@@ -203,95 +195,7 @@ const wss = new WebSocketServer({
     done(!why, 403, why || undefined);
   },
 });
-
-const clients = new Set();
-lichess.events.on('ratelimit', (until) => {
-  for (const c of clients) if (c.readyState === c.OPEN) c.send(JSON.stringify({ type: REPLY.LICHESS, status: lichess.status(), until }));
-});
-
-wss.on('connection', (ws) => {
-  clients.add(ws);
-  ws.on('close', () => clients.delete(ws));
-  const runs = new Map(); // client id -> engine run (for cancelling)
-  const send = (msg) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); };
-
-  send({ type: REPLY.HELLO, engine: engines.info() });
-
-  ws.on('message', async (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch (e) { return; }
-    // Not a request (null, a number, a list): ignore it. Reading msg.id from null here,
-    // outside the try below, would stop the whole server.
-    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return;
-    const { id } = msg;
-    try {
-      if (msg.type === REQUEST.ANALYSE) {
-        // A client only ever has one live analysis: a new one replaces the old.
-        for (const [key, run] of runs) if (run.kind === 'analyse') { run.cancel(); runs.delete(key); }
-        let last = 0;
-        let pending = null;
-        const flush = () => { pending = null; last = Date.now(); send({ type: REPLY.INFO, ...latest, id }); };
-        let latest = null;
-        const run = engines.analyse(msg, (snap) => {
-          latest = snap;
-          const wait = 120 - (Date.now() - last);
-          if (wait <= 0) flush();
-          else if (!pending) pending = setTimeout(flush, wait);
-        });
-        run.kind = 'analyse';
-        runs.set(id, run);
-        const res = await run.promise;
-        if (pending) clearTimeout(pending);
-        runs.delete(id);
-        send({ type: REPLY.DONE, ...res, id });
-      } else if (msg.type === REQUEST.STOP) {
-        const run = runs.get(id);
-        if (run) run.cancel();
-      } else if (msg.type === REQUEST.EVALUATE) {
-        const res = await engines.evaluate(msg);
-        send({ type: REPLY.RESULT, ...res, id });
-      } else if (msg.type === REQUEST.BESTMOVE) {
-        const res = await engines.bestmove(msg);
-        send({ type: REPLY.RESULT, ...res, id });
-      } else if (msg.type === REQUEST.STATUS) {
-        send({ type: REPLY.RESULT, id, engine: engines.info() });
-      } else if (msg.type === REQUEST.PUZZLE_SEARCH) {
-        const rep = store.getRepertoire(msg.repId);
-        if (!rep) throw Object.assign(new Error('Repertoire not found'), { status: 404 });
-        const fen = checkFen(msg.fen);
-        let stopped = false;
-        runs.set(id, { kind: 'search', cancel: () => { stopped = true; } });
-        const result = await searchMistakes({
-          rep,
-          model: buildRepertoire(rep),
-          fen,
-          prefix: msg.prefix,
-          engines,
-          lichess,
-          options: schema.finderOptions(store.getSettings()),
-          cancelled: () => stopped || ws.readyState !== ws.OPEN,
-          onEvent: (ev) => {
-            if (ev.kind === 'found') store.addPuzzles(rep.id, [ev.puzzle]);
-            if (ev.kind === 'gap') store.addGaps(rep.id, [ev.gap]);
-            send({ type: REPLY.SEARCH_EVENT, id, ...ev });
-          },
-        });
-        runs.delete(id);
-        send({ type: REPLY.RESULT, id, ...result, puzzles: result.puzzles.map((p) => p.id) });
-      } else {
-        // Without an answer the page would wait for its timeout.
-        throw new Error(`The server does not understand "${String(msg.type)}" requests. Reload the page.`);
-      }
-    } catch (err) {
-      send({ type: REPLY.ERROR, id, message: err.message });
-    }
-  });
-
-  ws.on('close', () => {
-    for (const run of runs.values()) run.cancel();
-    runs.clear();
-  });
-});
+serveEngineSocket(wss, { engines, store, lichess });
 
 server.listen(PORT, HOST, () => {
   const url = `http://localhost:${PORT}`;
@@ -307,10 +211,13 @@ server.listen(PORT, HOST, () => {
   store.sweepTempFiles();
   void lichess.pruneCache(store.getSettings().cacheDays);
   engines.warmUp();
+  /* c8 ignore next: opens the user's browser, which no test should do */
   if (process.argv.includes('--open')) openBrowser(url);
 });
 
-server.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+// ws passes the HTTP server's errors on to the WebSocket server, so they are handled there:
+// unhandled, Node would stop with a stack trace before any handler on `server` ran.
+wss.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`Port ${PORT} is already in use. Is the trainer already running? Try http://localhost:${PORT}`);
   } else {
@@ -319,10 +226,12 @@ server.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
   process.exit(1);
 });
 
+/* c8 ignore start: opens the user's browser (npm start, start.bat), which no test should do */
 function openBrowser(url) {
   const cmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
   exec(cmd, () => {});
 }
+/* c8 ignore stop */
 
 function shutdown() {
   engines.quit();

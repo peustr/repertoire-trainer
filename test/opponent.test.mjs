@@ -158,3 +158,15 @@ test('an answer from a set-up position keeps the position, and Black’s numbers
   assert.match(surpriseToPgn(asBlack, 'e7e5', { note: 'Rare.' }), /\[Event "Surprise: 1\.b3"\][\s\S]*\n\n1\. b3 \{ Rare\. \} 1\.\.\. e5 \*/);
   assert.throws(() => surpriseToPgn(asBlack, 'e7e4'), /not legal/);
 });
+
+test('explorer data without a move list, or Stockfish without lines, gives no surprises', () => {
+  assert.deepEqual(surpriseReplies(model, AFTER_D4, { total: 100 }), []);
+  assert.deepEqual(engineSurprises(model, AFTER_D4, null), []);
+  assert.deepEqual(engineSurprises(model, AFTER_D4, [null, { score: { cp: 10 } }, { score: { cp: 10 }, pv: [] }]), []);
+});
+
+test('a saved gap without a reach still comes up, after the likelier ones', () => {
+  const rep = { gaps: { b6: { ...GAP_B6, reach: undefined }, c6: GAP_C6 } };
+  const queue = surpriseQueue(rep, model, { rand: () => 0 });
+  assert.deepEqual(queue.slice(0, 2).map((q) => q.kind === 'gap' && [q.surprise.uci, q.reach]), [['c7c6', 0.05], ['b7b6', 0]]);
+});

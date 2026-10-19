@@ -3,10 +3,11 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-store-'));
 process.env.TRAINER_DATA_DIR = dataDir;
@@ -21,6 +22,7 @@ after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, re
 const repFile = (id) => path.join(REP_DIR, `${id}.json`);
 const readFile = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const setAside = (file) => fs.readdirSync(path.dirname(file)).filter((f) => f.startsWith(`${path.basename(file)}.corrupt-`));
+const positionOf = (fen) => fen.split(' ').slice(0, 4).join(' ');
 const tempFiles = () => fs.readdirSync(REP_DIR).filter((f) => f.endsWith('.tmp'));
 
 test('a damaged settings file is set aside and the previous version restored', (t) => {
@@ -182,4 +184,171 @@ test('Windows: a save succeeds while a sync client briefly holds the file', { sk
   assert.equal(store.getRepertoire(rep.id).cards.k.level, 2);
   assert.deepEqual(tempFiles(), []);
   await new Promise((resolve) => ps.once('exit', resolve));
+});
+
+test('without TRAINER_DATA_DIR, data lives in the data folder beside the app', () => {
+  const env = { ...process.env };
+  delete env.TRAINER_DATA_DIR;
+  const storeUrl = new URL('../store.js', import.meta.url).href;
+  // Loading the store touches no files, so this never reaches the real ./data.
+  const run = spawnSync(process.execPath, ['--input-type=module', '-e', `const s = await import(${JSON.stringify(storeUrl)}); console.log(s.DATA_DIR);`], { env, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout.trim(), path.join(fileURLToPath(new URL('..', import.meta.url)), 'data'));
+});
+
+test('a repertoire file that cannot be read is reported, not taken as missing', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  fs.mkdirSync(repFile('not-a-file'), { recursive: true });
+  t.after(() => fs.rmSync(repFile('not-a-file'), { recursive: true, force: true }));
+  assert.throws(() => store.getRepertoire('not-a-file'), { code: 'EISDIR' });
+  assert.ok(!store.listRepertoires().some((r) => r.id === 'not-a-file'), 'the library skips it');
+  assert.ok(warn.mock.calls.some((c) => /Skipped not-a-file\.json/.test(c.arguments[0])));
+});
+
+test('a damaged repertoire still opens from its backup when the backup cannot be copied back', (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const rep = store.createRepertoire({ name: 'Read only', color: 'white', pgn: PGN });
+  store.patchProgress(rep.id, { cards: { k: { level: 2, due: 0 } } }); // .bak holds the first version
+  fs.writeFileSync(repFile(rep.id), '{"id": "trunc');
+  t.mock.method(fs, 'copyFileSync', () => { throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' }); });
+
+  assert.equal(store.getRepertoire(rep.id).name, 'Read only');
+  assert.ok(!fs.existsSync(repFile(rep.id)), 'the next save writes it');
+});
+
+test('a failed save reports its own error even when its temp file cannot be removed', (t) => {
+  t.mock.method(fs, 'renameSync', () => { throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' }); });
+  t.mock.method(fs, 'unlinkSync', () => { throw Object.assign(new Error('EBUSY: resource busy'), { code: 'EBUSY' }); });
+  assert.throws(() => store.saveSettings({ theme: 'dark' }), { code: 'ENOSPC' });
+  t.mock.restoreAll();
+  store.sweepTempFiles();
+});
+
+test('temp files another program still holds are left for the next start', (t) => {
+  fs.mkdirSync(REP_DIR, { recursive: true });
+  const held = path.join(REP_DIR, 'y-1a2b3c.json.4242.1700000000000.tmp');
+  fs.writeFileSync(held, '{}');
+  t.mock.method(fs, 'unlinkSync', () => { throw Object.assign(new Error('EBUSY: resource busy'), { code: 'EBUSY' }); });
+  store.sweepTempFiles();
+  assert.ok(fs.existsSync(held));
+  t.mock.restoreAll();
+  store.sweepTempFiles();
+  assert.ok(!fs.existsSync(held));
+});
+
+test('a name with no letters or digits still gives a usable id', () => {
+  const rep = store.createRepertoire({ name: '♞ ♞!', color: 'white', pgn: PGN });
+  assert.match(rep.id, /^repertoire-[0-9a-f]{6}$/);
+  assert.equal(rep.name, '♞ ♞!');
+});
+
+test('the library lists repertoires oldest first, whatever their names', async () => {
+  const made = [];
+  for (const name of ['Zulu', 'Alpha', 'Mike']) {
+    made.push(store.createRepertoire({ name, color: 'white', pgn: PGN }).id);
+    await new Promise((resolve) => setTimeout(resolve, 5)); // distinct creation times
+  }
+  const order = store.listRepertoires().filter((r) => made.includes(r.id)).map((r) => r.name);
+  assert.deepEqual(order, ['Zulu', 'Alpha', 'Mike']);
+});
+
+test('changes to a repertoire that does not exist find nothing', () => {
+  const id = 'no-such-rep';
+  assert.equal(store.updateRepertoire(id, { name: 'X' }), null);
+  assert.equal(store.patchProgress(id, { cards: {} }), null);
+  assert.equal(store.addPuzzles(id, []), null);
+  assert.equal(store.addLine(id, { pgn: '1. e4 *' }), null);
+  assert.equal(store.addGaps(id, []), null);
+  assert.equal(store.deleteGap(id, 'k'), null);
+  assert.equal(store.deletePuzzle(id, 'p'), null);
+  assert.equal(store.resetProgress(id), null);
+  assert.equal(store.deleteRepertoire(id), false);
+  assert.ok(!fs.existsSync(repFile(id)), 'and nothing is created');
+});
+
+test('only the last 200 save ids are remembered', () => {
+  const rep = store.createRepertoire({ name: 'Many saves', color: 'white', pgn: PGN });
+  const ids = Array.from({ length: 200 }, (_, i) => `s${i}`);
+  fs.writeFileSync(repFile(rep.id), JSON.stringify({ ...readFile(repFile(rep.id)), appliedSaves: ids }));
+  store.patchProgress(rep.id, { cards: { a: { level: 1, due: 0 } }, saveId: 's200' });
+  const saved = store.getRepertoire(rep.id).appliedSaves;
+  assert.equal(saved.length, 200);
+  assert.equal(saved[0], 's1');
+  assert.equal(saved[199], 's200');
+});
+
+test('daily tallies keep the last 400 days, and missing counts add nothing', () => {
+  const rep = store.createRepertoire({ name: 'Long streak', color: 'white', pgn: PGN });
+  const day = (i) => new Date(Date.UTC(2025, 0, 1) + i * 864e5).toISOString().slice(0, 10);
+  const history = Array.from({ length: 400 }, (_, i) => ({ date: day(i), correct: 1, wrong: 0, lines: 1 }));
+  fs.writeFileSync(repFile(rep.id), JSON.stringify({ ...readFile(repFile(rep.id)), history }));
+
+  store.patchProgress(rep.id, { tally: { date: day(400), wrong: 2 } }); // no cards, no correct, no lines
+  const saved = store.getRepertoire(rep.id).history;
+  assert.equal(saved.length, 400);
+  assert.equal(saved[0].date, day(1), 'the oldest day goes');
+  assert.deepEqual(saved[399], { date: day(400), correct: 0, wrong: 2, lines: 0 });
+});
+
+test('a tally that arrives late, for an earlier day, is kept in date order', () => {
+  const rep = store.createRepertoire({ name: 'Offline yesterday', color: 'white', pgn: PGN });
+  store.patchProgress(rep.id, { tally: { date: '2026-10-18', correct: 1 } });
+  store.patchProgress(rep.id, { tally: { date: '2026-10-17', correct: 2 } }); // queued offline, sent today
+  assert.deepEqual(store.getRepertoire(rep.id).history.map((d) => [d.date, d.correct]), [['2026-10-17', 2], ['2026-10-18', 1]]);
+});
+
+test('puzzles and gaps without an id or position are skipped', () => {
+  const rep = store.createRepertoire({ name: 'Sparse', color: 'white', pgn: PGN });
+  assert.equal(store.addPuzzles(rep.id, undefined).added, 0);
+  const out = store.addPuzzles(rep.id, [null, { fen: 'x' }, { id: 'p1', fen: 'x' }]);
+  assert.equal(out.added, 1);
+  assert.deepEqual(Object.keys(out.rep.puzzles), ['p1']);
+
+  assert.deepEqual(store.addGaps(rep.id, undefined).gaps, {});
+  const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+  const gaps = store.addGaps(rep.id, [null, { share: 0.2 }, { fen, share: 0.2 }]).gaps;
+  assert.deepEqual(Object.keys(gaps), [positionOf(fen)]);
+});
+
+test('a gap or puzzle can be dismissed, and progress reset', () => {
+  const rep = store.createRepertoire({ name: 'Tidy', color: 'white', pgn: PGN });
+  assert.equal(store.deleteGap(rep.id, 'nothing yet').gaps, undefined, 'no gaps to remove from');
+  assert.equal(store.deletePuzzle(rep.id, 'nothing yet').puzzles, undefined);
+
+  const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+  store.addGaps(rep.id, [{ fen }]);
+  store.addPuzzles(rep.id, [{ id: 'p1' }, { id: 'p2' }]);
+  store.patchProgress(rep.id, { cards: { 'pz|p1': { level: 1, due: 0 }, k: { level: 2, due: 0 } }, tally: { date: '2026-10-18', correct: 1 } });
+
+  assert.deepEqual(store.deleteGap(rep.id, positionOf(fen)).gaps, {});
+  const after = store.deletePuzzle(rep.id, 'p1');
+  assert.deepEqual(Object.keys(after.puzzles), ['p2']);
+  assert.deepEqual(after.cards, { k: { level: 2, due: 0 } }, "the puzzle's progress goes with it");
+
+  const reset = store.resetProgress(rep.id);
+  assert.deepEqual([reset.cards, reset.history], [{}, []]);
+  assert.deepEqual(Object.keys(store.getRepertoire(rep.id).puzzles), ['p2'], 'the puzzles stay');
+});
+
+test('a repertoire file without PGN (edited by hand) can still take a new line', () => {
+  const rep = store.createRepertoire({ name: 'Hand edited', color: 'white', pgn: PGN });
+  const { pgn, ...rest } = readFile(repFile(rep.id));
+  assert.equal(pgn, PGN);
+  fs.writeFileSync(repFile(rep.id), JSON.stringify({ ...rest, puzzles: { p1: { id: 'p1' } } }));
+  assert.equal(store.addLine(rep.id, { pgn: '1. d4 *' }).pgn, '\n\n1. d4 *\n');
+
+  fs.writeFileSync(repFile(rep.id), JSON.stringify({ ...rest, puzzles: { p1: { id: 'p1' } } }));
+  assert.equal(store.addPuzzleLine(rep.id, 'p1', '1. c4 *').pgn, '\n\n1. c4 *');
+});
+
+test('a repertoire deleted before its first change has no backup to remove', () => {
+  const rep = store.createRepertoire({ name: 'Brief', color: 'white', pgn: PGN });
+  assert.ok(!fs.existsSync(`${repFile(rep.id)}.bak`));
+  assert.equal(store.deleteRepertoire(rep.id), true);
+  assert.ok(!fs.existsSync(repFile(rep.id)));
+});
+
+test('saving no settings changes nothing', () => {
+  const before = store.getSettings();
+  assert.deepEqual(store.saveSettings(null), before);
 });

@@ -19,6 +19,15 @@ test('the Node.js running the tests passes the check', () => {
   assert.equal(run.status, 0, run.stderr);
 });
 
+test('a Node.js that is too old gets a plain message and nothing else', () => {
+  const oldNode = fileURLToPath(new URL('./fixtures/old-node.cjs', import.meta.url));
+  const run = spawnSync(process.execPath, ['--require', oldNode, 'check-node.cjs'], { cwd: root, encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  const wanted = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).engines.node.replace(/^>=\s*/, '');
+  assert.match(run.stderr, new RegExp(`Repertoire Trainer needs Node\\.js ${wanted.replace('.', '\\.')} or newer\\. This computer has v18\\.20\\.4\\.`));
+  assert.match(run.stderr, /Install the LTS version from https:\/\/nodejs\.org/);
+});
+
 test('package.json and the CI matrix agree on the minimum', () => {
   const wanted = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).engines.node;
   const ci = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');

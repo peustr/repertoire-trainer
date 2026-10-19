@@ -150,7 +150,8 @@ with, or whichever native .exe you give it. The built-in engine can use at most
 ## Project layout
 
 ```
-server.js            Express server, REST API, WebSocket bridge to Stockfish
+server.js            Express server, REST API, starts the WebSocket bridge
+engine-socket.js     The WebSocket bridge to Stockfish: runs the pages' engine requests
 engine.js            UCI engine manager (native .exe or bundled WASM)
 lichess.js           Lichess client: OAuth, explorer (queued, cached), studies
 puzzles.js           Opponent-mistake tree search and puzzle builder
