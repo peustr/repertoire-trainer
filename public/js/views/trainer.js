@@ -42,6 +42,9 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   }
   const sessionSize = mode === 'review' && !target ? settings.reviewBatch : queue.length;
   const tally = { lines: 0, right: 0, wrong: 0 };
+  // The line that follows the one just finished, chosen once: retrying a line must not pass
+  // it over (nextLine() takes Learn and Practise lines off the queue).
+  let upcoming;
 
   function nextLine() {
     if (mode === 'review' && !target) {
@@ -54,6 +57,13 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
       return l;
     }
     return null;
+  }
+
+  /** The line to go on with: the one already chosen after the last line, or else the next. */
+  function takeNext() {
+    const next = upcoming === undefined ? nextLine() : upcoming;
+    upcoming = undefined;
+    return next;
   }
 
   // ---- layout -------------------------------------------------------------------
@@ -95,7 +105,8 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   const later = (fn, ms) => { const t = setTimeout(() => { timers = timers.filter((x) => x !== t); if (alive) fn(); }, ms); timers.push(t); };
   const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
 
-  function startLine(line, phase) {
+  /** retry: "Retry line", extra practice that counts neither in the session nor in the day's tally. */
+  function startLine(line, phase, { retry = false } = {}) {
     clearTimers();
     if (engineRun) { engineRun.stop(); engineRun = null; }
     evalBar.hide(true);
@@ -103,6 +114,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     run = {
       line,
       phase,
+      retry,
       ply: 0,
       fen: line.startFen,
       lastUci: null,
@@ -270,12 +282,15 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     run.results = graded.results;
     const { updates, right, wrong } = graded;
     const outcomes = graded.outcomes.map((o) => ({ node: model.cards.get(o.key).node, r: o.result, text: outcomeText(o, now) }));
-    tally.lines++;
-    tally.right += right;
-    tally.wrong += wrong;
+    if (!run.retry) {
+      tally.lines++;
+      tally.right += right;
+      tally.wrong += wrong;
+    }
     done.add(line.id);
-    if (Object.keys(updates).length || mode !== 'practice') {
-      void saveCards(rep.id, updates, mode === 'practice' ? null : { correct: right, wrong, lines: 1 }); // never rejects: see the outbox
+    // A practice pass (Practise, or a retry in any mode) leaves the schedule and the day's tally alone.
+    if (run.phase !== 'practice') {
+      void saveCards(rep.id, updates, { correct: right, wrong, lines: 1 }); // never rejects: see the outbox
     }
     if (!wrong) sound.done();
     renderDots();
@@ -283,7 +298,8 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   }
 
   function showLineDone(line, right, wrong, outcomes) {
-    const next = nextLine();
+    if (upcoming === undefined) upcoming = nextLine();
+    const next = upcoming;
     const perfect = wrong === 0;
     setPrompt(perfect ? 'Line complete' : 'Line complete, with mistakes', perfect ? `${plural(right, 'move')} right.` : `${right} right, ${wrong} to revisit.`);
     clear(notes);
@@ -292,9 +308,9 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     feedback.append(finalEval);
     clear(controls,
       next
-        ? h('button.btn.primary', { type: 'button', on: { click: () => startLine(next, phaseFor()) }, 'data-key': 'Enter', 'aria-keyshortcuts': 'Enter' }, keyed('Next line', '↵'))
+        ? h('button.btn.primary', { type: 'button', on: { click: () => startLine(takeNext(), phaseFor()) }, 'data-key': 'Enter', 'aria-keyshortcuts': 'Enter' }, keyed('Next line', '↵'))
         : h('button.btn.primary', { type: 'button', on: { click: showSessionDone }, 'data-key': 'Enter', 'aria-keyshortcuts': 'Enter' }, keyed('Finish session', '↵')),
-      h('button.btn', { type: 'button', on: { click: () => startLine(line, 'practice') } }, 'Retry line'));
+      h('button.btn', { type: 'button', on: { click: () => startLine(line, 'practice', { retry: true }) } }, 'Retry line'));
     setTools([
       playOutTool(sparLink(run.fen, { goal: 'hold' }), settings),
       sparTool(sparLink(run.fen), settings),
@@ -396,7 +412,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   }
 
   function renderHead() {
-    const pos = done.size + 1;
+    const pos = done.size + (done.has(run.line.id) ? 0 : 1); // a retried line keeps its place
     const total = mode === 'review' && !target ? Math.min(sessionSize, done.size + countDue()) : sessionSize;
     clear(crumbs,
       h('a.backlink', { href: `#/rep/${rep.id}` }, rep.name),
@@ -480,7 +496,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
           if (!run) return;
           clearTimers();
           done.add(run.line.id);
-          const next = nextLine();
+          const next = takeNext();
           if (next) startLine(next, phaseFor());
           else showSessionDone();
         },

@@ -4,14 +4,16 @@
 // folder, and offers helpers to seed data through the API. With
 // `test.use({ lichess: true })` it also starts the mock Lichess (test/mock-lichess.js)
 // and connects the trainer to it. `playMove` moves a piece on the chessground board by
-// clicking its square and then the destination.
+// clicking its square and then the destination. `fakeEngine` stands in for Stockfish.
 
 import { test as base, expect } from '@playwright/test';
+import { Chess } from 'chess.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../helpers/server.mjs';
 import { startMockLichess } from '../helpers/mock-lichess.mjs';
+import { REQUEST, REPLY } from '../../public/js/protocol.js';
 
 const SAMPLES = fileURLToPath(new URL('../../samples', import.meta.url));
 
@@ -94,6 +96,45 @@ export async function playMove(page, uci, orientation = 'white') {
   };
   await clickSquare(uci.slice(0, 2));
   await clickSquare(uci.slice(2, 4));
+}
+
+/**
+ * Replace the engine WebSocket with a fake that answers the page's requests: bestmove
+ * with the first legal move, evaluate and analyse as the test says, and the mistake
+ * search with the events and result `search` gives (no events and an empty result by
+ * default). Nothing waits on a real search. Returns every request the page sent.
+ * @param {import('@playwright/test').Page} page
+ * @param {{ evaluate?: (msg: any) => object, analyse?: (msg: any) => object[],
+ *   search?: (msg: any) => { events?: object[], result?: object } }} [script]
+ */
+export async function fakeEngine(page, {
+  evaluate = () => ({ best: { move: null, score: null, pv: [] }, moves: [] }),
+  analyse = () => [],
+  search = () => ({}),
+} = {}) {
+  const asked = [];
+  await page.routeWebSocket(/\/ws$/, (ws) => {
+    ws.send(JSON.stringify({ type: REPLY.HELLO, engine: null }));
+    ws.onMessage((raw) => {
+      const msg = JSON.parse(String(raw));
+      asked.push(msg);
+      const reply = (body) => ws.send(JSON.stringify({ ...body, id: msg.id }));
+      if (msg.type === REQUEST.BESTMOVE) {
+        const [first] = new Chess(msg.fen).moves({ verbose: true });
+        reply({ type: REPLY.RESULT, move: first.from + first.to + (first.promotion || ''), score: { cp: 0 } });
+      } else if (msg.type === REQUEST.EVALUATE) {
+        reply({ type: REPLY.RESULT, fen: msg.fen, depth: msg.depth, ...evaluate(msg) });
+      } else if (msg.type === REQUEST.ANALYSE) {
+        const lines = analyse(msg);
+        reply({ type: REPLY.DONE, depth: 12, lines, bestmove: lines.length ? lines[0].pv[0] : null });
+      } else if (msg.type === REQUEST.PUZZLE_SEARCH) {
+        const { events = [], result = {} } = search(msg);
+        for (const event of events) reply({ type: REPLY.SEARCH_EVENT, ...event });
+        reply({ type: REPLY.RESULT, puzzles: [], gaps: [], stats: { positions: 1, lookups: 1, cached: 0 }, exhausted: true, cancelled: false, ...result });
+      }
+    });
+  });
+  return asked;
 }
 
 /** In the trainer, play your moves of a line (UCI), waiting for each prompt. */

@@ -4,8 +4,8 @@
 // mock (test/mock-lichess.js) where a test asks for it.
 
 import { Chess } from 'chess.js';
-import { test, expect, playMove, playLine } from './fixtures.mjs';
-import { REQUEST, REPLY } from '../../public/js/protocol.js';
+import { test, expect, playMove, playLine, fakeEngine } from './fixtures.mjs';
+import { REQUEST } from '../../public/js/protocol.js';
 import { START_FEN, positionKey } from '../../public/js/constants.js';
 import { buildRepertoire } from '../../public/js/repertoire.js';
 
@@ -14,34 +14,6 @@ function fenAfter(sans, from = START_FEN) {
   const c = new Chess(from);
   for (const san of sans) c.move(san);
   return c.fen();
-}
-
-/**
- * Answer the page's engine requests: bestmove with the first legal move, evaluate and
- * analyse as the test says. Returns every request the page sent.
- * @param {import('@playwright/test').Page} page
- * @param {{ evaluate?: (msg: any) => object, analyse?: (msg: any) => object[] }} [script]
- */
-async function fakeEngine(page, { evaluate = () => ({ best: { move: null, score: null, pv: [] }, moves: [] }), analyse = () => [] } = {}) {
-  const asked = [];
-  await page.routeWebSocket(/\/ws$/, (ws) => {
-    ws.send(JSON.stringify({ type: REPLY.HELLO, engine: null }));
-    ws.onMessage((raw) => {
-      const msg = JSON.parse(String(raw));
-      asked.push(msg);
-      const reply = (body) => ws.send(JSON.stringify({ ...body, id: msg.id }));
-      if (msg.type === REQUEST.BESTMOVE) {
-        const [first] = new Chess(msg.fen).moves({ verbose: true });
-        reply({ type: REPLY.RESULT, move: first.from + first.to + (first.promotion || ''), score: { cp: 0 } });
-      } else if (msg.type === REQUEST.EVALUATE) {
-        reply({ type: REPLY.RESULT, fen: msg.fen, depth: msg.depth, ...evaluate(msg) });
-      } else if (msg.type === REQUEST.ANALYSE) {
-        const lines = analyse(msg);
-        reply({ type: REPLY.DONE, depth: 12, lines, bestmove: lines.length ? lines[0].pv[0] : null });
-      }
-    });
-  });
-  return asked;
 }
 
 /** A scripted evaluate: Stockfish's best is `best`, and each move scores as listed (others −1.00). */

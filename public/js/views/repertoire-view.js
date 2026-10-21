@@ -161,6 +161,7 @@ function findInChapter(rep, chapter) {
     fen: n.fen,
     prefix: { startFen: chapter.root.fen, moves },
     where: sans.length ? `${chapter.name}, from ${formatSanLine(sans.slice(-6))}` : chapter.name,
+    onSaved: refresh,
   });
 }
 
@@ -168,7 +169,7 @@ function opponentsPanel(rep, model, pz) {
   const list = puzzleList(rep).sort((a, b) => (b.reach || 0) - (a.reach || 0));
   const gaps = Object.entries(rep.gaps || {}).map(([key, g]) => ({ key, ...g })).sort((a, b) => (b.reach || 0) - (a.reach || 0));
   const start = model.chapters[0];
-  const searchAll = action(() => openMistakeFinder({ rep, fen: start.root.fen, prefix: { startFen: start.root.fen, moves: [] }, where: 'Whole repertoire' }));
+  const searchAll = action(() => openMistakeFinder({ rep, fen: start.root.fen, prefix: { startFen: start.root.fen, moves: [] }, where: 'Whole repertoire', onSaved: refresh }));
   if (!list.length && !gaps.length) {
     return h('div.opponents',
       h('div.audit-head',
