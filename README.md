@@ -130,9 +130,12 @@ with, or whichever native .exe you give it. The built-in engine can use at most
   keyed by position, so a move shared by many lines (1.e4, or a transposition
   between chapters) is one card, learned once.
 - Eight levels with waits of 4 hours, 1 day, 3 days, 1 week, 2 weeks, 1 month,
-  3 months and 6 months. A correct answer on a due card moves it up one level.
-  A mistake (or a hint) sends it back to level 1, or two levels down if you pick
-  that in Settings.
+  3 months and 6 months (each can be changed in **Settings → Memory schedule**).
+  A correct answer on a due card moves it up one level.
+- A mistake sends the card back to level 1, or down 1 to 7 levels (2 by default)
+  if you choose **Drop a few levels** in Settings. A hint counts as a mistake,
+  unless you turn off **A hint counts as a mistake**: then a hint costs nothing,
+  but the move does not level up either.
 - If you play a different move that is also in your repertoire for that
   position, the trainer tells you so and lets you try again without a penalty.
 - When you make a real mistake, Stockfish scores your move against the book move
@@ -148,44 +151,7 @@ with, or whichever native .exe you give it. The built-in engine can use at most
 - `[SetUp "1"]` + `[FEN "…"]` start a chapter from any position.
 - Editing a repertoire keeps progress on every move that is still in the PGN.
 
-## Project layout
-
-```
-server.js            Express server, REST API, starts the WebSocket bridge
-engine-socket.js     The WebSocket bridge to Stockfish: runs the pages' engine requests
-engine.js            UCI engine manager (native .exe or bundled WASM)
-lichess.js           Lichess client: OAuth, explorer (queued, cached), studies
-puzzles.js           Opponent-mistake tree search and puzzle builder
-store.js             JSON file storage in ./data
-repertoire-format.js The repertoire file format: typedef, version, migration, checks
-settings-schema.js   Every setting: default, range, help text (drives the Settings page)
-check-node.cjs       Stops with a plain message on a too-old Node.js
-check-install.cjs    Tells start.bat when to install the dependencies
-public/
-  index.html         App shell, import map
-  css/app.css        All styles (Inter, the palette, light and dark)
-  js/constants.js    Start position, position keys, scores, Lichess speeds and ratings
-  js/moves.js        Playing a move from a position (UCI or SAN), for every page and the server
-  js/pgn.js          PGN tokenizer and move-tree builder
-  js/repertoire.js   Lines and cards from a move tree
-  js/srs.js          Spaced-repetition scheduler
-  js/board.js        Chessground board, chess.js rules, eval bar
-  js/engine-client.js  Browser side of the engine bridge
-  js/protocol.js     The engine WebSocket's messages
-  js/puzzle-utils.js Puzzle queue, PGN export, explorer formatting
-  js/opponent.js     How opponents choose moves: Lichess players by popularity, surprises off your book
-  js/session.js      The training rules: what a pass quizzes, how answers, surprises and play-outs are graded
-  js/views/          Library, repertoire, import, trainer, explore, spar, surprise,
-                     audit, lichess, finder (search dialog), puzzles, settings,
-                     tools (the "From this position" list beside the board)
-samples/             Two sample repertoires
-test/*.test.mjs      Unit and integration tests: parser, scheduler, storage, engine,
-                     server security, Lichess client, mistake search (npm test)
-test/smoke-server.mjs Boots the server and checks the API and engine (npm run test:smoke)
-test/e2e/            Playwright browser tests (npm run test:e2e)
-test/mock-lichess.js Offline stand-in for the Lichess API
-test/helpers/, test/fixtures/  Test server launcher, fake Stockfish
-```
+## Your data
 
 Settings live in `data/settings.json`, repertoires in `data/repertoires/*.json`.
 Back up or sync the `data` folder to keep your progress. If the trainer's console
@@ -198,6 +164,79 @@ goes to `data/trash`, with its `.bak`: to restore it, move its `.json` file back
 into `data/repertoires`. A repertoire file's name is its id, so a copy you make by
 hand needs a new name of lower-case letters, digits and dashes (`my-copy.json`);
 the trainer skips other names and says so in its console window.
+
+### Another data folder, or another port
+
+The trainer keeps its data in the `data` folder beside it and answers on port
+3210. To keep the data somewhere else, such as a folder OneDrive syncs, or to use
+another port, set `TRAINER_DATA_DIR` or `PORT`. For `start.bat`, run these once in
+a Command Prompt; they apply from the next start:
+
+```
+setx TRAINER_DATA_DIR "D:\OneDrive\Chess\trainer-data"
+setx PORT 3300
+```
+
+Close the trainer and move what is in the old `data` folder to the new one first.
+To go back, run `setx TRAINER_DATA_DIR ""` or `setx PORT ""`. A new port is a
+new address (`http://localhost:3300`), and the browser keeps answers that are
+waiting to be saved per address, so change it only when the trainer has not told
+you that saving is failing. From a terminal on any system:
+`TRAINER_DATA_DIR=/path/to/data PORT=3300 npm start`.
+
+## Project layout
+
+```
+start.bat            Double-click to start: checks Node.js, installs what changed, runs the server
+server.js            Express server, REST API, starts the WebSocket bridge
+engine-socket.js     The WebSocket bridge to Stockfish: runs the pages' engine requests
+engine.js            UCI engine manager (native .exe or bundled WASM)
+lichess.js           Lichess client: OAuth, explorer (queued, cached), studies
+puzzles.js           Opponent-mistake tree search and puzzle builder
+store.js             JSON file storage in ./data: atomic saves, backups, the trash
+repertoire-format.js The repertoire file format: typedef, version, migration, checks
+settings-schema.js   Every setting: default, range, help text (drives the Settings page)
+check-node.cjs       Stops with a plain message on a too-old Node.js
+check-install.cjs    Tells start.bat when to install the dependencies
+public/
+  index.html         App shell, import map
+  css/app.css        All styles (Inter, the palette, light and dark)
+  js/app.js          Header, hash router and start-up
+  js/nav.js          refresh(): draw the current page again
+  js/api.js          The REST API, one function per route
+  js/store.js        The page's copy of repertoires and settings; saveCards()
+  js/outbox.js       Answers waiting to be saved, kept in the browser until the server has them
+  js/ui.js           DOM helpers (h, action, toasts, dialogs), notation, sounds
+  js/board.js        Chessground board, promotion, game status, eval bar
+  js/engine-client.js  Browser side of the engine bridge
+  js/protocol.js     The engine WebSocket's messages
+  js/constants.js    Start position, position keys, scores, Lichess speeds and ratings
+  js/moves.js        Playing a move from a position (UCI or SAN), for every page and the server
+  js/pgn.js          PGN tokenizer and move-tree builder
+  js/repertoire.js   Lines and cards from a move tree
+  js/srs.js          Spaced-repetition scheduler
+  js/session.js      The training rules: what a pass quizzes, how answers, surprises and play-outs are graded
+  js/opponent.js     How opponents choose moves: Lichess players by popularity, surprises off your book
+  js/puzzle-utils.js Puzzle queue, PGN export, explorer formatting
+  js/views/          Library, repertoire, import, trainer, explore, spar, surprise,
+                     audit, lichess, finder (search dialog), puzzles, settings,
+                     tools (the "From this position" list beside the board)
+samples/             Two sample repertoires
+engine/              Where a native Stockfish .exe goes (see engine/README.txt)
+test/*.test.mjs      Unit and integration tests (npm test): storage, the file format and
+                     card keys, the engine and its socket, the server's API and security,
+                     the Lichess client, the mistake search, PGN, moves, scheduling, the
+                     training rules, opponents, the outbox, the start-up checks
+test/smoke-server.mjs Boots the server and checks the API and engine (npm run test:smoke)
+test/e2e/            Playwright browser tests (npm run test:e2e)
+test/mock-lichess.js Offline stand-in for the Lichess API
+test/helpers/, test/fixtures/  Server and mock Lichess launchers, fake Stockfish
+package.json         Dependencies, pinned exactly, and the npm scripts
+eslint.config.mjs, tsconfig.json  Lint and type check (npm run check)
+.c8rc.json           npm test's coverage thresholds: 100%
+playwright.config.mjs  Browser test settings
+.github/             CI (tests, lint, browser tests, secrets scan) and Dependabot
+```
 
 ## Credits
 
