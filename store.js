@@ -13,6 +13,7 @@ import { SCHEMA_VERSION, migrate, checkRepertoireInput, checkProgress, checkChap
 
 const DATA_DIR = process.env.TRAINER_DATA_DIR || path.join(import.meta.dirname, 'data');
 const REP_DIR = path.join(DATA_DIR, 'repertoires');
+const TRASH_DIR = path.join(DATA_DIR, 'trash');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 function ensureDirs() {
@@ -38,16 +39,49 @@ function withRetry(fn, attempt = 0) {
   }
 }
 
-/** Write via a temp file and rename, keeping the previous version as <file>.bak. */
-function writeJsonAtomic(file, data) {
+/**
+ * Write via a temp file and rename, so a reader never sees half a file. The temp file
+ * reaches the disk before the rename: otherwise a power cut can leave the renamed file
+ * empty. The previous version is kept as <file>.bak, unless `backup` is false (the
+ * Lichess token, which must not outlive a disconnect).
+ * @param {string} file
+ * @param {unknown} data
+ * @param {{ backup?: boolean, mode?: number }} [options]  mode: the file's permissions
+ */
+function writeJsonAtomic(file, data, { backup = true, mode = 0o666 } = {}) {
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
   try {
-    if (fs.existsSync(file)) withRetry(() => fs.copyFileSync(file, `${file}.bak`));
+    writeToDisk(tmp, JSON.stringify(data, null, 2), mode);
+    if (backup && fs.existsSync(file)) {
+      withRetry(() => fs.copyFileSync(file, `${file}.bak`));
+      // The backup is only a fallback: one that is not on disk yet must not stop the save.
+      try { withRetry(() => syncToDisk(`${file}.bak`)); } catch (err) { /* written, just not flushed */ }
+    }
     withRetry(() => fs.renameSync(tmp, file));
   } catch (err) {
     try { fs.unlinkSync(tmp); } catch (e) { /* already gone */ }
     throw err;
+  }
+}
+
+/** Write a new file and wait until it is on the disk. */
+function writeToDisk(file, text, mode) {
+  const fd = fs.openSync(file, 'w', mode);
+  try {
+    fs.writeFileSync(fd, text, 'utf8');
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/** Wait until a file written some other way (a copy) is on the disk. */
+function syncToDisk(file) {
+  const fd = fs.openSync(file, 'r+'); // Windows flushes only a file opened for writing
+  try {
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
   }
 }
 
@@ -314,11 +348,17 @@ function resetProgress(id) {
   return rep;
 }
 
+/**
+ * Delete a repertoire by moving its file, and its backup, to data/trash/<id>-<time>/, so a
+ * mistaken delete can be undone by moving them back into data/repertoires.
+ */
 function deleteRepertoire(id) {
   const file = repFile(id);
   if (!fs.existsSync(file)) return false;
-  withRetry(() => fs.unlinkSync(file));
-  try { fs.unlinkSync(`${file}.bak`); } catch (err) { /* no backup yet */ }
+  const bin = path.join(TRASH_DIR, `${id}-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+  fs.mkdirSync(bin, { recursive: true });
+  withRetry(() => fs.renameSync(file, path.join(bin, path.basename(file))));
+  if (fs.existsSync(`${file}.bak`)) withRetry(() => fs.renameSync(`${file}.bak`, path.join(bin, `${path.basename(file)}.bak`)));
   return true;
 }
 
@@ -336,6 +376,7 @@ function saveSettings(patch) {
 
 export {
   DATA_DIR,
+  writeJsonAtomic,
   sweepTempFiles,
   listRepertoires,
   getRepertoire,

@@ -19,17 +19,21 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "node_modules\" (
+rem Install the dependencies on the first run, and again after an update changed them.
+node check-install.cjs
+if errorlevel 1 (
   echo.
-  echo   First run: installing dependencies. This takes a minute.
+  echo   Installing the trainer's components. This takes a minute and needs the internet.
   echo.
-  call npm install --no-audit --no-fund
+  call npm ci --no-audit --no-fund
   if errorlevel 1 (
     echo.
-    echo   npm install failed. Check your internet connection and try again.
+    echo   The installation failed. Check your internet connection, close any other
+    echo   Repertoire Trainer window, and run start.bat again.
     pause
     exit /b 1
   )
+  node check-install.cjs --done
 )
 
 node server.js --open

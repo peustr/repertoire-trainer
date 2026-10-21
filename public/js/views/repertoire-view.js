@@ -249,7 +249,7 @@ function toolsPanel(rep) {
         type: 'button',
         on: {
           click: action(async () => {
-            if (!(await confirmDialog('Delete this repertoire?', `${rep.name} and its review history will be removed from the data folder.`, 'Delete', true))) return;
+            if (!(await confirmDialog('Delete this repertoire?', `${rep.name} and its review history leave the library. The file is moved to the trash folder inside the data folder, so it can be restored by hand.`, 'Delete', true))) return;
             await api.remove(rep.id);
             dropRep(rep.id);
             toast('Repertoire deleted');
