@@ -166,13 +166,20 @@ export function sanToUci(fen, san) {
   }
 }
 
-export function gameStatus(fen) {
+/**
+ * Whether a game is over, and why. The game is replayed from its start, because a
+ * threefold repetition needs the positions before the current one, which a FEN does not hold.
+ * @param {string} startFen
+ * @param {string[]} [moves]  UCI, from startFen to the current position
+ */
+export function gameStatus(startFen, moves = []) {
   const c = new Chess();
-  c.load(fen, { skipValidation: true });
+  c.load(startFen, { skipValidation: true });
+  for (const u of moves) c.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
   if (c.isCheckmate()) return { over: true, text: `Checkmate — ${c.turn() === 'w' ? 'Black' : 'White'} wins`, winner: c.turn() === 'w' ? 'b' : 'w' };
   if (c.isStalemate()) return { over: true, text: 'Stalemate — draw' };
   if (c.isInsufficientMaterial()) return { over: true, text: 'Insufficient material — draw' };
-  if (c.isThreefoldRepetition && c.isThreefoldRepetition()) return { over: true, text: 'Threefold repetition — draw' };
+  if (c.isThreefoldRepetition()) return { over: true, text: 'Threefold repetition — draw' };
   if (c.isDraw()) return { over: true, text: 'Draw' };
   return { over: false };
 }

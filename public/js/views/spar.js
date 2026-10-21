@@ -114,6 +114,8 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
   // ---- game flow ------------------------------------------------------------------------
   const fenNow = () => (history.length ? history[history.length - 1].fen : startFen);
   const myTurn = () => turnColor(fenNow()) === me;
+  /** Whether the game is over, judged on the whole game so that a threefold repetition counts. */
+  const gameNow = () => gameStatus(startFen, history.map((m) => m.uci));
   const myMoves = () => history.filter((m) => m.color === mine);
   const strength = () => (elo >= 3190 ? 'full strength' : `${elo} Elo`);
   /** The Lichess database ran out (or could not be asked) earlier in this game. */
@@ -122,7 +124,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
   function render() {
     const fen = fenNow();
     const last = history[history.length - 1];
-    const st = gameStatus(fen);
+    const st = gameNow();
     board.setPosition(fen, { lastMove: last ? last.uci : undefined, movable: myTurn() && !thinking && !st.over && !finished });
     clear(title, goal ? `Play it out as ${me === 'white' ? 'White' : 'Black'}` : `Spar as ${me === 'white' ? 'White' : 'Black'}`);
     modeTag.textContent = goal ? `Play it out · ${Math.min(myMoves().length, goal.moves)} of ${goal.moves}` : 'Spar';
@@ -218,7 +220,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     if (prepared.length && !prepared.some((n) => n.uci === uci)) {
       toast(`Your repertoire move here was ${prepared.map((n) => fig(n.san)).join(' or ')}.`);
     }
-    if (goal && (myMoves().length >= goal.moves || gameStatus(res.fen).over)) { void finishPlayout(); return; }
+    if (goal && (myMoves().length >= goal.moves || gameNow().over)) { void finishPlayout(); return; }
     void engineTurn();
   }
 
@@ -256,7 +258,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
 
   async function engineTurn() {
     const fen = fenNow();
-    if (myTurn() || gameStatus(fen).over || finished) { render(); return; }
+    if (myTurn() || gameNow().over || finished) { render(); return; }
     thinking = true;
     render();
     const token = gameToken;
@@ -280,7 +282,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     if (move.source !== 'book') noteBookExit(fen, res, bookReplies(fen));
     history.push({ ...res, ...move, before: fen });
     board.setPosition(res.fen, { lastMove: res.uci, playSound: true, captured: res.captured });
-    if (goal && gameStatus(res.fen).over) { void finishPlayout(); return; }
+    if (goal && gameNow().over) { void finishPlayout(); return; }
     render();
   }
 
@@ -338,7 +340,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     finished = true;
     render();
     const fen = fenNow();
-    const st = gameStatus(fen);
+    const st = gameNow();
     const result = st.over ? (st.winner ? (st.winner === mine ? 'win' : 'loss') : 'draw') : null;
     setStatus('Play-out over', 'Stockfish is judging the position…');
     clear(goalControls,

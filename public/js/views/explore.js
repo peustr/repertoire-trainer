@@ -411,7 +411,8 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   // ---- keyboard ------------------------------------------------------------------------------
   function onKey(e) {
     if (e.target.closest('input, textarea, select, dialog')) return;
-    const keys = { ArrowLeft: back, ArrowRight: forward, ArrowUp: () => sibling(-1), ArrowDown: () => sibling(1), Home: () => goTo(chapter.root), End: toEnd, f: () => board.flip() };
+    const flip = () => board.flip();
+    const keys = { ArrowLeft: back, ArrowRight: forward, ArrowUp: () => sibling(-1), ArrowDown: () => sibling(1), Home: () => goTo(chapter.root), End: toEnd, f: flip, F: flip };
     if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
   }
   document.addEventListener('keydown', onKey);
