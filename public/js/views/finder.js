@@ -2,18 +2,22 @@
 // position you are learning.
 
 import { h, clear, sanLabel, fig, plural, sound, lineTail } from '../ui.js';
-import { refresh } from '../nav.js';
 import { state, loadLichess } from '../store.js';
 import { searchMistakes, onLichessNotice } from '../engine-client.js';
 import { formatGames, formatShare, describeRatings, describeSpeeds, describeReach } from '../puzzle-utils.js';
 
-export async function openMistakeFinder({ rep, fen, prefix, where }) {
+/**
+ * @param {{ rep: any, fen: string, prefix: { startFen: string, moves: string[] }, where: string, onSaved?: () => void }} options
+ *   onSaved runs when the dialog closes after the search saved puzzles or gaps. The repertoire
+ *   page passes its redraw; a board page must not redraw, or a session in progress restarts.
+ */
+export async function openMistakeFinder({ rep, fen, prefix, where, onSaved = () => {} }) {
   await loadLichess();
   const close = () => {
     if (search) search.stop();
     dlg.close();
     dlg.remove();
-    if (found.length || gapCount) refresh();
+    if (found.length || gapCount) onSaved();
   };
   let search = null;
   const found = [];
