@@ -6,15 +6,16 @@
 //           moves you already know play themselves.
 // Practise: every move, no effect on the schedule.
 
-import { h, clear, sound, fig, sanLabel, uciLineToSan, formatSanLine, plural, action, keyed, panelSection, toolList } from '../ui.js';
+import { h, clear, sound, fig, useFigurines, sanLabel, uciLineToSan, formatSanLine, plural, action, keyed, panelSection, toolList } from '../ui.js';
 import { refresh } from '../nav.js';
 import { state, getRep, modelFor, saveCards } from '../store.js';
 import { cardKey } from '../repertoire.js';
-import { nagGlyphs, moveNumber } from '../pgn.js';
+import { nagGlyphs, moveNumber, moveLabel } from '../pgn.js';
 import { START_FEN, positionKey, scoreToCp } from '../constants.js';
 import { lineStatus, nextReviewLine, newLines, describeWait } from '../srs.js';
 import { passPlan, resultForCorrectMove, resultAfterHint, firstResult, judgeWrongMove, gradePass } from '../session.js';
-import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci } from '../board.js';
+import { createBoard, createEvalBar, isPromotion, choosePromotion } from '../board.js';
+import { playMove } from '../moves.js';
 import { evaluate, analyse, formatScore, evalBarShare } from '../engine-client.js';
 import { openMistakeFinder } from './finder.js';
 import { playOutTool, sparTool, finderTool as findTool, exploreTool } from './tools.js';
@@ -93,7 +94,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   page.append(boardCol, panel);
   root.append(page);
 
-  const board = createBoard(boardHost, { orientation: rep.color, onMove: onUserMove });
+  const board = createBoard(boardHost, { orientation: rep.color, onMove: action(onUserMove) });
   const evalBar = createEvalBar(evalHost);
   evalBar.hide(true);
 
@@ -171,7 +172,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   }
 
   function playNode(node) {
-    const res = applyUci(run.fen, node.uci);
+    const res = playMove(run.fen, node.uci);
     run.fen = node.fen;
     run.lastUci = node.uci;
     run.played.push(node);
@@ -207,7 +208,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     }
 
     const inRepertoire = (model.myMovesAt.get(positionKey(run.fen)) || new Set()).has(uci);
-    const played = applyUci(run.fen, uci);
+    const played = playMove(run.fen, uci);
     const meaning = judgeWrongMove({ inRepertoire, phase: run.phase }, settings);
     if (meaning === 'alternative') {
       board.setPosition(run.fen, { lastMove: run.lastUci, movable: true });
@@ -390,8 +391,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
   }
 
   function moveText(node) {
-    const n = moveNumber(node);
-    return node.color === 'w' ? `${n}.${fig(node.san)}` : `${n}...${fig(node.san)}`;
+    return moveLabel(node, useFigurines());
   }
 
   function setPrompt(title, sub) {

@@ -22,7 +22,6 @@ export function serveEngineSocket(wss, { engines, store, lichess }) {
 
   wss.on('connection', (ws) => {
     clients.add(ws);
-    ws.on('close', () => clients.delete(ws));
     const runs = new Map(); // client id -> engine run (for cancelling)
     const send = (msg) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); };
 
@@ -108,6 +107,7 @@ export function serveEngineSocket(wss, { engines, store, lichess }) {
     });
 
     ws.on('close', () => {
+      clients.delete(ws);
       for (const run of runs.values()) run.cancel();
       runs.clear();
     });

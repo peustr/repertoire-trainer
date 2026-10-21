@@ -7,20 +7,18 @@
 // With goal=hold ("Play it out" after a line) you play a set number of moves, and you
 // pass if Stockfish's evaluation holds up (gradePlayout in session.js).
 
-import { h, clear, fig, toast, sound, sanLabel, uciLineToSan, formatSanLine, panelSection } from '../ui.js';
+import { h, clear, fig, toast, sound, sanLabel, uciLineToSan, formatSanLine, panelSection, action, pawns } from '../ui.js';
 import { state, getRep, modelFor } from '../store.js';
 import { api } from '../api.js';
-import { START_FEN, positionKey, scoreToCp } from '../constants.js';
-import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci, gameStatus, turnColor } from '../board.js';
+import { START_FEN, positionKey } from '../constants.js';
+import { createBoard, createEvalBar, isPromotion, choosePromotion, gameStatus, turnColor } from '../board.js';
+import { playMove } from '../moves.js';
 import { bestmove, analyse, evaluate, formatScore, evalBarShare } from '../engine-client.js';
 import { pickByPopularity } from '../opponent.js';
 import { gradePlayout, biggestSlip } from '../session.js';
-import { describeRatings, describeSpeeds, formatShare, formatGames } from '../puzzle-utils.js';
+import { describeRatings, describeSpeeds, formatShare, formatGames, cpFor } from '../puzzle-utils.js';
 
 const OPPONENTS = [['lichess', 'Lichess players at your rating'], ['book', 'Your prepared lines'], ['engine', 'Stockfish only']];
-
-/** A score from White's side as centipawns from one side. */
-const cpFor = (score, me) => scoreToCp(score) * (me === 'white' ? 1 : -1);
 
 /** "+0.45", "−1.20", or "winning" / "losing" for a mate. */
 function formatCp(cp) {
@@ -28,8 +26,6 @@ function formatCp(cp) {
   if (cp <= -9000) return 'a forced mate against you';
   return `${cp >= 0 ? '+' : '−'}${Math.abs(cp / 100).toFixed(2)}`;
 }
-
-const pawns = (cp) => `${(Math.abs(cp) / 100).toFixed(1)} ${Math.abs(cp) === 100 ? 'pawn' : 'pawns'}`;
 
 export async function renderSpar(root, { fen, color, id, back, goal: goalParam }) {
   const startFen = fen || START_FEN;
@@ -98,7 +94,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
           evalRow))));
   root.append(page);
 
-  const board = createBoard(boardHost, { orientation: me, onMove });
+  const board = createBoard(boardHost, { orientation: me, onMove: action(onMove) });
   const evalBar = createEvalBar(evalHost);
   evalBar.hide(true);
 
@@ -211,7 +207,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     const fen = fenNow();
     let uci = from + to;
     if (isPromotion(fen, from, to)) uci += await choosePromotion(me);
-    const res = applyUci(fen, uci);
+    const res = playMove(fen, uci);
     if (!res) { render(); return; }
     const prepared = bookReplies(fen).filter((n) => n.color === mine);
     noteBookExit(fen, res, prepared);
@@ -249,7 +245,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
       let problem = null;
       try { data = await api.lichess.explorer(fen); } catch (err) { problem = err.message; }
       const pick = data ? pickByPopularity(data) : null;
-      if (pick && applyUci(fen, pick.uci)) return { uci: pick.uci, source: /** @type {const} */ ('lichess'), share: pick.share, games: data.total };
+      if (pick && playMove(fen, pick.uci)) return { uci: pick.uci, source: /** @type {const} */ ('lichess'), share: pick.share, games: data.total };
       // A new position (or no Lichess): Stockfish plays the rest of this game.
       return { ...(await engineMove(fen)), dbEnd: problem || 'no-games' };
     }
@@ -277,7 +273,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
       if (token !== gameToken || !page.isConnected) return;
     }
     thinking = false;
-    const res = move && move.uci ? applyUci(fen, move.uci) : null;
+    const res = move && move.uci ? playMove(fen, move.uci) : null;
     if (!res) { render(); return; }
     if (move.source !== 'book') noteBookExit(fen, res, bookReplies(fen));
     history.push({ ...res, ...move, before: fen });
@@ -318,7 +314,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
   /** Stockfish's evaluation of a position, in centipawns from your side; null if it is not available. */
   function rate(fen) {
     return evaluate(fen, [], settings.verdictDepth)
-      .then((res) => (res.best && res.best.score ? cpFor(res.best.score, me) : null))
+      .then((res) => (res.best && res.best.score ? cpFor(res.best.score, mine) : null))
       .catch(() => null);
   }
 
@@ -384,7 +380,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
         const res = await evaluate(m.before, [m.uci], settings.verdictDepth);
         const played = res.moves.find((x) => x.move === m.uci);
         if (res.best && res.best.score && played && played.score) {
-          m.loss = Math.max(0, cpFor(res.best.score, me) - cpFor(played.score, me));
+          m.loss = Math.max(0, cpFor(res.best.score, mine) - cpFor(played.score, mine));
           m.best = res.best.move;
         }
       } catch (err) {

@@ -5,6 +5,7 @@
 
 import { Chess } from 'chess.js';
 import { START_FEN, positionKey, scoreToCp } from './constants.js';
+import { playMove } from './moves.js';
 
 /**
  * @typedef {{ uci: string, san: string, total: number }} ExplorerMove
@@ -14,17 +15,6 @@ import { START_FEN, positionKey, scoreToCp } from './constants.js';
  *   moves lead from startFen to fen, the position before the surprise move uci
  * @typedef {{ fen: string, startFen: string, moves: string[] }} OpponentTurn
  */
-
-function play(fen, uci) {
-  const c = new Chess();
-  try {
-    c.load(fen);
-    const mv = c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
-    return { fen: c.fen(), san: mv.san };
-  } catch (err) {
-    return null;
-  }
-}
 
 /**
  * A move from an explorer answer, chosen with the odds real players give it: a move
@@ -85,7 +75,7 @@ export function opponentTurns(model) {
 /** A move the repertoire does not answer: not one of its moves here, and not a transposition into it. */
 function offBook(model, fen, uci, book) {
   if (book.has(uci)) return null;
-  const after = play(fen, uci);
+  const after = playMove(fen, uci);
   if (!after || model.nodesByPosition.has(positionKey(after.fen))) return null;
   return after;
 }
@@ -152,7 +142,7 @@ export function surpriseFromGap(model, key, gap) {
   let fen = startFen;
   const moves = gap.lineMoves.slice(0, -1);
   for (const uci of moves) {
-    const next = play(fen, uci);
+    const next = playMove(fen, uci);
     if (!next) return null;
     fen = next.fen;
   }

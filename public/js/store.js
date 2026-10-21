@@ -28,7 +28,7 @@ function applyTheme() {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 }
 
-export function applySettings() {
+function applySettings() {
   const s = state.settings;
   setFigurines(s.figurines);
   setSounds(s.sounds, s.volume);
@@ -62,8 +62,9 @@ export async function getRep(id, { fresh = false } = {}) {
   return state.reps.get(id);
 }
 
+/** Keep a repertoire the server sent, with any answers it does not have yet laid on top. */
 export function putRep(rep) {
-  state.reps.set(rep.id, rep);
+  state.reps.set(rep.id, withUnsaved(rep));
   return rep;
 }
 

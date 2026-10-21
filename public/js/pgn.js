@@ -5,7 +5,8 @@
 // lichess/ChessBase [%cal …] / [%csl …] arrow and square markup.
 
 import { Chess } from 'chess.js';
-import { START_FEN } from './constants.js';
+import { START_FEN, TEXT_STYLE } from './constants.js';
+import { playMove } from './moves.js';
 
 const FIGURINE_TO_LETTER = { '♔': 'K', '♕': 'Q', '♖': 'R', '♗': 'B', '♘': 'N', '♚': 'K', '♛': 'Q', '♜': 'R', '♝': 'B', '♞': 'N' };
 const SUFFIX_NAGS = { '!': 1, '?': 2, '!!': 3, '??': 4, '!?': 5, '?!': 6 };
@@ -32,7 +33,8 @@ export function tokenize(text) {
   while (i < n) {
     const c = text[i];
     if (c === '\n') { lineStart = true; i++; continue; }
-    if (c === '﻿' || c === ' ' || c === '\t' || c === '\r' || c === '\f' || c === '\v' || c === ' ') { i++; continue; }
+    // Whitespace, including a byte-order mark (\uFEFF) and the no-break space (\u00A0).
+    if (c === '\uFEFF' || c === ' ' || c === '\t' || c === '\r' || c === '\f' || c === '\v' || c === '\u00A0') { i++; continue; }
     const atLineStart = lineStart;
     lineStart = false;
 
@@ -150,23 +152,7 @@ function appendComment(node, key, raw) {
   if (shapes.length) node.shapes = [...node.shapes, ...shapes];
 }
 
-const chess = new Chess();
-
-function tryMove(fen, san) {
-  try {
-    chess.load(fen, { skipValidation: true });
-    const mv = chess.move(san, { strict: false }); // throws on an illegal move
-    if (mv.san === '--') return null; // a null move (the side to move passes): nothing you could play
-    return {
-      san: mv.san,
-      uci: mv.from + mv.to + (mv.promotion || ''),
-      fen: chess.fen(),
-      color: mv.color,
-    };
-  } catch (err) {
-    return null;
-  }
-}
+const chess = new Chess(); // checks [FEN] headers
 
 function pathSan(node) {
   const parts = [];
@@ -180,9 +166,11 @@ export function moveNumber(node) {
   return +(before.split(/\s+/)[5] || 1);
 }
 
-export function moveLabel(node) {
+/** "5.Nf3" or "5...Nc6", in figurines when asked. */
+export function moveLabel(node, figurines = false) {
   const n = moveNumber(node);
-  return node.color === 'w' ? `${n}.${node.san}` : `${n}...${node.san}`;
+  const san = figurines ? toFigurine(node.san) : node.san;
+  return node.color === 'w' ? `${n}.${san}` : `${n}...${san}`;
 }
 
 /** "5.Nf3 Nc6 6.Bb5" — numbers only where a reader needs them. */
@@ -198,7 +186,7 @@ export function formatSequence(nodes, figurines = false) {
 const FIGURINES = { K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘' };
 export function toFigurine(san) {
   if (!san) return '';
-  return san.replace(/^[KQRBN]/, (p) => FIGURINES[p] + '︎').replace(/=([QRBN])/, (_, p) => `=${FIGURINES[p]}︎`);
+  return san.replace(/^[KQRBN]/, (p) => FIGURINES[p] + TEXT_STYLE).replace(/=([QRBN])/, (_, p) => `=${FIGURINES[p]}${TEXT_STYLE}`);
 }
 
 /** @param {() => number} nextId */
@@ -225,7 +213,7 @@ function buildGame(tokens, headers, chapterIndex, nextId) {
     switch (tok.t) {
       case 'san': {
         if (dead) break;
-        const mv = tryMove(cur.fen, tok.text);
+        const mv = playMove(cur.fen, tok.text);
         if (!mv) {
           errors.push(`Illegal or unreadable move "${tok.text}" after ${pathSan(cur)} — skipped the rest of that line.`);
           dead = true;
@@ -233,7 +221,7 @@ function buildGame(tokens, headers, chapterIndex, nextId) {
         }
         let next = cur.children.find((c) => c.uci === mv.uci);
         if (!next) {
-          next = makeNode(nextId, { ...mv, ply: cur.ply + 1, parent: cur });
+          next = makeNode(nextId, { san: mv.san, uci: mv.uci, fen: mv.fen, color: mv.color, ply: cur.ply + 1, parent: cur });
           cur.children.push(next);
         }
         if (pendingPre) { appendComment(next, 'preComment', pendingPre); pendingPre = ''; }

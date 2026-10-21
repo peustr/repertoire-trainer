@@ -55,7 +55,7 @@ export async function runAudit(box, rep, model, onDone) {
   const audit = { at: new Date().toISOString(), depth, threshold, checked, complete: checked === cards.length, flags };
   const updated = await api.update(rep.id, { audit });
   rep.audit = updated.audit;
-  putRep({ ...updated, cards: rep.cards });
+  putRep(updated);
   toast(checked === cards.length ? 'Audit complete' : `Audit stopped after ${checked} moves`);
   onDone();
 }

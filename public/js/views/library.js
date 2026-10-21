@@ -4,7 +4,8 @@ import { h, clear, levelBar, plural, toast, sound, fig, sanLabel, action } from 
 import { state, loadReps, modelFor, saveCards } from '../store.js';
 import { repertoireStats, describeWait, isDue } from '../srs.js';
 import { gradeCard } from '../session.js';
-import { createBoard, isPromotion, choosePromotion, applyUci } from '../board.js';
+import { createBoard, isPromotion, choosePromotion } from '../board.js';
+import { playMove } from '../moves.js';
 import { api } from '../api.js';
 import { START_FEN, positionKey } from '../constants.js';
 import { puzzleStats } from '../puzzle-utils.js';
@@ -162,7 +163,7 @@ function renderQuickCard(container, entries) {
     const { rep, model, card } = current;
     let uci = from + to;
     if (isPromotion(card.fenBefore, from, to)) uci += card.uci.startsWith(uci) ? card.uci[4] : await choosePromotion(rep.color);
-    const played = applyUci(card.fenBefore, uci);
+    const played = playMove(card.fenBefore, uci);
     const alsoMine = (model.myMovesAt.get(positionKey(card.fenBefore)) || new Set()).has(uci);
     answered = true;
     const now = Date.now();

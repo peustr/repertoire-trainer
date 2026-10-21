@@ -164,7 +164,7 @@ test('an illegal position or a smuggled command is refused before it reaches the
     { fen: `${START_FEN}\nquit` },
     { fen: START_FEN, go: 'depth 1\nquit' },
     { fen: START_FEN, searchmoves: ['e2e4\nquit'] },
-    { fen: START_FEN, moves: ['e2e4 e7e5'] },
+    { fen: START_FEN, searchmoves: ['e2e4 e7e5'] },
     { fen: START_FEN, options: { MultiPV: '1\nquit' } },
     { fen: START_FEN, options: { 'MultiPV value 1\nquit': 1 } },
   ];
@@ -366,12 +366,12 @@ test('the engine’s lines: a missing MultiPV number is line 1, a bound does not
   const engine = new UciEngine('tasks', () => ({}), { specFor: () => fake('ok', '--move=(none)', `--info=${info}`) });
   t.after(() => engine.quit());
   const sent = recorded(engine);
-  const res = await engine.submit({ fen: START_FEN, moves: ['e2e4'], newGame: true }).promise;
+  const res = await engine.submit({ fen: START_FEN, newGame: true }).promise;
   assert.equal(res.bestmove, null, '"bestmove (none)": no legal move');
   assert.deepEqual(res.lines.map((l) => [l.multipv, l.pv[0], l.score, l.bound]), [[1, 'e2e4', { cp: 20 }, null], [2, 'c2c4', { cp: 10 }, 'upperbound']]);
   assert.equal(res.depth, 6);
   assert.ok(sent.includes('ucinewgame'));
-  assert.ok(sent.includes(`position fen ${START_FEN} moves e2e4`));
+  assert.ok(sent.includes(`position fen ${START_FEN}`), 'the position alone: the score is from its side to move');
   assert.ok(sent.includes('go depth 16'), 'the default search');
 });
 

@@ -3,6 +3,7 @@
 import { Chessground } from '@lichess-org/chessground';
 import { Chess } from 'chess.js';
 import { h, sound } from './ui.js';
+import { TEXT_STYLE } from './constants.js';
 
 // Display preferences from Settings → Display and sound.
 const prefs = { coordinates: true, showDests: true, animation: 220 };
@@ -14,7 +15,7 @@ export function setBoardPrefs(p) {
 
 const SQUARES = 'abcdefgh'.split('').flatMap((f) => '12345678'.split('').map((r) => f + r));
 
-export function legalDests(chess) {
+function legalDests(chess) {
   const dests = new Map();
   for (const sq of SQUARES) {
     const moves = chess.moves({ square: sq, verbose: true });
@@ -135,35 +136,11 @@ export function choosePromotion(color) {
           type: 'button',
           'aria-label': { q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' }[p],
           on: { click: () => { dlg.close(); dlg.remove(); resolve(p); } },
-        }, g + '︎')))));
+        }, g + TEXT_STYLE)))));
     dlg.addEventListener('cancel', () => { dlg.remove(); resolve('q'); });
     document.body.append(dlg);
     dlg.showModal();
   });
-}
-
-/** Apply a UCI move to a FEN. Returns { fen, san, captured, uci } or null. */
-export function applyUci(fen, uci) {
-  const c = new Chess();
-  try {
-    c.load(fen, { skipValidation: true });
-    const mv = c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
-    return { fen: c.fen(), san: mv.san, captured: !!mv.captured, uci, color: mv.color };
-  } catch (err) {
-    return null;
-  }
-}
-
-/** SAN → { uci, fen } in a position, or null. */
-export function sanToUci(fen, san) {
-  const c = new Chess();
-  try {
-    c.load(fen, { skipValidation: true });
-    const mv = c.move(san, { strict: false });
-    return { uci: mv.from + mv.to + (mv.promotion || ''), fen: c.fen() };
-  } catch (err) {
-    return null;
-  }
 }
 
 /**

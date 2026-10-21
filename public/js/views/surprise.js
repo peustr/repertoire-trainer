@@ -7,10 +7,11 @@
 // at your level reply in your lines, or, without a Lichess account, from sound
 // sidelines Stockfish finds.
 
-import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, action, keyed, panelSection, toolList } from '../ui.js';
+import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, action, keyed, panelSection, toolList, pawns } from '../ui.js';
 import { state, getRep, putRep, modelFor, loadLichess } from '../store.js';
 import { api } from '../api.js';
-import { createBoard, isPromotion, choosePromotion, applyUci } from '../board.js';
+import { createBoard, isPromotion, choosePromotion } from '../board.js';
+import { playMove } from '../moves.js';
 import { evaluate, analyseOnce, formatScore } from '../engine-client.js';
 import { surpriseQueue, surpriseFromGap, surpriseReplies, engineSurprises, surpriseToPgn } from '../opponent.js';
 import { gradeSurprise, surprisePassed } from '../session.js';
@@ -18,8 +19,6 @@ import { exploreTool } from './tools.js';
 import { formatShare, formatGames, describeRatings, describeSpeeds, cpFor } from '../puzzle-utils.js';
 
 const LOOKUPS_PER_SURPRISE = 8; // positions tried before giving up on finding another surprise
-
-const pawns = (cp) => `${(cp / 100).toFixed(1)} ${cp === 100 ? 'pawn' : 'pawns'}`;
 
 export async function renderSurprise(root, { id }) {
   let rep = await getRep(id, { fresh: true });
@@ -51,7 +50,7 @@ export async function renderSurprise(root, { id }) {
       toolsSection));
   root.append(page);
 
-  const board = createBoard(boardHost, { orientation: rep.color, onMove });
+  const board = createBoard(boardHost, { orientation: rep.color, onMove: action(onMove) });
   let cur = null;
   let token = 0;
   let timers = [];
@@ -143,7 +142,7 @@ export async function renderSurprise(root, { id }) {
 
   // ---- one surprise ----------------------------------------------------------------------
   function present(s, t) {
-    const res = applyUci(s.fen, s.uci);
+    const res = playMove(s.fen, s.uci);
     cur = { s, after: res.fen, waiting: false, tries: 0, answer: null, best: null, added: false };
     clear(head, h('h1.line-title', 'Unprepared reply'), h('p.line-sub', sourceText(s)));
     renderContext(s);
@@ -188,7 +187,7 @@ export async function renderSurprise(root, { id }) {
     const fen = cur.after;
     let uci = from + to;
     if (isPromotion(fen, from, to)) uci += await choosePromotion(rep.color);
-    const played = applyUci(fen, uci);
+    const played = playMove(fen, uci);
     if (!played) { board.setPosition(fen, { lastMove: cur.s.uci, movable: true }); return; }
     cur.waiting = false;
     board.setShapes([]);
@@ -292,7 +291,7 @@ export async function renderSurprise(root, { id }) {
             : 'A sideline Stockfish rates as sound.';
           const pgn = surpriseToPgn(s, uci, { note });
           const updated = await api.addLine(rep.id, pgn, s.gapKey);
-          rep = putRep({ ...updated, cards: rep.cards });
+          rep = putRep(updated);
           model = modelFor(rep);
           cur.added = true;
           for (const b of controls.querySelectorAll('button[data-add]')) if (b !== btn) b.remove();
