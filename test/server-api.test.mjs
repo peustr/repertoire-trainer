@@ -1,6 +1,6 @@
 // The REST API of the real server (server.js) against the mock Lichess: requests without a
-// body, unexpected errors, the settings schema and samples, the Lichess routes and sign-in,
-// and the puzzle routes. Runs against a throwaway data folder.
+// body, bodies it cannot read, unexpected errors, the settings schema and samples, the
+// Lichess routes and sign-in, and the puzzle routes. Runs against a throwaway data folder.
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -47,7 +47,6 @@ test('requests sent without a body get the same answers as an empty one', async 
   assert.deepEqual((await api('PATCH', `/api/repertoires/${rep.id}/progress`)).json.cards, {});
   assert.equal((await api('PUT', '/api/settings')).json.reviewBatch, 20);
   assert.equal((await api('POST', '/api/lichess/token')).json.error, 'That does not look like a Lichess token.');
-  assert.deepEqual((await api('POST', `/api/repertoires/${rep.id}/puzzles`)).json.puzzles, {});
   assert.equal((await api('POST', `/api/repertoires/${rep.id}/puzzles/p1/add-line`)).status, 404);
   assert.equal((await api('DELETE', `/api/repertoires/${rep.id}/gaps`)).status, 200, 'no key: nothing removed');
 });
@@ -100,12 +99,13 @@ test('Lichess sign-in: the start goes to Lichess, and the way back connects or s
   await api('DELETE', '/api/lichess/token');
 });
 
-test('puzzles are saved, added as a line and dismissed; gaps too; progress reset; repertoires deleted', async () => {
+test('puzzles are added as a line and dismissed; gaps too; progress reset; repertoires deleted', async () => {
   const rep = (await api('POST', '/api/repertoires', { name: 'Puzzled', color: 'white', pgn: PGN })).json;
   const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
-  assert.equal((await api('POST', '/api/repertoires/no-such-rep/puzzles', { puzzles: [] })).status, 404);
-  const saved = await api('POST', `/api/repertoires/${rep.id}/puzzles`, { puzzles: [{ id: 'p1', fen }, { id: 'p2', fen }] });
-  assert.deepEqual(Object.keys(saved.json.puzzles), ['p1', 'p2']);
+  // Only the mistake search saves puzzles: the page has no route to write them.
+  assert.deepEqual((await api('POST', `/api/repertoires/${rep.id}/puzzles`, { puzzles: [{ id: 'p1', fen }] })).json, { error: 'Unknown API route' });
+  const file = path.join(server.dataDir, 'repertoires', `${rep.id}.json`);
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), puzzles: { p1: { id: 'p1', fen }, p2: { id: 'p2', fen } } }));
   const added = await api('POST', `/api/repertoires/${rep.id}/puzzles/p1/add-line`, { pgn: '1. e4 e5 2. Qh5 *' });
   assert.match(added.json.pgn, /Qh5/);
   assert.deepEqual(Object.keys((await api('DELETE', `/api/repertoires/${rep.id}/puzzles/p2`)).json.puzzles), ['p1']);
@@ -116,6 +116,21 @@ test('puzzles are saved, added as a line and dismissed; gaps too; progress reset
   assert.deepEqual((await api('DELETE', `/api/repertoires/${rep.id}`)).json, { ok: true });
   assert.equal((await api('DELETE', `/api/repertoires/${rep.id}`)).status, 404);
   assert.deepEqual((await api('GET', '/api/nothing-here')).json, { error: 'Unknown API route' });
+});
+
+test('a body that is not JSON, in an unknown charset or too large gets a JSON answer', async () => {
+  const post = (headers, body) => fetch(`${server.base}/api/repertoires`, { method: 'POST', headers, body });
+  const broken = await post({ 'Content-Type': 'application/json' }, '{"name": ');
+  assert.deepEqual([broken.status, await broken.json()], [400, { error: 'The request was not valid JSON.' }]);
+  const charset = await post({ 'Content-Type': 'application/json; charset=latin1' }, '{}');
+  assert.equal(charset.status, 415);
+  assert.match((await charset.json()).error, /unsupported charset "LATIN1"/);
+
+  // Over the 20 MB limit. The server answers once the whole body has arrived.
+  const tooLarge = await post({ 'Content-Type': 'application/json' }, ' '.repeat(21 * 2 ** 20));
+  const answer = await tooLarge.text();
+  assert.equal(tooLarge.status, 413);
+  assert.deepEqual(JSON.parse(answer), { error: 'That is too much to send in one go: the trainer takes at most 20 MB at a time.' });
 });
 
 test('a request without a Host header is refused', async () => {

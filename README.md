@@ -194,7 +194,9 @@ previous version next to it as `.bak`. If a file is ever damaged (say, by a
 sync conflict), the trainer keeps the damaged copy as `.corrupt-<time>`, restores
 the previous version, and says so in its console window. A deleted repertoire
 goes to `data/trash`, with its `.bak`: to restore it, move its `.json` file back
-into `data/repertoires`.
+into `data/repertoires`. A repertoire file's name is its id, so a copy you make by
+hand needs a new name of lower-case letters, digits and dashes (`my-copy.json`);
+the trainer skips other names and says so in its console window.
 
 ## Credits
 

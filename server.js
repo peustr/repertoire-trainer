@@ -158,10 +158,6 @@ app.get('/api/lichess/explorer', wrapAsync((req) => {
 app.get('/api/lichess/study', wrapAsync((req) => lichess.studyPgn(req.query.url)));
 app.get('/api/lichess/studies', wrapAsync(() => lichess.userStudies()));
 
-app.post('/api/repertoires/:id/puzzles', wrap((req) => {
-  const out = store.addPuzzles(req.params.id, (req.body || {}).puzzles || []);
-  return out ? out.rep : null;
-}));
 app.post('/api/repertoires/:id/puzzles/:pid/add-line', wrap((req) => store.addPuzzleLine(req.params.id, req.params.pid, (req.body || {}).pgn)));
 app.delete('/api/repertoires/:id/puzzles/:pid', wrap((req) => store.deletePuzzle(req.params.id, req.params.pid)));
 app.delete('/api/repertoires/:id/gaps', wrap((req) => store.deleteGap(req.params.id, String(req.query.key || ''))));
@@ -180,6 +176,17 @@ app.get('/auth/lichess/callback', async (req, res) => {
 });
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Unknown API route' }));
+
+// Errors raised before a route runs, such as a body that is not JSON or is too large, get
+// the API's JSON answer rather than Express's HTML error page.
+const BODY_ERRORS = {
+  'entity.parse.failed': 'The request was not valid JSON.',
+  'entity.too.large': 'That is too much to send in one go: the trainer takes at most 20 MB at a time.',
+};
+app.use((err, req, res, next) => {
+  const plain = BODY_ERRORS[err.type];
+  failure(res, plain ? Object.assign(new Error(plain), { status: err.status }) : err);
+});
 
 // --- WebSocket engine bridge ---------------------------------------------------
 //

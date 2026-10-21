@@ -70,6 +70,8 @@ test('what the browser sends is accepted', () => {
   const rep = store.createRepertoire({ name: 'Accepted', color: 'white', pgn: PGN, notes: 'My notes' });
   assert.equal(store.updateRepertoire(rep.id, { name: 'Renamed', notes: '', audit: AUDIT }).audit.checked, 12);
   assert.equal(store.updateRepertoire(rep.id, { audit: null }).audit, null);
+  const { updatedAt } = store.getRepertoire(rep.id);
+  assert.equal(store.updateRepertoire(rep.id, { name: 'Edited', color: 'black', pgn: PGN, baseUpdatedAt: updatedAt }).color, 'black', 'the edit form');
   const saved = store.patchProgress(rep.id, {
     cards: { a: STATE, 'pz|abc123': { level: 1, due: 0, reps: 1, lapses: 0, last: 0 }, b: null },
     tally: { date: '2026-10-18', correct: 2, wrong: 1, lines: 1 },
@@ -89,6 +91,7 @@ test('a repertoire update with the wrong shape is refused and changes nothing', 
     { audit: { ...AUDIT, depth: 'deep' } },
     { audit: { ...AUDIT, flags: [] } },
     { audit: { ...AUDIT, flags: { k: { loss: 'a lot' } } } },
+    { name: 'X', baseUpdatedAt: 1700000000000 },
   ];
   for (const patch of bad) assert.throws(() => store.updateRepertoire(rep.id, patch), { status: 400 }, JSON.stringify(patch));
   assert.throws(() => store.createRepertoire({ name: 'X', color: 'white', pgn: PGN, notes: {} }), { status: 400 });
@@ -173,6 +176,12 @@ test('the API answers 400 with the reason, for every kind of update', async (t) 
 test('a file with a version that makes no sense is refused', () => {
   for (const schemaVersion of [0, -1, 1.5, 'one', null]) {
     assert.throws(() => migrate({ id: 'odd', schemaVersion }, 'odd.json'), { status: 500, message: /^odd\.json has an unknown format version/ }, String(schemaVersion));
+  }
+});
+
+test('a file that does not hold an object is not a repertoire', () => {
+  for (const value of [[], [1, 2], 'text', 5, true]) {
+    assert.throws(() => migrate(value, 'odd.json'), { status: 500, message: 'odd.json does not hold a repertoire.' }, JSON.stringify(value));
   }
 });
 

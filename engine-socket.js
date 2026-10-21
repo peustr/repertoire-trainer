@@ -51,9 +51,14 @@ export function serveEngineSocket(wss, { engines, store, lichess }) {
           });
           run.kind = 'analyse';
           runs.set(id, run);
-          const res = await run.promise;
-          if (pending) clearTimeout(pending);
-          runs.delete(id);
+          let res;
+          try {
+            res = await run.promise;
+          } finally {
+            // Also when it fails: no progress may follow the error, and it is not cancelled again.
+            if (pending) clearTimeout(pending);
+            runs.delete(id);
+          }
           send({ type: REPLY.DONE, ...res, id });
         } else if (msg.type === REQUEST.STOP) {
           const run = runs.get(id);
@@ -72,22 +77,26 @@ export function serveEngineSocket(wss, { engines, store, lichess }) {
           const fen = checkFen(msg.fen);
           let stopped = false;
           runs.set(id, { kind: 'search', cancel: () => { stopped = true; } });
-          const result = await searchMistakes({
-            rep,
-            model: buildRepertoire(rep),
-            fen,
-            prefix: msg.prefix,
-            engines,
-            lichess,
-            options: schema.finderOptions(store.getSettings()),
-            cancelled: () => stopped || ws.readyState !== ws.OPEN,
-            onEvent: (ev) => {
-              if (ev.kind === 'found') store.addPuzzles(rep.id, [ev.puzzle]);
-              if (ev.kind === 'gap') store.addGaps(rep.id, [ev.gap]);
-              send({ type: REPLY.SEARCH_EVENT, id, ...ev });
-            },
-          });
-          runs.delete(id);
+          let result;
+          try {
+            result = await searchMistakes({
+              rep,
+              model: buildRepertoire(rep),
+              fen,
+              prefix: msg.prefix,
+              engines,
+              lichess,
+              options: schema.finderOptions(store.getSettings()),
+              cancelled: () => stopped || ws.readyState !== ws.OPEN,
+              onEvent: (ev) => {
+                if (ev.kind === 'found') store.addPuzzles(rep.id, [ev.puzzle]);
+                if (ev.kind === 'gap') store.addGaps(rep.id, [ev.gap]);
+                send({ type: REPLY.SEARCH_EVENT, id, ...ev });
+              },
+            });
+          } finally {
+            runs.delete(id);
+          }
           send({ type: REPLY.RESULT, id, ...result, puzzles: result.puzzles.map((p) => p.id) });
         } else {
           // Without an answer the page would wait for its timeout.

@@ -102,6 +102,57 @@ test('a deleted repertoire goes to the trash with its backup, and can be moved b
   assert.deepEqual(store.getRepertoire(rep.id).cards, { k: { level: 2, due: 0 } });
 });
 
+test('a file that does not hold a repertoire is skipped, with a warning', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  fs.writeFileSync(repFile('not-a-rep'), '[1, 2]');
+  t.after(() => fs.rmSync(repFile('not-a-rep'), { force: true }));
+  assert.ok(!store.listRepertoires().some((r) => r.id === 'not-a-rep' || Array.isArray(r) || r[0] === 1));
+  assert.ok(warn.mock.calls.some((c) => c.arguments[0] === '[store] Skipped not-a-rep.json: not-a-rep.json does not hold a repertoire.'));
+  assert.throws(() => store.getRepertoire('not-a-rep'), { status: 500 });
+});
+
+test('a copied file is a repertoire of its own, named after its file', () => {
+  const rep = store.createRepertoire({ name: 'Original', color: 'white', pgn: PGN });
+  fs.copyFileSync(repFile(rep.id), repFile('original-copy'));
+  const listed = store.listRepertoires().filter((r) => r.name === 'Original').map((r) => r.id);
+  assert.deepEqual(listed.sort(), [rep.id, 'original-copy'].sort(), 'two entries, each opening its own file');
+
+  store.patchProgress('original-copy', { cards: { k: { level: 2, due: 0 } } });
+  assert.deepEqual(store.getRepertoire(rep.id).cards, {}, 'a save to the copy leaves the original alone');
+  assert.equal(readFile(repFile('original-copy')).id, 'original-copy', 'and the copy now carries its own id');
+});
+
+test('a file whose name is not an id is skipped, with a warning that says how to rename it', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const rep = store.createRepertoire({ name: 'Copied in Explorer', color: 'white', pgn: PGN });
+  const copy = path.join(REP_DIR, `${rep.id} - Copy.json`);
+  fs.copyFileSync(repFile(rep.id), copy);
+  t.after(() => fs.rmSync(copy, { force: true }));
+  assert.equal(store.listRepertoires().filter((r) => r.name === 'Copied in Explorer').length, 1);
+  assert.ok(warn.mock.calls.some((c) => c.arguments[0] === `[store] Skipped ${rep.id} - Copy.json: rename it with only lower-case letters, digits and dashes, like my-repertoire.json.`));
+});
+
+test('an edit made from an older version is refused, and changes nothing', () => {
+  const rep = store.createRepertoire({ name: 'Edited twice', color: 'white', pgn: PGN });
+  // The version each edit page opened: well in the past, so a later save cannot share its millisecond.
+  const opened = (time) => {
+    fs.writeFileSync(repFile(rep.id), JSON.stringify({ ...readFile(repFile(rep.id)), updatedAt: time }));
+    return time;
+  };
+  const first = opened('2026-01-01T00:00:00.000Z');
+  store.patchProgress(rep.id, { cards: { k: { level: 1, due: 0 } } }); // training elsewhere is no conflict
+  assert.equal(store.updateRepertoire(rep.id, { name: 'Renamed', baseUpdatedAt: first }).name, 'Renamed');
+
+  const second = opened('2026-02-01T00:00:00.000Z');
+  store.addLine(rep.id, { pgn: '1. d4 *' }); // a chapter added from another tab
+  assert.throws(() => store.updateRepertoire(rep.id, { pgn: PGN, baseUpdatedAt: second }), {
+    status: 409,
+    message: 'This repertoire changed in another tab or window while you were editing it. Copy your changes, reload the page and edit it again.',
+  });
+  assert.match(store.getRepertoire(rep.id).pgn, /1\. d4/, 'the added chapter is kept');
+  assert.equal(store.updateRepertoire(rep.id, { audit: null }).audit, null, 'a change that names no version is not checked');
+});
+
 test('a save retries while another program briefly holds the file', (t) => {
   const rep = store.createRepertoire({ name: 'Busy', color: 'white', pgn: PGN });
   const realRename = fs.renameSync;

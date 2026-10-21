@@ -141,9 +141,24 @@ function slug(text) {
     .slice(0, 40) || 'repertoire';
 }
 
+const ID = /^[a-z0-9-]+$/;
+
 function repFile(id) {
-  if (!/^[a-z0-9-]+$/.test(id)) throw Object.assign(new Error('Invalid id'), { status: 400 });
+  if (!ID.test(id)) throw Object.assign(new Error('Invalid id'), { status: 400 });
   return path.join(REP_DIR, `${id}.json`);
+}
+
+/**
+ * A stored repertoire in the current format (older files are migrated as they are read;
+ * the next save writes them in it), or null if there is none. Its id comes from the file
+ * name, so a file copied under a new name is a repertoire of its own.
+ * @param {string} id
+ * @returns {RepertoireFile | null}
+ */
+function getRepertoire(id) {
+  const file = repFile(id);
+  const rep = readJson(file, null);
+  return rep === null ? null : { ...migrate(rep, path.basename(file)), id };
 }
 
 function listRepertoires() {
@@ -153,8 +168,9 @@ function listRepertoires() {
     .filter((f) => f.endsWith('.json'))
     .map((f) => {
       try {
-        const rep = readJson(path.join(REP_DIR, f), null);
-        return rep && migrate(rep, f);
+        const id = f.slice(0, -'.json'.length);
+        if (!ID.test(id)) throw new Error('rename it with only lower-case letters, digits and dashes, like my-repertoire.json.');
+        return getRepertoire(id);
       } catch (err) {
         console.warn(`[store] Skipped ${f}: ${err.message}`);
         return null;
@@ -162,19 +178,6 @@ function listRepertoires() {
     })
     .filter(Boolean)
     .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
-}
-
-/**
- * A repertoire in the current format (older files are migrated as they are read; the
- * next save writes them in it). Null if there is none.
- * @param {string} id
- * @returns {RepertoireFile | null}
- */
-function getRepertoire(id) {
-  const file = repFile(id);
-  if (!fs.existsSync(file)) return null;
-  const rep = readJson(file, null);
-  return rep && migrate(rep, path.basename(file));
 }
 
 function createRepertoire(input) {
@@ -200,10 +203,20 @@ function createRepertoire(input) {
   return rep;
 }
 
+/**
+ * Change a repertoire's name, colour, PGN, notes or audit. A change that carries the
+ * baseUpdatedAt it was made from is refused once the file has moved on (a chapter added
+ * from another tab, say), rather than writing over what changed.
+ * @param {string} id
+ * @param {any} patch  as the browser sent it
+ */
 function updateRepertoire(id, patch) {
   checkRepertoireInput(patch, true);
   const rep = getRepertoire(id);
   if (!rep) return null;
+  if (patch.baseUpdatedAt !== undefined && patch.baseUpdatedAt !== rep.updatedAt) {
+    throw Object.assign(new Error('This repertoire changed in another tab or window while you were editing it. Copy your changes, reload the page and edit it again.'), { status: 409 });
+  }
   for (const key of ['name', 'color', 'pgn', 'notes', 'audit']) {
     if (patch[key] !== undefined) rep[key] = patch[key];
   }
