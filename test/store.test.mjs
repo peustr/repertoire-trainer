@@ -15,6 +15,7 @@ const store = await import('../store.js'); // after the environment is set: it i
 
 const SETTINGS = path.join(dataDir, 'settings.json');
 const REP_DIR = path.join(dataDir, 'repertoires');
+const TRASH = path.join(dataDir, 'trash');
 const PGN = '1. e4 e5 2. Nf3 Nc6 *';
 
 after(() => fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
@@ -24,6 +25,7 @@ const readFile = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const setAside = (file) => fs.readdirSync(path.dirname(file)).filter((f) => f.startsWith(`${path.basename(file)}.corrupt-`));
 const positionOf = (fen) => fen.split(' ').slice(0, 4).join(' ');
 const tempFiles = () => fs.readdirSync(REP_DIR).filter((f) => f.endsWith('.tmp'));
+const trashed = (id) => fs.readdirSync(TRASH).filter((d) => d.startsWith(`${id}-`));
 
 test('a damaged settings file is set aside and the previous version restored', (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
@@ -85,12 +87,19 @@ test('without a backup, a damaged repertoire is kept aside, not deleted', (t) =>
   assert.equal(fs.readFileSync(path.join(REP_DIR, aside), 'utf8'), '{"id": "trunc');
 });
 
-test('deleting a repertoire removes its backup too', () => {
+test('a deleted repertoire goes to the trash with its backup, and can be moved back', () => {
   const rep = store.createRepertoire({ name: 'Short lived', color: 'white', pgn: PGN });
-  store.patchProgress(rep.id, { cards: {} });
+  store.patchProgress(rep.id, { cards: { k: { level: 2, due: 0 } } });
   assert.ok(fs.existsSync(`${repFile(rep.id)}.bak`));
   assert.equal(store.deleteRepertoire(rep.id), true);
   assert.ok(!fs.existsSync(repFile(rep.id)) && !fs.existsSync(`${repFile(rep.id)}.bak`));
+  assert.ok(!store.listRepertoires().some((r) => r.id === rep.id));
+
+  const [bin] = trashed(rep.id);
+  assert.match(bin, new RegExp(`^${rep.id}-\\d{4}-\\d{2}-\\d{2}T[\\d-]+Z$`), 'named after the repertoire and the time');
+  assert.deepEqual(fs.readdirSync(path.join(TRASH, bin)).sort(), [`${rep.id}.json`, `${rep.id}.json.bak`]);
+  fs.renameSync(path.join(TRASH, bin, `${rep.id}.json`), repFile(rep.id)); // restoring it by hand
+  assert.deepEqual(store.getRepertoire(rep.id).cards, { k: { level: 2, due: 0 } });
 });
 
 test('a save retries while another program briefly holds the file', (t) => {
@@ -341,11 +350,67 @@ test('a repertoire file without PGN (edited by hand) can still take a new line',
   assert.equal(store.addPuzzleLine(rep.id, 'p1', '1. c4 *').pgn, '\n\n1. c4 *');
 });
 
-test('a repertoire deleted before its first change has no backup to remove', () => {
+test('a repertoire deleted before its first change goes to the trash without a backup', () => {
   const rep = store.createRepertoire({ name: 'Brief', color: 'white', pgn: PGN });
   assert.ok(!fs.existsSync(`${repFile(rep.id)}.bak`));
   assert.equal(store.deleteRepertoire(rep.id), true);
   assert.ok(!fs.existsSync(repFile(rep.id)));
+  const [bin] = trashed(rep.id);
+  assert.deepEqual(fs.readdirSync(path.join(TRASH, bin)), [`${rep.id}.json`]);
+});
+
+/**
+ * Record which files are flushed to disk and renamed during a save, in order.
+ * @param {import('node:test').TestContext} t
+ * @param {{ failFlush?: (name: string) => boolean }} [options]  flushing these files fails
+ */
+function watchDisk(t, { failFlush = () => false } = {}) {
+  const steps = [];
+  const opened = new Map();
+  const { openSync, fsyncSync, renameSync } = fs;
+  t.mock.method(fs, 'openSync', (file, flags, mode) => {
+    const fd = openSync(file, flags, mode);
+    opened.set(fd, path.basename(String(file)));
+    return fd;
+  });
+  t.mock.method(fs, 'fsyncSync', (fd) => {
+    const name = opened.get(fd);
+    if (failFlush(name)) throw Object.assign(new Error('EIO: i/o error, fsync'), { code: 'EIO' });
+    steps.push(`flush ${name}`);
+    return fsyncSync(fd);
+  });
+  t.mock.method(fs, 'renameSync', (from, to) => {
+    steps.push(`rename to ${path.basename(String(to))}`);
+    return renameSync(from, to);
+  });
+  return steps;
+}
+
+test('a save is on the disk, and so is its backup, before it replaces the file', (t) => {
+  const rep = store.createRepertoire({ name: 'Power cut', color: 'white', pgn: PGN });
+  const steps = watchDisk(t);
+  store.patchProgress(rep.id, { cards: { k: { level: 1, due: 0 } } });
+  assert.equal(steps.length, 3, steps.join(', '));
+  assert.match(steps[0], new RegExp(`^flush ${rep.id}\\.json\\.\\d+\\.\\d+\\.tmp$`), 'the new version first');
+  assert.deepEqual(steps.slice(1), [`flush ${rep.id}.json.bak`, `rename to ${rep.id}.json`]);
+});
+
+test('a save that cannot reach the disk changes nothing and leaves no temp file', (t) => {
+  const rep = store.createRepertoire({ name: 'Disk full', color: 'white', pgn: PGN });
+  watchDisk(t, { failFlush: (name) => name.endsWith('.tmp') });
+  assert.throws(() => store.patchProgress(rep.id, { cards: { k: { level: 1, due: 0 } } }), { code: 'EIO' });
+  t.mock.restoreAll();
+  assert.deepEqual(tempFiles(), []);
+  assert.deepEqual(store.getRepertoire(rep.id).cards, {}, 'the last good version is untouched');
+});
+
+test('a backup that cannot be flushed does not stop the save', (t) => {
+  const rep = store.createRepertoire({ name: 'Slow backup', color: 'white', pgn: PGN });
+  watchDisk(t, { failFlush: (name) => name.endsWith('.bak') });
+  store.patchProgress(rep.id, { cards: { k: { level: 1, due: 0 } } });
+  t.mock.restoreAll();
+  assert.deepEqual(store.getRepertoire(rep.id).cards, { k: { level: 1, due: 0 } });
+  assert.deepEqual(readFile(`${repFile(rep.id)}.bak`).cards, {}, 'the backup holds the version before');
 });
 
 test('saving no settings changes nothing', () => {

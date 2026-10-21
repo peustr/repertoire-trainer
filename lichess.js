@@ -16,6 +16,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { defaults } from './settings-schema.js';
+import { writeJsonAtomic } from './store.js';
 import { SPEEDS, RATING_GROUPS } from './public/js/constants.js';
 
 const { version } = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'package.json'), 'utf8'));
@@ -104,7 +105,9 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
   function writeAuth(auth) {
     fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true });
     if (!auth) { try { fs.unlinkSync(TOKEN_FILE); } catch (err) { /* already gone */ } return; }
-    fs.writeFileSync(TOKEN_FILE, JSON.stringify(auth, null, 2), { encoding: 'utf8', mode: 0o600 });
+    // Atomic, so a crash mid-write cannot lose the sign-in; no .bak, so a replaced or
+    // disconnected token does not stay on disk.
+    writeJsonAtomic(TOKEN_FILE, auth, { backup: false, mode: 0o600 });
   }
 
   function token() {

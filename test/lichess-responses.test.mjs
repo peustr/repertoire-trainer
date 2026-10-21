@@ -164,6 +164,23 @@ test('a token is checked with Lichess: refused, failing, or out of reach', async
   assert.ok(!fs.existsSync(path.join(dataDir, 'lichess.json')), 'nothing saved');
 });
 
+test('the token is saved whole or not at all, and a replaced one leaves no copy', async (t) => {
+  const { client, dataDir } = tempClient(t);
+  const file = path.join(dataDir, 'lichess.json');
+  scriptFetch(t, () => json({ id: 'me', username: 'Me' }));
+  await client.connectWithToken('lip_firstToken123');
+  await client.connectWithToken('lip_secondToken123');
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).token, 'lip_secondToken123');
+  assert.deepEqual(fs.readdirSync(dataDir), ['lichess.json'], 'no backup holding the first token');
+
+  // A save that fails part-way (a full disk) leaves the saved sign-in as it was.
+  t.mock.method(fs, 'renameSync', () => { throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' }); });
+  await assert.rejects(client.connectWithToken('lip_thirdToken123'), { code: 'ENOSPC' });
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).token, 'lip_secondToken123');
+  assert.deepEqual(fs.readdirSync(dataDir), ['lichess.json'], 'and no temp file');
+  if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+});
+
 test('an account without rated games gets no rating suggestion', async (t) => {
   const { client } = tempClient(t);
   scriptFetch(t, () => json({ id: 'newbie', username: 'Newbie' }));

@@ -12,7 +12,8 @@ Everything runs on your laptop. Your repertoires are plain JSON files in `data/`
 1. Install **Node.js LTS** (version 22.12 or newer) from https://nodejs.org.
 2. Unzip this folder somewhere, for example `Documents\repertoire-trainer`.
 3. Double-click **`start.bat`**. The first run installs dependencies (about a
-   minute, needs internet once). Your browser opens at http://localhost:3210.
+   minute, needs the internet), and so does the first run after an update that
+   changed them. Your browser opens at http://localhost:3210.
 
 Close the console window (or press Ctrl+C in it) to stop the trainer.
 
@@ -159,6 +160,7 @@ store.js             JSON file storage in ./data
 repertoire-format.js The repertoire file format: typedef, version, migration, checks
 settings-schema.js   Every setting: default, range, help text (drives the Settings page)
 check-node.cjs       Stops with a plain message on a too-old Node.js
+check-install.cjs    Tells start.bat when to install the dependencies
 public/
   index.html         App shell, import map
   css/app.css        All styles (Inter, the palette, light and dark)
@@ -190,7 +192,9 @@ window is closed while you train, your answers wait in the browser and are saved
 soon as it is running again. Each file keeps its
 previous version next to it as `.bak`. If a file is ever damaged (say, by a
 sync conflict), the trainer keeps the damaged copy as `.corrupt-<time>`, restores
-the previous version, and says so in its console window.
+the previous version, and says so in its console window. A deleted repertoire
+goes to `data/trash`, with its `.bak`: to restore it, move its `.json` file back
+into `data/repertoires`.
 
 ## Credits
 
