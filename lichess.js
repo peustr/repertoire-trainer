@@ -149,17 +149,27 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
   }
 
   /**
+   * One call to Lichess, made in the queue like every other. It waits out a rate-limit
+   * pause first; a 429 starts a new pause, tells every page, and is retried `retries`
+   * times; a network failure becomes a 502 the user can act on. `read` turns any other
+   * answer into the result (or an error), still in the queue, so the next call starts only
+   * once this one has fully arrived.
+   * @template T
    * @param {string} url
-   * @param {{ accept?: string, method?: string, body?: any, headers?: Record<string, string>, retries?: number }} [options]
+   * @param {{ method?: string, accept?: string, body?: any, headers?: Record<string, string>,
+   *   auth?: string | null, retries?: number }} options  auth: the token to send; the saved one
+   *   when left out, none when null
+   * @param {(res: Response, sentToken: string | null | undefined) => Promise<T>} read
+   * @returns {Promise<T>}
    */
-  async function request(url, { accept = 'application/json', method = 'GET', body, headers = {}, retries = 2 } = {}) {
+  function call(url, { method = 'GET', accept = 'application/json', body, headers = {}, auth, retries = 0 }, read) {
     return enqueue(async () => {
-      for (let attempt = 0; ; attempt++) {
+      for (let attempt = 0; attempt <= retries; attempt++) {
         const wait = pausedUntil - Date.now();
         if (wait > 0) await sleep(wait);
         /** @type {Record<string, string>} */
         const h = { 'User-Agent': USER_AGENT, Accept: accept, ...headers };
-        const t = token();
+        const t = auth === undefined ? token() : auth;
         if (t) h.Authorization = `Bearer ${t}`;
         let res;
         try {
@@ -170,19 +180,32 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
         if (res.status === 429) {
           pausedUntil = Date.now() + rateLimitPauseMs;
           events.emit('ratelimit', pausedUntil);
-          if (attempt < retries) continue;
-          throw new LichessError('Lichess asked us to slow down. Try again in a minute.', 429);
+          continue;
         }
-        if (res.status === 401) {
-          throw new LichessError(t ? 'Lichess rejected the saved token. Connect your account again.' : 'Connect your Lichess account first.', 401);
-        }
-        if (!res.ok) {
-          const text = await res.text().catch(() => '');
-          throw new LichessError(`Lichess answered ${res.status}${text ? `: ${text.slice(0, 160)}` : ''}`, res.status);
-        }
+        const out = await read(res, t);
         await sleep(120); // a little breathing room between calls
-        return accept === 'application/json' ? res.json() : res.text();
+        return out;
       }
+      throw new LichessError('Lichess asked us to slow down. Try again in a minute.', 429);
+    });
+  }
+
+  /**
+   * A GET with the saved token, answered in JSON (or text, for another `accept`), and
+   * tried again twice after a 429.
+   * @param {string} url
+   * @param {{ accept?: string }} [options]
+   */
+  function request(url, { accept = 'application/json' } = {}) {
+    return call(url, { accept, retries: 2 }, async (res, sentToken) => {
+      if (res.status === 401) {
+        throw new LichessError(sentToken ? 'Lichess rejected the saved token. Connect your account again.' : 'Connect your Lichess account first.', 401);
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new LichessError(`Lichess answered ${res.status}${text ? `: ${text.slice(0, 160)}` : ''}`, res.status);
+      }
+      return accept === 'application/json' ? res.json() : res.text();
     });
   }
 
@@ -302,14 +325,12 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
   // --- account, studies -----------------------------------------------------------------
 
   /** The account a token belongs to: checks a token before it is saved. */
-  async function account(tok) {
-    const res = await enqueue(() => fetch(`${baseUrl}/api/account`, {
-      headers: { Authorization: `Bearer ${tok}`, Accept: 'application/json', 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(20000),
-    })).catch((err) => { throw new LichessError(`Could not reach Lichess (${err.message}).`, 502); });
-    if (res.status === 401) throw new LichessError('Lichess did not accept that token.', 401);
-    if (!res.ok) throw new LichessError(`Lichess answered ${res.status}`, res.status);
-    return res.json();
+  function account(tok) {
+    return call(`${baseUrl}/api/account`, { auth: tok }, async (res) => {
+      if (res.status === 401) throw new LichessError('Lichess did not accept that token.', 401);
+      if (!res.ok) throw new LichessError(`Lichess answered ${res.status}`, res.status);
+      return res.json();
+    });
   }
 
   async function connectWithToken(tok, via = 'personal') {
@@ -324,7 +345,8 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
     const auth = readAuth();
     if (auth && auth.via === 'oauth') {
       // Tokens we created through sign-in are ours to revoke. Personal tokens belong to the user.
-      await enqueue(() => fetch(`${baseUrl}/api/token`, { method: 'DELETE', headers: { Authorization: `Bearer ${auth.token}`, 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(10000) })).catch(() => {});
+      // Best effort: the token is forgotten here whatever Lichess answers.
+      await call(`${baseUrl}/api/token`, { method: 'DELETE', auth: auth.token }, async () => null).catch(() => {});
     }
     writeAuth(null);
     return status();
@@ -392,14 +414,12 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
       redirect_uri: entry.redirectUri,
       client_id: CLIENT_ID,
     });
-    const res = await enqueue(() => fetch(`${baseUrl}/api/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': USER_AGENT },
-      body,
-      signal: AbortSignal.timeout(20000),
-    }));
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.access_token) throw new LichessError(data.error_description || data.error || `Token exchange failed (${res.status})`, 400);
+    const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    const data = await call(`${baseUrl}/api/token`, { method: 'POST', auth: null, headers, body }, async (res) => {
+      const answer = await res.json().catch(() => ({}));
+      if (!res.ok || !answer.access_token) throw new LichessError(answer.error_description || answer.error || `Token exchange failed (${res.status})`, 400);
+      return answer;
+    });
     return connectWithToken(data.access_token, 'oauth');
   }
 

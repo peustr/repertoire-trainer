@@ -24,7 +24,6 @@ export const api = {
   saveSettings: (s) => call('PUT', '/api/settings', s),
   samples: () => call('GET', '/api/samples'),
   engine: () => call('GET', '/api/engine'),
-  addPuzzles: (id, puzzles) => call('POST', `/api/repertoires/${id}/puzzles`, { puzzles }),
   addPuzzleLine: (id, pid, pgn) => call('POST', `/api/repertoires/${id}/puzzles/${pid}/add-line`, { pgn }),
   deletePuzzle: (id, pid) => call('DELETE', `/api/repertoires/${id}/puzzles/${pid}`),
   deleteGap: (id, key) => call('DELETE', `/api/repertoires/${id}/gaps?key=${encodeURIComponent(key)}`),

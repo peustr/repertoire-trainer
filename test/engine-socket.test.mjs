@@ -22,17 +22,17 @@ function fakeSocket() {
   return ws;
 }
 
-/** Analyses that finish when the test says so. */
+/** Analyses that finish, or fail, when the test says so. */
 function scriptedEngines(overrides = {}) {
   const analyses = [];
   return {
     analyses,
     info: () => ({ analysis: { kind: 'fake' }, tasks: { kind: 'fake' } }),
     analyse(msg, onInfo) {
-      let finish;
-      const promise = new Promise((resolve) => { finish = resolve; });
+      let finish, fail;
+      const promise = new Promise((resolve, reject) => { finish = resolve; fail = reject; });
       const run = {
-        msg, onInfo, promise, finish, cancelled: false,
+        msg, onInfo, promise, finish, fail, cancelled: false,
         cancel() { run.cancelled = true; finish({ depth: 1, lines: [], bestmove: null, cancelled: true }); },
       };
       analyses.push(run);
@@ -109,6 +109,27 @@ test('analysis progress goes out at most every 120 ms, and a new analysis replac
   ws.request({ type: REQUEST.STOP, id: 99 }); // nothing running under that id
   await settle();
   assert.equal(engines.analyses[2].cancelled, true);
+});
+
+test('a failed analysis ends with its error, and leaves nothing behind', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_000_000 });
+  const engines = scriptedEngines();
+  const ws = serve({ engines }).connect();
+  ws.request({ type: REQUEST.ANALYSE, id: 1, fen: START_FEN });
+  await settle();
+  const [run] = engines.analyses;
+  run.onInfo({ depth: 1 }); // sent at once
+  run.onInfo({ depth: 2 }); // held back for 120 ms...
+  run.fail(new Error('Stockfish stopped responding, so it was restarted.'));
+  await settle();
+  t.mock.timers.tick(500); // ...and dropped: nothing may follow the error
+  assert.deepEqual(ws.replies(1).map((m) => m.type), [REPLY.INFO, REPLY.ERROR]);
+  assert.equal(ws.replies(1)[1].message, 'Stockfish stopped responding, so it was restarted.');
+
+  ws.readyState = 3;
+  ws.emit('close');
+  await settle();
+  assert.equal(run.cancelled, false, 'a run that has ended is not cancelled again');
 });
 
 test('evaluations and best moves are answered under their request id; failures as errors', async () => {
@@ -200,6 +221,14 @@ test('a puzzle search saves and reports what it finds, and answers with the puzz
   const result = ws.replies(7).at(-1);
   assert.equal(result.type, REPLY.RESULT);
   assert.deepEqual(result.puzzles, [puzzle.id]);
+});
+
+test('a puzzle search Lichess refuses ends with the reason', async (t) => {
+  const refused = async () => { throw Object.assign(new Error('Connect your Lichess account first.'), { status: 401 }); };
+  const ws = serve(searchServices(t, { explorer: refused })).connect();
+  ws.request({ type: REQUEST.PUZZLE_SEARCH, id: 4, repId: 'rep', fen: START_FEN });
+  for (let i = 0; i < 20 && !ws.replies(4).length; i++) await settle();
+  assert.deepEqual(ws.replies(4), [{ type: REPLY.ERROR, id: 4, message: 'Connect your Lichess account first.' }]);
 });
 
 test('a puzzle search needs a repertoire and a legal position', async (t) => {

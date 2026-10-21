@@ -17,7 +17,7 @@ const TOKEN = { token: 'lip_savedToken123', username: 'Me', via: 'personal' };
 /**
  * A client with its own temp data folder (removed after the test), signed in when `auth` is given.
  * @param {import('node:test').TestContext} t
- * @param {{ auth?: object | null, memoryCacheSize?: number }} [options]
+ * @param {{ auth?: object | null, memoryCacheSize?: number, rateLimitPauseMs?: number }} [options]
  */
 function tempClient(t, { auth = null, ...options } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-lichess-answers-'));
@@ -155,7 +155,7 @@ test('a token is checked with Lichess: refused, failing, or out of reach', async
   const cases = [
     [() => json({ error: 'No such token' }, 401), { status: 401, message: 'Lichess did not accept that token.' }],
     [() => json({ error: 'Oops' }, 500), { status: 500, message: 'Lichess answered 500' }],
-    [() => { throw new TypeError('fetch failed'); }, { status: 502, message: 'Could not reach Lichess (fetch failed).' }],
+    [() => { throw new TypeError('fetch failed'); }, { status: 502, message: 'Could not reach Lichess (fetch failed). Check your internet connection.' }],
   ];
   for (const [answer, expected] of cases) {
     scriptFetch(t, answer);
@@ -236,4 +236,27 @@ test('sign-in: cancelled, expired after 15 minutes, or refused by Lichess', asyn
     const state = stateOf(client.oauthStart('http://localhost:3210/auth/lichess/callback'));
     await assert.rejects(client.oauthCallback({ code: 'c', state }), { status: 400, message });
   }
+});
+
+test('sign-in that cannot reach Lichess says so, as every other call does', async (t) => {
+  const { client } = tempClient(t);
+  scriptFetch(t, () => { throw new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } }); });
+  const state = new URL(client.oauthStart('http://localhost:3210/auth/lichess/callback')).searchParams.get('state');
+  await assert.rejects(client.oauthCallback({ code: 'c', state }), { status: 502, message: 'Could not reach Lichess (ENOTFOUND). Check your internet connection.' });
+});
+
+test('a token check that Lichess rate-limits pauses every call, and the next one waits it out', async (t) => {
+  const { client } = tempClient(t, { rateLimitPauseMs: 80 });
+  const notices = [];
+  client.events.on('ratelimit', (until) => notices.push(until));
+  const asked = [];
+  scriptFetch(t, () => {
+    asked.push(Date.now());
+    return asked.length === 1 ? json({}, 429) : json({ id: 'me', username: 'Me' });
+  });
+  await assert.rejects(client.connectWithToken('lip_validLooking123'), { status: 429, message: 'Lichess asked us to slow down. Try again in a minute.' });
+  assert.equal(notices.length, 1, 'the open pages are told');
+  assert.ok(client.status().pausedUntil, 'the pause shows in the status');
+  assert.equal((await client.connectWithToken('lip_validLooking123')).username, 'Me');
+  assert.ok(asked[1] - asked[0] >= 70, `the second call waited out the pause (${asked[1] - asked[0]} ms)`);
 });

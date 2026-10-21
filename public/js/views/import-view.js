@@ -90,7 +90,8 @@ export async function renderImport(root, { id }) {
         saveBtn.disabled = true;
         try {
           const payload = { name: name.value, color: color(), pgn: pgn.value };
-          const saved = editing ? await api.update(id, payload) : await api.create(payload);
+          // An edit names the version it started from, so it cannot overwrite a chapter added meanwhile.
+          const saved = editing ? await api.update(id, { ...payload, baseUpdatedAt: rep.updatedAt }) : await api.create(payload);
           putRep(saved);
           toast(editing ? 'Changes saved' : `Saved ${saved.name}`);
           location.hash = `#/rep/${saved.id}`;

@@ -70,6 +70,7 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
  * @returns {RepertoireFile}
  */
 export function migrate(rep, fileName = 'This repertoire') {
+  if (!isObject(rep)) throw fail(`${fileName} does not hold a repertoire.`, 500);
   const version = rep.schemaVersion === undefined ? 1 : rep.schemaVersion;
   if (!Number.isInteger(version) || version < 1) throw fail(`${fileName} has an unknown format version (${version}).`, 500);
   if (version > SCHEMA_VERSION) {
@@ -103,13 +104,14 @@ function checkAudit(audit) {
 
 /**
  * Check a new repertoire (partial = false) or a change to one (PUT). Only name, color,
- * pgn, notes and audit can be set this way.
+ * pgn, notes and audit can be set this way. A change may also carry baseUpdatedAt, the
+ * updatedAt of the version it was made from (store.js refuses it if the file has moved on).
  * @param {any} input
  * @param {boolean} [partial]
  */
 export function checkRepertoireInput(input, partial = false) {
   if (!isObject(input)) throw fail('Send the repertoire as a JSON object.');
-  const { name, color, pgn, notes, audit } = input;
+  const { name, color, pgn, notes, audit, baseUpdatedAt } = input;
   const errors = [];
   if (!partial || name !== undefined) {
     if (typeof name !== 'string' || !name.trim()) errors.push('Give the repertoire a name.');
@@ -121,6 +123,7 @@ export function checkRepertoireInput(input, partial = false) {
     if (typeof pgn !== 'string' || !pgn.trim()) errors.push('Paste or upload some PGN.');
   }
   if (notes !== undefined && typeof notes !== 'string') errors.push('Notes must be text.');
+  if (baseUpdatedAt !== undefined && typeof baseUpdatedAt !== 'string') errors.push('baseUpdatedAt must be the time the edit started from.');
   if (errors.length) throw fail(errors.join(' '));
   if (audit !== undefined) checkAudit(audit);
 }
