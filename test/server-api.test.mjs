@@ -10,6 +10,7 @@ import path from 'node:path';
 import { startServer } from './helpers/server.mjs';
 import { startMockLichess } from './helpers/mock-lichess.mjs';
 import { START_FEN } from '../public/js/constants.js';
+import { must } from './helpers/must.mjs';
 
 const PGN = '1. e4 e5 2. Nf3 Nc6 *';
 let mock;
@@ -89,8 +90,8 @@ test('the explorer, studies and account go through the app’s Lichess client', 
 test('Lichess sign-in: the start goes to Lichess, and the way back connects or says why not', async () => {
   const start = await api('GET', '/auth/lichess/start');
   assert.equal(start.status, 302);
-  const approval = await fetch(start.location, { redirect: 'manual' });
-  const back = new URL(approval.headers.get('location'));
+  const approval = await fetch(must(start.location), { redirect: 'manual' });
+  const back = new URL(must(approval.headers.get('location')));
   assert.equal(back.origin, server.base, 'Lichess sends the user back to this server');
   const done = await api('GET', back.pathname + back.search);
   assert.equal(done.location, '/#/lichess?connected=1');

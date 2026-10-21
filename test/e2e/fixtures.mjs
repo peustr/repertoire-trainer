@@ -26,13 +26,14 @@ const COVERAGE_DIR = process.env.E2E_COVERAGE_DIR;
  * script's URL turned into its file under public/.
  * @param {import('@playwright/test').Page} page
  * @param {string} base  the server's address
+ * @param {string} dir  where to save it
  */
-async function saveCoverage(page, base) {
+async function saveCoverage(page, base, dir) {
   const result = (await page.coverage.stopJSCoverage())
     .filter((script) => script.url.startsWith(`${base}/js/`))
     .map(({ scriptId, url, functions }) => ({ scriptId, functions, url: pathToFileURL(path.join(ROOT, 'public', new URL(url).pathname)).href }));
-  fs.mkdirSync(COVERAGE_DIR, { recursive: true });
-  fs.writeFileSync(path.join(COVERAGE_DIR, `coverage-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`), JSON.stringify({ result }));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `coverage-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`), JSON.stringify({ result }));
 }
 
 /**
@@ -90,7 +91,7 @@ export const test = base.extend({
       if (mock) await api('POST', '/api/lichess/token', { token: 'lip_mockPersonalToken' }); // gitleaks:allow (fake token for the mock)
       await use(app);
     } finally {
-      if (COVERAGE_DIR) await saveCoverage(page, server.base);
+      if (COVERAGE_DIR) await saveCoverage(page, server.base, COVERAGE_DIR);
       await server.stop();
       if (mock) await mock.stop();
     }

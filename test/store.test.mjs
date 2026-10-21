@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { must } from './helpers/must.mjs';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-store-'));
 process.env.TRAINER_DATA_DIR = dataDir;
@@ -73,7 +74,7 @@ test('a damaged repertoire is restored from its backup and stays in the library'
   fs.writeFileSync(repFile(rep.id), '{"id": "trunc');
 
   assert.ok(store.listRepertoires().some((r) => r.id === rep.id));
-  assert.equal(store.getRepertoire(rep.id).name, 'Restorable');
+  assert.equal(must(store.getRepertoire(rep.id)).name, 'Restorable');
   assert.equal(setAside(repFile(rep.id)).length, 1);
 });
 
@@ -99,7 +100,7 @@ test('a deleted repertoire goes to the trash with its backup, and can be moved b
   assert.match(bin, new RegExp(`^${rep.id}-\\d{4}-\\d{2}-\\d{2}T[\\d-]+Z$`), 'named after the repertoire and the time');
   assert.deepEqual(fs.readdirSync(path.join(TRASH, bin)).sort(), [`${rep.id}.json`, `${rep.id}.json.bak`]);
   fs.renameSync(path.join(TRASH, bin, `${rep.id}.json`), repFile(rep.id)); // restoring it by hand
-  assert.deepEqual(store.getRepertoire(rep.id).cards, { k: { level: 2, due: 0 } });
+  assert.deepEqual(must(store.getRepertoire(rep.id)).cards, { k: { level: 2, due: 0 } });
 });
 
 test('a file that does not hold a repertoire is skipped, with a warning', (t) => {
@@ -118,7 +119,7 @@ test('a copied file is a repertoire of its own, named after its file', () => {
   assert.deepEqual(listed.sort(), [rep.id, 'original-copy'].sort(), 'two entries, each opening its own file');
 
   store.patchProgress('original-copy', { cards: { k: { level: 2, due: 0 } } });
-  assert.deepEqual(store.getRepertoire(rep.id).cards, {}, 'a save to the copy leaves the original alone');
+  assert.deepEqual(must(store.getRepertoire(rep.id)).cards, {}, 'a save to the copy leaves the original alone');
   assert.equal(readFile(repFile('original-copy')).id, 'original-copy', 'and the copy now carries its own id');
 });
 
@@ -141,7 +142,7 @@ test('an edit made from an older version is refused, and changes nothing', () =>
   };
   const first = opened('2026-01-01T00:00:00.000Z');
   store.patchProgress(rep.id, { cards: { k: { level: 1, due: 0 } } }); // training elsewhere is no conflict
-  assert.equal(store.updateRepertoire(rep.id, { name: 'Renamed', baseUpdatedAt: first }).name, 'Renamed');
+  assert.equal(must(store.updateRepertoire(rep.id, { name: 'Renamed', baseUpdatedAt: first })).name, 'Renamed');
 
   const second = opened('2026-02-01T00:00:00.000Z');
   store.addLine(rep.id, { pgn: '1. d4 *' }); // a chapter added from another tab
@@ -149,8 +150,8 @@ test('an edit made from an older version is refused, and changes nothing', () =>
     status: 409,
     message: 'This repertoire changed in another tab or window while you were editing it. Copy your changes, reload the page and edit it again.',
   });
-  assert.match(store.getRepertoire(rep.id).pgn, /1\. d4/, 'the added chapter is kept');
-  assert.equal(store.updateRepertoire(rep.id, { audit: null }).audit, null, 'a change that names no version is not checked');
+  assert.match(must(store.getRepertoire(rep.id)).pgn, /1\. d4/, 'the added chapter is kept');
+  assert.equal(must(store.updateRepertoire(rep.id, { audit: null })).audit, null, 'a change that names no version is not checked');
 });
 
 test('a save retries while another program briefly holds the file', (t) => {
@@ -164,7 +165,7 @@ test('a save retries while another program briefly holds the file', (t) => {
 
   store.patchProgress(rep.id, { cards: { k: { level: 1, due: 0 } } });
   assert.equal(rename.mock.callCount(), 3);
-  assert.deepEqual(store.getRepertoire(rep.id).cards, { k: { level: 1, due: 0 } });
+  assert.deepEqual(must(store.getRepertoire(rep.id)).cards, { k: { level: 1, due: 0 } });
 });
 
 test('a save that keeps failing reports the error and leaves no temp file', (t) => {
@@ -176,7 +177,7 @@ test('a save that keeps failing reports the error and leaves no temp file', (t) 
   assert.throws(() => store.patchProgress(rep.id, { cards: { k: { level: 1, due: 0 } } }), { code: 'EPERM' });
   assert.deepEqual(tempFiles(), []);
   t.mock.restoreAll();
-  assert.deepEqual(store.getRepertoire(rep.id).cards, {}, 'the last good version is untouched');
+  assert.deepEqual(must(store.getRepertoire(rep.id)).cards, {}, 'the last good version is untouched');
 });
 
 test('a save retried after a lost reply is applied once', () => {
@@ -184,9 +185,9 @@ test('a save retried after a lost reply is applied once', () => {
   const save = { cards: { k: { level: 1, due: 0 } }, tally: { date: '2026-10-18', correct: 3, wrong: 1, lines: 1 }, saveId: 'save-1' };
   store.patchProgress(rep.id, save);
   store.patchProgress(rep.id, save); // the browser never heard back, so it sent it again
-  assert.deepEqual(store.getRepertoire(rep.id).history, [{ date: '2026-10-18', correct: 3, wrong: 1, lines: 1 }]);
+  assert.deepEqual(must(store.getRepertoire(rep.id)).history, [{ date: '2026-10-18', correct: 3, wrong: 1, lines: 1 }]);
   store.patchProgress(rep.id, { ...save, saveId: 'save-2' });
-  assert.equal(store.getRepertoire(rep.id).history[0].correct, 6, 'a different save still counts');
+  assert.equal(must(store.getRepertoire(rep.id)).history[0].correct, 6, 'a different save still counts');
 });
 
 test("a puzzle's line is added to the repertoire in one save, and only once", (t) => {
@@ -194,15 +195,15 @@ test("a puzzle's line is added to the repertoire in one save, and only once", (t
   store.addPuzzles(rep.id, [{ id: 'pz1', fen: 'x' }]);
   const chapter = '[Event "Punishing 1...f6"]\n\n1. e4 f6 2. Qh5+ *\n';
   const renames = t.mock.method(fs, 'renameSync');
-  const first = store.addPuzzleLine(rep.id, 'pz1', chapter);
+  const first = must(store.addPuzzleLine(rep.id, 'pz1', chapter));
   assert.equal(renames.mock.callCount(), 1, 'the chapter and the mark go in the same write');
   renames.mock.restore();
   assert.equal(first.pgn, `${PGN}\n\n${chapter}`);
-  assert.ok(first.puzzles.pz1.addedAt);
+  assert.ok(first.puzzles?.pz1.addedAt);
 
-  const again = store.addPuzzleLine(rep.id, 'pz1', chapter); // a double click, or a retry
+  const again = must(store.addPuzzleLine(rep.id, 'pz1', chapter)); // a double click, or a retry
   assert.equal(again.pgn.split('Punishing').length, 2, 'the chapter is there once');
-  assert.equal(again.puzzles.pz1.addedAt, first.puzzles.pz1.addedAt);
+  assert.equal(must(again.puzzles).pz1.addedAt, must(first.puzzles).pz1.addedAt);
   assert.deepEqual(store.getRepertoire(rep.id), again);
 });
 
@@ -213,7 +214,7 @@ test('adding the line of a missing puzzle, or without a chapter, is refused', ()
   assert.throws(() => store.addPuzzleLine(rep.id, '__proto__', '1. e4 *'), { status: 404 });
   assert.throws(() => store.addPuzzleLine(rep.id, 'pz1', '  '), { status: 400 });
   assert.equal(store.addPuzzleLine('no-such-rep', 'pz1', '1. e4 *'), null);
-  assert.equal(store.getRepertoire(rep.id).pgn, PGN);
+  assert.equal(must(store.getRepertoire(rep.id)).pgn, PGN);
 });
 
 test('temp files left by interrupted saves are swept', () => {
@@ -241,7 +242,7 @@ test('Windows: a save succeeds while a sync client briefly holds the file', { sk
   });
 
   store.patchProgress(rep.id, { cards: { k: { level: 2, due: 0 } } });
-  assert.equal(store.getRepertoire(rep.id).cards.k.level, 2);
+  assert.equal(must(store.getRepertoire(rep.id)).cards.k.level, 2);
   assert.deepEqual(tempFiles(), []);
   await new Promise((resolve) => ps.once('exit', resolve));
 });
@@ -272,7 +273,7 @@ test('a damaged repertoire still opens from its backup when the backup cannot be
   fs.writeFileSync(repFile(rep.id), '{"id": "trunc');
   t.mock.method(fs, 'copyFileSync', () => { throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' }); });
 
-  assert.equal(store.getRepertoire(rep.id).name, 'Read only');
+  assert.equal(must(store.getRepertoire(rep.id)).name, 'Read only');
   assert.ok(!fs.existsSync(repFile(rep.id)), 'the next save writes it');
 });
 
@@ -331,7 +332,7 @@ test('only the last 200 save ids are remembered', () => {
   const ids = Array.from({ length: 200 }, (_, i) => `s${i}`);
   fs.writeFileSync(repFile(rep.id), JSON.stringify({ ...readFile(repFile(rep.id)), appliedSaves: ids }));
   store.patchProgress(rep.id, { cards: { a: { level: 1, due: 0 } }, saveId: 's200' });
-  const saved = store.getRepertoire(rep.id).appliedSaves;
+  const saved = must(must(store.getRepertoire(rep.id)).appliedSaves);
   assert.equal(saved.length, 200);
   assert.equal(saved[0], 's1');
   assert.equal(saved[199], 's200');
@@ -344,7 +345,7 @@ test('daily tallies keep the last 400 days, and missing counts add nothing', () 
   fs.writeFileSync(repFile(rep.id), JSON.stringify({ ...readFile(repFile(rep.id)), history }));
 
   store.patchProgress(rep.id, { tally: { date: day(400), wrong: 2 } }); // no cards, no correct, no lines
-  const saved = store.getRepertoire(rep.id).history;
+  const saved = must(store.getRepertoire(rep.id)).history;
   assert.equal(saved.length, 400);
   assert.equal(saved[0].date, day(1), 'the oldest day goes');
   assert.deepEqual(saved[399], { date: day(400), correct: 0, wrong: 2, lines: 0 });
@@ -354,40 +355,40 @@ test('a tally that arrives late, for an earlier day, is kept in date order', () 
   const rep = store.createRepertoire({ name: 'Offline yesterday', color: 'white', pgn: PGN });
   store.patchProgress(rep.id, { tally: { date: '2026-10-18', correct: 1 } });
   store.patchProgress(rep.id, { tally: { date: '2026-10-17', correct: 2 } }); // queued offline, sent today
-  assert.deepEqual(store.getRepertoire(rep.id).history.map((d) => [d.date, d.correct]), [['2026-10-17', 2], ['2026-10-18', 1]]);
+  assert.deepEqual(must(store.getRepertoire(rep.id)).history.map((d) => [d.date, d.correct]), [['2026-10-17', 2], ['2026-10-18', 1]]);
 });
 
 test('puzzles and gaps without an id or position are skipped', () => {
   const rep = store.createRepertoire({ name: 'Sparse', color: 'white', pgn: PGN });
-  assert.equal(store.addPuzzles(rep.id, undefined).added, 0);
-  const out = store.addPuzzles(rep.id, [null, { fen: 'x' }, { id: 'p1', fen: 'x' }]);
+  assert.equal(must(store.addPuzzles(rep.id, undefined)).added, 0);
+  const out = must(store.addPuzzles(rep.id, [null, { fen: 'x' }, { id: 'p1', fen: 'x' }]));
   assert.equal(out.added, 1);
-  assert.deepEqual(Object.keys(out.rep.puzzles), ['p1']);
+  assert.deepEqual(Object.keys(must(out.rep.puzzles)), ['p1']);
 
-  assert.deepEqual(store.addGaps(rep.id, undefined).gaps, {});
+  assert.deepEqual(must(store.addGaps(rep.id, undefined)).gaps, {});
   const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
-  const gaps = store.addGaps(rep.id, [null, { share: 0.2 }, { fen, share: 0.2 }]).gaps;
+  const gaps = must(must(store.addGaps(rep.id, [null, { share: 0.2 }, { fen, share: 0.2 }])).gaps);
   assert.deepEqual(Object.keys(gaps), [positionOf(fen)]);
 });
 
 test('a gap or puzzle can be dismissed, and progress reset', () => {
   const rep = store.createRepertoire({ name: 'Tidy', color: 'white', pgn: PGN });
-  assert.equal(store.deleteGap(rep.id, 'nothing yet').gaps, undefined, 'no gaps to remove from');
-  assert.equal(store.deletePuzzle(rep.id, 'nothing yet').puzzles, undefined);
+  assert.equal(must(store.deleteGap(rep.id, 'nothing yet')).gaps, undefined, 'no gaps to remove from');
+  assert.equal(must(store.deletePuzzle(rep.id, 'nothing yet')).puzzles, undefined);
 
   const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
   store.addGaps(rep.id, [{ fen }]);
   store.addPuzzles(rep.id, [{ id: 'p1' }, { id: 'p2' }]);
   store.patchProgress(rep.id, { cards: { 'pz|p1': { level: 1, due: 0 }, k: { level: 2, due: 0 } }, tally: { date: '2026-10-18', correct: 1 } });
 
-  assert.deepEqual(store.deleteGap(rep.id, positionOf(fen)).gaps, {});
-  const after = store.deletePuzzle(rep.id, 'p1');
-  assert.deepEqual(Object.keys(after.puzzles), ['p2']);
+  assert.deepEqual(must(store.deleteGap(rep.id, positionOf(fen))).gaps, {});
+  const after = must(store.deletePuzzle(rep.id, 'p1'));
+  assert.deepEqual(Object.keys(must(after.puzzles)), ['p2']);
   assert.deepEqual(after.cards, { k: { level: 2, due: 0 } }, "the puzzle's progress goes with it");
 
-  const reset = store.resetProgress(rep.id);
+  const reset = must(store.resetProgress(rep.id));
   assert.deepEqual([reset.cards, reset.history], [{}, []]);
-  assert.deepEqual(Object.keys(store.getRepertoire(rep.id).puzzles), ['p2'], 'the puzzles stay');
+  assert.deepEqual(Object.keys(must(must(store.getRepertoire(rep.id)).puzzles)), ['p2'], 'the puzzles stay');
 });
 
 test('a repertoire file without PGN (edited by hand) can still take a new line', () => {
@@ -395,10 +396,10 @@ test('a repertoire file without PGN (edited by hand) can still take a new line',
   const { pgn, ...rest } = readFile(repFile(rep.id));
   assert.equal(pgn, PGN);
   fs.writeFileSync(repFile(rep.id), JSON.stringify({ ...rest, puzzles: { p1: { id: 'p1' } } }));
-  assert.equal(store.addLine(rep.id, { pgn: '1. d4 *' }).pgn, '\n\n1. d4 *\n');
+  assert.equal(must(store.addLine(rep.id, { pgn: '1. d4 *' })).pgn, '\n\n1. d4 *\n');
 
   fs.writeFileSync(repFile(rep.id), JSON.stringify({ ...rest, puzzles: { p1: { id: 'p1' } } }));
-  assert.equal(store.addPuzzleLine(rep.id, 'p1', '1. c4 *').pgn, '\n\n1. c4 *');
+  assert.equal(must(store.addPuzzleLine(rep.id, 'p1', '1. c4 *')).pgn, '\n\n1. c4 *');
 });
 
 test('a repertoire deleted before its first change goes to the trash without a backup', () => {
@@ -452,7 +453,7 @@ test('a save that cannot reach the disk changes nothing and leaves no temp file'
   assert.throws(() => store.patchProgress(rep.id, { cards: { k: { level: 1, due: 0 } } }), { code: 'EIO' });
   t.mock.restoreAll();
   assert.deepEqual(tempFiles(), []);
-  assert.deepEqual(store.getRepertoire(rep.id).cards, {}, 'the last good version is untouched');
+  assert.deepEqual(must(store.getRepertoire(rep.id)).cards, {}, 'the last good version is untouched');
 });
 
 test('a backup that cannot be flushed does not stop the save', (t) => {
@@ -460,7 +461,7 @@ test('a backup that cannot be flushed does not stop the save', (t) => {
   watchDisk(t, { failFlush: (name) => name.endsWith('.bak') });
   store.patchProgress(rep.id, { cards: { k: { level: 1, due: 0 } } });
   t.mock.restoreAll();
-  assert.deepEqual(store.getRepertoire(rep.id).cards, { k: { level: 1, due: 0 } });
+  assert.deepEqual(must(store.getRepertoire(rep.id)).cards, { k: { level: 1, due: 0 } });
   assert.deepEqual(readFile(`${repFile(rep.id)}.bak`).cards, {}, 'the backup holds the version before');
 });
 

@@ -179,6 +179,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
   const stats = { positions: 0, lookups: 0, cached: 0, evaluations: 0, rootGames: null, skipped: 0 };
   const gaps = [];
   const inTree = (f) => model.nodesByPosition.has(positionKey(f));
+  /** @type {{ fen: string, path: string[], reach: number, oppDepth: number, hint: string | null, offBook: number }[]} */
   const frontier = [{ fen, path: [], reach: 1, oppDepth: 0, hint: null, offBook: 0 }];
 
   const pop = () => {
@@ -282,8 +283,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
         const puzzle = {
           id,
           createdAt: new Date().toISOString(),
-          fen: c.after,
-          beforeFen: node.fen,
+          beforeFen: node.fen, // ...built, below, brings fen: the position after the mistake
           startFen: prefix && prefix.startFen ? prefix.startFen : fen,
           lineMoves: [...((prefix && prefix.moves) || []), ...pathToMistake],
           searchRoot: fen,

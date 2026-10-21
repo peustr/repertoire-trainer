@@ -204,7 +204,7 @@ function opponentsPanel(rep, model, pz) {
         h('span.audit-move', lineTail(g.startFen, g.lineMoves, 3)),
         h('span.muted', `played in ${formatShare(g.share)} of games`),
         h('span.muted', g.bestReplySan ? `Stockfish answers ${g.bestReplySan}` : ''),
-        h('span.pz-status', g.reach ? describeReach(g.reach).replace(/ from here$/, '') : ''),
+        h('span.pz-status', g.reach ? /** @type {string} */ (describeReach(g.reach)).replace(/ from here$/, '') : ''),
         h('span.gap-actions',
           h('a.btn.small.ghost', { href: `#/explore/${rep.id}?moves=${encodeURIComponent(g.lineMoves.join(','))}` }, 'Explore'),
           h('button.btn.small.ghost', {

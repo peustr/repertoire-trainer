@@ -182,6 +182,6 @@ export function gradePlayout({ startCp, endCp, result = null }, { playOutToleran
  */
 export function biggestSlip(moves, min = 50) {
   let worst = null;
-  for (const m of moves) if (m.loss != null && m.loss >= min && (!worst || m.loss > worst.loss)) worst = m;
+  for (const m of moves) if (m.loss != null && m.loss >= min && (!worst || m.loss > /** @type {number} */ (worst.loss))) worst = m;
   return worst;
 }

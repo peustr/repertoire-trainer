@@ -17,9 +17,15 @@ export function positionKey(fen) {
 }
 
 /**
+ * Stockfish's evaluation from White's side: centipawns, or mate in that many moves
+ * (negative when Black mates).
+ * @typedef {{ cp: number } | { mate: number }} Score
+ */
+
+/**
  * Centipawns from White's view, with mates mapped to large numbers (mate in 1 is 9990).
  * A missing score counts as 0.
- * @param {{ cp?: number, mate?: number } | null | undefined} score
+ * @param {Score | null | undefined} score
  */
 export function scoreToCp(score) {
   if (!score) return 0;

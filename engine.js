@@ -410,7 +410,7 @@ class UciEngine extends EventEmitter {
   }
 
   _replaceStuck(err) {
-    const proc = this.proc;
+    const proc = /** @type {import('node:child_process').ChildProcess} */ (this.proc); // a search was running on it
     const job = this.current;
     this.current = null;
     this.proc = null;

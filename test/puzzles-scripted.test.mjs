@@ -10,6 +10,7 @@ import { buildRepertoire } from '../public/js/repertoire.js';
 import { START_FEN as START, positionKey } from '../public/js/constants.js';
 import { LichessError } from '../lichess.js';
 import { searchMistakes, buildPuzzle, theme } from '../puzzles.js';
+import { must } from './helpers/must.mjs';
 
 /** The FEN after these SAN moves. */
 function fenAfter(sans, from = START) {
@@ -41,6 +42,7 @@ function scriptedExplorer(answers) {
  * a move not listed scores level. lines: by position, the MultiPV lines. Scores are from White's side.
  */
 function scriptedEngines({ evals = {}, lines = {} } = {}) {
+  /** @type {{ evaluate: { key: string, moves: string[] }[], lines: { key: string, depth: number }[] }} */
   const calls = { evaluate: [], lines: [] };
   const evalsByKey = new Map(Object.entries(evals).map(([fen, e]) => [positionKey(fen), e]));
   const linesByKey = new Map(Object.entries(lines).map(([fen, l]) => [positionKey(fen), l]));
@@ -105,7 +107,7 @@ test('no puzzle when Stockfish has no line, or no longer sees enough', async () 
 
 test('a mate for Black is a puzzle, worked out at the solving depth', async () => {
   const engines = scriptedEngines({ lines: { [AFTER_E4]: [{ pv: ['d8h4'], score: { mate: -3 } }] } });
-  const p = await buildPuzzle(engines, AFTER_E4, 'b', { ...OPTIONS, solveDepth: 12 });
+  const p = must(await buildPuzzle(engines, AFTER_E4, 'b', { ...OPTIONS, solveDepth: 12 }));
   assert.equal(engines.calls.lines[0].depth, 12);
   assert.equal(p.unique, true, 'no second line to compare');
   assert.equal(p.secondScore, null);
@@ -115,8 +117,8 @@ test('a mate for Black is a puzzle, worked out at the solving depth', async () =
 
 test('a mate is a single-answer puzzle even when the second line scores almost as high', async () => {
   const lines = (a, b) => scriptedEngines({ lines: { [START]: [{ pv: ['e2e4'], score: a }, { pv: ['d2d4'], score: b }] } });
-  assert.equal((await buildPuzzle(lines({ mate: 4 }, { cp: 9900 }), START, 'w', OPTIONS)).unique, true);
-  assert.equal((await buildPuzzle(lines({ cp: 400 }, { cp: 350 }), START, 'w', OPTIONS)).unique, false);
+  assert.equal(must(await buildPuzzle(lines({ mate: 4 }, { cp: 9900 }), START, 'w', OPTIONS)).unique, true);
+  assert.equal(must(await buildPuzzle(lines({ cp: 400 }, { cp: 350 }), START, 'w', OPTIONS)).unique, false);
 });
 
 test('the solution goes on while each next move is clearly the only good one', async () => {
@@ -130,7 +132,7 @@ test('the solution goes on while each next move is clearly the only good one', a
       [afterNc6]: [{ pv: ['f1b5'], score: { mate: 5 } }, { pv: ['f1c4'], score: { cp: 9900 } }],
     },
   });
-  const p = await buildPuzzle(engines, START, 'w', { ...OPTIONS, maxLength: 3, solveDepth: 12 });
+  const p = must(await buildPuzzle(engines, START, 'w', { ...OPTIONS, maxLength: 3, solveDepth: 12 }));
   assert.deepEqual(engines.calls.lines.map((c) => c.depth), [12, 12, 12], 'every move is worked out at the solving depth');
   assert.deepEqual(p.solutionSan, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']);
   assert.deepEqual(p.score, { mate: 5 }, 'the score at the end of the solution');
@@ -139,7 +141,7 @@ test('the solution goes on while each next move is clearly the only good one', a
 });
 
 test('the solution stops where the next move is not forced, not legal, or the game is over', async () => {
-  const solve = async (lines, fen = START, maxLength = 3) => (await buildPuzzle(scriptedEngines({ lines }), fen, 'w', { ...OPTIONS, maxLength })).solution;
+  const solve = async (lines, fen = START, maxLength = 3) => must(await buildPuzzle(scriptedEngines({ lines }), fen, 'w', { ...OPTIONS, maxLength })).solution;
   const first = (pv) => ({ [START]: [{ pv, score: { cp: 500 } }] });
   const afterE5 = fenAfter(['e4', 'e5']);
 
@@ -153,12 +155,12 @@ test('the solution stops where the next move is not forced, not legal, or the ga
 
   // 1.f3 e5 2.g4?? Qh4#: after the reply there is nothing left to play.
   const fools = fenAfter(['f3', 'e5']);
-  const p = await buildPuzzle(scriptedEngines({ lines: { [fools]: [{ pv: ['g2g4', 'd8h4'], score: { cp: 300 } }] } }), fools, 'w', { ...OPTIONS, maxLength: 3 });
+  const p = must(await buildPuzzle(scriptedEngines({ lines: { [fools]: [{ pv: ['g2g4', 'd8h4'], score: { cp: 300 } }] } }), fools, 'w', { ...OPTIONS, maxLength: 3 }));
   assert.deepEqual(p.solution, ['g2g4']);
 });
 
 test('a first move that is not legal still gives a puzzle, at the position it was asked about', async () => {
-  const p = await buildPuzzle(scriptedEngines({ lines: { [START]: [{ pv: ['e2e5', 'e7e5'], score: { cp: 500 } }] } }), START, 'w', OPTIONS);
+  const p = must(await buildPuzzle(scriptedEngines({ lines: { [START]: [{ pv: ['e2e5', 'e7e5'], score: { cp: 500 } }] } }), START, 'w', OPTIONS));
   assert.deepEqual(p.solution, ['e2e5']);
   assert.deepEqual(p.solutionSan, [], 'nothing to name');
   assert.equal(p.theme.label, 'Decisive advantage');

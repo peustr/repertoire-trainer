@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 import { startServer } from './helpers/server.mjs';
 import { START_FEN } from '../public/js/constants.js';
 import { REQUEST, REPLY } from '../public/js/protocol.js';
+import { must } from './helpers/must.mjs';
 
 function withTimeout(promise, ms, what) {
   let timer;
@@ -62,7 +63,7 @@ try {
       assert.equal((await api('GET', url)).status, 200, url);
     }
     const fontCss = (await api('GET', '/vendor/fonts/inter/index.css')).text;
-    const fontFile = fontCss.match(/url\(\.\/([^)]+\.woff2)\)/)[1];
+    const fontFile = must(fontCss.match(/url\(\.\/([^)]+\.woff2)\)/))[1];
     assert.equal((await api('GET', `/vendor/fonts/inter/${fontFile}`)).status, 200, fontFile);
   });
 

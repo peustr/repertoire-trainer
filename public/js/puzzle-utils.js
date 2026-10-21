@@ -14,7 +14,11 @@ export function puzzleState(rep, puzzle) {
   return (rep.cards || {})[puzzleKey(puzzle.id)] || null;
 }
 
-/** Due puzzles first (most overdue first), then new ones (most likely to come up first). */
+/**
+ * Due puzzles first (most overdue first), then new ones (most likely to come up first).
+ * @param {any} rep
+ * @param {{ limit?: number, now?: number, only?: string[] | null }} [options]  only: these puzzle ids
+ */
 export function puzzleQueue(rep, { limit = 12, now = Date.now(), only = null } = {}) {
   let list = puzzleList(rep);
   if (only) list = list.filter((p) => only.includes(p.id));

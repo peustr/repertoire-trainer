@@ -25,7 +25,7 @@ function request({ method = 'GET', path = '/api/settings', host, origin, body } 
     const req = http.request({ host: '127.0.0.1', port: server.port, method, path, headers, agent: false }, (res) => {
       let text = '';
       res.on('data', (d) => { text += d; });
-      res.on('end', () => resolve({ status: res.statusCode, text }));
+      res.on('end', () => resolve({ status: Number(res.statusCode), text }));
     });
     req.on('error', reject);
     req.end(body ? JSON.stringify(body) : undefined);

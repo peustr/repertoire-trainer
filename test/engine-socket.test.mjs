@@ -201,7 +201,7 @@ function searchServices(t, { explorer } = {}) {
     [positionKey(AFTER_E4)]: { total: 1000, moves: [explorerMove('e7e5', 'e5', 500), explorerMove('f7f6', 'f6', 300), explorerMove('c7c5', 'c5', 200)] },
   };
   const lichess = {
-    explorer: explorer || (async ({ fen }) => ({ cached: false, total: 0, moves: [], ...answers[positionKey(fen)] })),
+    explorer: explorer || (async ({ fen }) => ({ cached: false, ...(answers[positionKey(fen)] || { total: 0, moves: [] }) })),
   };
   return { store, engines, lichess };
 }

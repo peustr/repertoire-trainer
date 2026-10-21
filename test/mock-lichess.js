@@ -68,7 +68,7 @@ const STUDY = `[Event "Mock study: Scotch"]
 `;
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const url = new URL(req.url || '/', `http://localhost:${PORT}`);
   const auth = req.headers.authorization || '';
   const json = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
   console.log(req.method, url.pathname, auth ? '(auth)' : '');
@@ -111,9 +111,12 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/oauth') {
     // Approve straight away and bounce back like Lichess would.
-    const back = new URL(url.searchParams.get('redirect_uri'));
+    const redirect = url.searchParams.get('redirect_uri');
+    const state = url.searchParams.get('state');
+    if (!redirect || !state) { res.writeHead(400); return res.end('redirect_uri and state are required'); }
+    const back = new URL(redirect);
     back.searchParams.set('code', 'mockcode');
-    back.searchParams.set('state', url.searchParams.get('state'));
+    back.searchParams.set('state', state);
     res.writeHead(302, { Location: back.toString() });
     return res.end();
   }

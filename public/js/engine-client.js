@@ -74,7 +74,8 @@ async function request(payload, onInfo) {
   const id = ++seq;
   const quiet = payload.type === REQUEST.PUZZLE_SEARCH ? limits.search : limits.request;
   const promise = new Promise((resolve, reject) => {
-    const entry = { resolve, reject, onInfo, timer: null };
+    /** @type {{ resolve: (msg: any) => void, reject: (err: Error) => void, onInfo: any, timer?: ReturnType<typeof setTimeout>, touch: () => void }} */
+    const entry = { resolve, reject, onInfo, touch: () => {} };
     entry.touch = () => {
       clearTimeout(entry.timer);
       entry.timer = setTimeout(() => {
@@ -117,7 +118,7 @@ export function analyse(fen, { multipv = 3, depth = 22 } = {}, onUpdate, onError
  * Resolves to the DONE message: { depth, lines: [{ multipv, score, pv }], bestmove }.
  * @param {string} fen
  * @param {{ multipv?: number, depth?: number }} [options]
- * @returns {Promise<{ depth: number, lines: { multipv: number, depth: number, score: { cp?: number, mate?: number }, pv: string[] }[] }>}
+ * @returns {Promise<{ depth: number, lines: { multipv: number, depth: number, score: import('./constants.js').Score, pv: string[] }[] }>}
  */
 export function analyseOnce(fen, { multipv = 3, depth = 14 } = {}) {
   return new Promise((resolve, reject) => {

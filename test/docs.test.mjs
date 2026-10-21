@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { must } from './helpers/must.mjs';
 
 const read = (file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
 const list = (dir, pattern) => fs.readdirSync(new URL(`../${dir}`, import.meta.url)).filter((f) => pattern.test(f));
@@ -23,7 +24,7 @@ test('CLAUDE.md lists exactly the shared modules: the ones in public/js that cov
   const browserOnly = JSON.parse(read('.c8rc.json')).exclude.join().match(/\{([^}]+)\}/)[1].split(',');
   const shared = list('public/js', /\.js$/).map((f) => f.replace(/\.js$/, '')).filter((m) => !browserOnly.includes(m)).sort();
   const claude = read('CLAUDE.md');
-  const line = claude.split('\n').find((l) => l.startsWith('- **Shared modules**'));
+  const line = must(claude.split('\n').find((l) => l.startsWith('- **Shared modules**')));
   const listed = [...line.slice(0, line.indexOf(' run in ')).matchAll(/`(?:public\/js\/)?([\w-]+)\.js`/g)].map((m) => m[1]).sort();
   assert.deepEqual(listed, shared);
 });

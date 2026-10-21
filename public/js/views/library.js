@@ -163,7 +163,7 @@ function renderQuickCard(container, entries) {
     const { rep, model, card } = current;
     let uci = from + to;
     if (isPromotion(card.fenBefore, from, to)) uci += card.uci.startsWith(uci) ? card.uci[4] : await choosePromotion(rep.color);
-    const played = playMove(card.fenBefore, uci);
+    const played = /** @type {import('../moves.js').PlayedMove} */ (playMove(card.fenBefore, uci)); // the board offers legal moves only
     const alsoMine = (model.myMovesAt.get(positionKey(card.fenBefore)) || new Set()).has(uci);
     answered = true;
     const now = Date.now();

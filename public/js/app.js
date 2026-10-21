@@ -115,7 +115,7 @@ function header() {
 // --- boot -------------------------------------------------------------------------------
 
 async function boot() {
-  document.getElementById('app').prepend(header());
+  /** @type {HTMLElement} */ (document.getElementById('app')).prepend(header());
   try {
     await loadSettings();
   } catch (err) {

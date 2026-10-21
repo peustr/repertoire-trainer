@@ -29,7 +29,7 @@ export function intervalFor(schedule, level) {
 
 /** @param {Schedule} schedule */
 function stepbackLevels(schedule) {
-  return Math.max(1, Math.min(MAX_LEVEL - 1, Math.round(schedule.stepbackLevels) || DEFAULT_SCHEDULE.stepbackLevels));
+  return Math.max(1, Math.min(MAX_LEVEL - 1, Math.round(Number(schedule.stepbackLevels)) || DEFAULT_SCHEDULE.stepbackLevels));
 }
 
 export function isDue(state, now = Date.now()) {
@@ -106,14 +106,14 @@ export function repertoireStats(model, cards, now = Date.now()) {
 /** The learned line that clears the most due cards (ties: the most overdue). */
 export function nextReviewLine(model, cards, now = Date.now(), skip = new Set()) {
   let best = null;
-  let bestScore = null;
+  let bestScore = [-Infinity, -Infinity]; // [due cards, -oldest due time]: any due line beats it
   for (const line of model.lines) {
     if (skip.has(line.id)) continue;
     const st = lineStatus(line, cards, now);
     if (!st.isDue) continue;
     const oldest = Math.min(...st.dueKeys.map((k) => cards[k].due));
     const score = [st.dueKeys.length, -oldest];
-    if (!best || score[0] > bestScore[0] || (score[0] === bestScore[0] && score[1] > bestScore[1])) {
+    if (score[0] > bestScore[0] || (score[0] === bestScore[0] && score[1] > bestScore[1])) {
       best = line;
       bestScore = score;
     }

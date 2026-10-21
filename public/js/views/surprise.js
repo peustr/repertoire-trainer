@@ -71,7 +71,7 @@ export async function renderSurprise(root, { id }) {
   async function findSurprise(t) {
     let lookups = 0;
     while (queue.length) {
-      const item = queue.shift();
+      const item = /** @type {(typeof queue)[number]} */ (queue.shift()); // the queue is not empty
       if (item.kind === 'gap') {
         // The repertoire may answer it by now (an answer added earlier in this session).
         const gap = rep.gaps && rep.gaps[item.surprise.gapKey];
@@ -142,7 +142,7 @@ export async function renderSurprise(root, { id }) {
 
   // ---- one surprise ----------------------------------------------------------------------
   function present(s, t) {
-    const res = playMove(s.fen, s.uci);
+    const res = /** @type {import('../moves.js').PlayedMove} */ (playMove(s.fen, s.uci)); // a surprise is a legal move
     cur = { s, after: res.fen, waiting: false, tries: 0, answer: null, best: null, added: false };
     clear(head, h('h1.line-title', 'Unprepared reply'), h('p.line-sub', sourceText(s)));
     renderContext(s);

@@ -12,7 +12,10 @@
     "types": ["node"],
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "strict": false
+    "strict": false,
+    // A value that may be null or undefined has to be checked before it is used. In tests,
+    // must() (test/helpers/must.mjs) does that for a value the test expects to be there.
+    "strictNullChecks": true
   },
   "include": ["*.js", "*.cjs", "*.mjs", "public/js/**/*.js", "test/**/*.mjs", "test/**/*.js", "test/**/*.cjs"],
   "exclude": ["node_modules", "data"]

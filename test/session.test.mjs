@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { buildRepertoire } from '../public/js/repertoire.js';
 import { passPlan, resultForCorrectMove, resultAfterHint, firstResult, judgeWrongMove, gradePass, gradeCard, gradeSurprise, surprisePassed, gradePlayout, biggestSlip } from '../public/js/session.js';
 import { buildSchema } from '../settings-schema.js';
+import { must } from './helpers/must.mjs';
 
 const HOUR = 3600e3;
 const NOW = 1_800_000_000_000;
@@ -217,7 +218,7 @@ test('a play-out passes if the position holds', () => {
 
 test('the biggest slip is the move that gave away the most', () => {
   const moves = [{ san: 'e4', loss: 0 }, { san: 'Bc4', loss: 120 }, { san: 'h3' }, { san: 'Qh5', loss: 300 }, { san: 'd3', loss: 40 }];
-  assert.equal(biggestSlip(moves).san, 'Qh5');
+  assert.equal(must(biggestSlip(moves)).san, 'Qh5');
   assert.equal(biggestSlip(moves, 400), null, 'nothing that bad');
   assert.equal(biggestSlip([{ san: 'd3', loss: 40 }, { san: 'h3' }]), null, 'small losses and unchecked moves are not slips');
 });
