@@ -210,8 +210,7 @@ function clampInt(value, min, max, fallback) {
 
 /** Refuse a job that could make the engine read more than one command per line. */
 function checkJob(job) {
-  const moves = [...(job.moves || []), ...(job.searchmoves || [])];
-  if (moves.some((m) => !UCI_MOVE.test(m))) throw badRequest('Moves must be in UCI form, like e2e4.');
+  if ((job.searchmoves || []).some((m) => !UCI_MOVE.test(m))) throw badRequest('Moves must be in UCI form, like e2e4.');
   if (job.go !== undefined && !GO.test(job.go)) throw badRequest(`Unknown search "${job.go}".`);
   for (const [name, value] of Object.entries(job.options || {})) {
     if (!/^[\w ]+$/.test(name) || !/^[\w .-]*$/.test(String(value))) throw badRequest('Engine options must be plain names and values.');
@@ -255,6 +254,7 @@ class UciEngine extends EventEmitter {
     this.current = null;
     this.buffer = '';
     this.lineWaiters = [];
+    this._starting = false; // start() is awaited for the next queued job
   }
 
   start() {
@@ -453,7 +453,7 @@ class UciEngine extends EventEmitter {
 
   /**
    * Queue a search.
-   * job: { fen, moves?, go: 'depth 18' | 'movetime 1000' | 'infinite', searchmoves?, options?, onInfo? }
+   * job: { fen, go: 'depth 18' | 'movetime 1000' | 'infinite', searchmoves?, options?, newGame?, onInfo? }
    * Returns { id, promise, cancel() }. Throws a 400 error, before anything is queued, for
    * an illegal position or a value that is not what UCI expects (see checkJob).
    */
@@ -513,8 +513,7 @@ class UciEngine extends EventEmitter {
     const opts = { MultiPV: 1, 'Skill Level': 20, UCI_LimitStrength: 'false', ...(job.options || {}) };
     for (const [name, value] of Object.entries(opts)) this._setOption(name, value);
     if (job.newGame) this.send('ucinewgame');
-    const moves = job.moves && job.moves.length ? ` moves ${job.moves.join(' ')}` : '';
-    this.send(`position fen ${job.fen}${moves}`);
+    this.send(`position fen ${job.fen}`);
     const sm = job.searchmoves && job.searchmoves.length ? ` searchmoves ${job.searchmoves.join(' ')}` : '';
     this.send(`go ${job.go || 'depth 16'}${sm}`);
     this._watch(job);
@@ -550,13 +549,11 @@ class UciEngine extends EventEmitter {
     if (!this.restartPending || this.current) return false;
     this.restartPending = false;
     const proc = this.proc;
+    this.send('quit'); // to the old process, while it is still this.proc
     this.proc = null;
     this.ready = null;
     this.spec = null;
-    if (proc) {
-      proc.stdin.write('quit\n');
-      setTimeout(() => proc.kill(), 500);
-    }
+    if (proc) setTimeout(() => proc.kill(), 500);
     return true;
   }
 

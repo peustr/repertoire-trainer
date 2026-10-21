@@ -17,6 +17,7 @@ import { Chess } from 'chess.js';
 import { cleanSpeeds, cleanRatings } from './lichess.js';
 import { defaults, finderOptions } from './settings-schema.js';
 import { positionKey, scoreToCp } from './public/js/constants.js';
+import { playMove } from './public/js/moves.js';
 
 /**
  * The search's options. Each one is a setting tagged `search` in settings-schema.js,
@@ -45,25 +46,11 @@ import { positionKey, scoreToCp } from './public/js/constants.js';
 /** @type {SearchOptions} */
 const DEFAULTS = /** @type {any} */ (finderOptions(defaults()));
 
-function play(fen, move) {
-  const c = new Chess();
-  c.load(fen, { skipValidation: true });
-  try {
-    const mv = typeof move === 'string' && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move)
-      ? c.move({ from: move.slice(0, 2), to: move.slice(2, 4), promotion: move[4] })
-      : c.move(move, { strict: false });
-    if (mv.san === '--') return null; // chess.js reads null and "--" as a null move: no move at all
-    return { fen: c.fen(), uci: mv.from + mv.to + (mv.promotion || ''), san: mv.san, color: mv.color };
-  } catch (err) {
-    return null;
-  }
-}
-
 function sanLine(fen, ucis) {
   const out = [];
   let f = fen;
   for (const u of ucis) {
-    const r = play(f, u);
+    const r = playMove(f, u);
     if (!r) break;
     out.push(r.san);
     f = r.fen;
@@ -104,10 +91,15 @@ function isMateFor(score, pov) {
 /**
  * Build a puzzle from the position right after the opponent's mistake.
  * Returns null if Stockfish, looking deeper, no longer sees a clear win.
+ * @param {any} engines
+ * @param {string} fen
+ * @param {'w' | 'b'} side
+ * @param {Pick<SearchOptions, 'solveDepth' | 'minAdvantage' | 'uniqueGap' | 'maxLength'>} opts
+ *   all of them: searchMistakes() fills in the defaults
  */
 async function buildPuzzle(engines, fen, side, opts) {
   const pov = side === 'w' ? 1 : -1;
-  const first = await engines.lines({ fen, depth: opts.solveDepth || opts.depth + 2, multipv: 2 });
+  const first = await engines.lines({ fen, depth: opts.solveDepth, multipv: 2 });
   const [a, b] = first.lines;
   if (!a || !a.pv.length) return null;
   const s1 = scoreToCp(a.score) * pov;
@@ -117,23 +109,23 @@ async function buildPuzzle(engines, fen, side, opts) {
 
   // Extend the solution while each next move of ours is also clearly the only good one.
   const solution = [a.pv[0]];
-  let cur = play(fen, a.pv[0]);
+  let cur = playMove(fen, a.pv[0]);
   let pv = a.pv;
   let finalScore = a.score;
-  for (let step = 0; step < (opts.maxLength || 3) - 1 && cur; step++) {
+  for (let step = 0; step < opts.maxLength - 1 && cur; step++) {
     const reply = pv[1];
     if (!reply) break;
-    const afterReply = play(cur.fen, reply);
+    const afterReply = playMove(cur.fen, reply);
     if (!afterReply) break;
     if (new Chess(afterReply.fen).moves().length === 0) break;
-    const r = await engines.lines({ fen: afterReply.fen, depth: opts.solveDepth || opts.depth, multipv: 2 });
+    const r = await engines.lines({ fen: afterReply.fen, depth: opts.solveDepth, multipv: 2 });
     const [x, y] = r.lines;
     if (!x || !x.pv.length) break;
     const sx = scoreToCp(x.score) * pov;
     const sy = y ? scoreToCp(y.score) * pov : -Infinity;
     const only = !y || sx - sy >= Math.max(opts.uniqueGap, 100) || (isMateFor(x.score, pov) && !isMateFor(y.score, pov));
     if (!only) break;
-    const next = play(afterReply.fen, x.pv[0]);
+    const next = playMove(afterReply.fen, x.pv[0]);
     if (!next) break;
     solution.push(reply, x.pv[0]);
     cur = next;
@@ -142,7 +134,7 @@ async function buildPuzzle(engines, fen, side, opts) {
   }
 
   // Let the opponent's forced reply to our last move show, if Stockfish expects one.
-  const tail = pv[1] && cur ? play(cur.fen, pv[1]) : null;
+  const tail = pv[1] && cur ? playMove(cur.fen, pv[1]) : null;
   const endFen = tail ? tail.fen : cur ? cur.fen : fen;
 
   return {
@@ -214,7 +206,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
         if (best) moves = [best];
       }
       for (const m of moves) {
-        const next = play(node.fen, m);
+        const next = playMove(node.fen, m);
         if (next) frontier.push({ fen: next.fen, path: [...node.path, next.uci], reach: node.reach, oppDepth: node.oppDepth, hint: null, offBook: inBook ? 0 : node.offBook });
       }
       continue;
@@ -250,7 +242,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
     for (const m of data.moves) {
       const share = m.total / data.total;
       if (share < opts.minShare) continue;
-      const mv = play(node.fen, m.san) || play(node.fen, m.uci);
+      const mv = playMove(node.fen, m.san) || playMove(node.fen, m.uci);
       if (!mv) continue;
       candidates.push({ ...m, uci: mv.uci, san: mv.san, share, after: mv.fen });
       if (candidates.length >= opts.candidates) break;
@@ -306,7 +298,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
             yourScore: c.total ? Math.round(((userWins + c.draws / 2) / c.total) * 100) : null,
             bestBefore: ev.best.score,
             bestMoveBefore: ev.best.move,
-            bestMoveBeforeSan: (play(node.fen, ev.best.move) || {}).san || null,
+            bestMoveBeforeSan: (playMove(node.fen, ev.best.move) || {}).san || null,
             after: scored.score,
             gain: Math.round(gain),
           },
@@ -333,7 +325,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
               reach: Math.round(node.reach * c.share * 10000) / 10000,
               score: scored.score,
               bestReply: scored.pv && scored.pv[1] ? scored.pv[1] : null,
-              bestReplySan: scored.pv && scored.pv[1] ? (play(c.after, scored.pv[1]) || {}).san || null : null,
+              bestReplySan: scored.pv && scored.pv[1] ? (playMove(c.after, scored.pv[1]) || {}).san || null : null,
             };
             gaps.push(gap);
             onEvent({ kind: 'gap', gap, stats: { ...stats } });

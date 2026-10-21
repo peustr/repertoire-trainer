@@ -461,7 +461,6 @@ cg-board square.wrong { background-color: rgba(179, 38, 30, 0.5); }
 .rep-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
 .rep-sub { color: var(--muted); margin: 0; }
 .rep-sub .side-chip { font-size: 14px; margin-right: 8px; }
-.rep-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .rep-section { margin-top: 32px; }
 .rep-section > .caption { margin-bottom: 10px; }
@@ -555,7 +554,6 @@ table.lines tr.is-due td.when { color: var(--flame-ink); font-weight: 650; }
 .import-form { display: flex; flex-direction: column; gap: 18px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.field-help { font-size: 12.5px; color: var(--muted); }
 .segmented { border: 0; padding: 0; margin: 0; display: flex; gap: 8px; flex-wrap: wrap; }
 .segmented legend { padding: 0; margin-bottom: 6px; }
 .segmented label { position: relative; }

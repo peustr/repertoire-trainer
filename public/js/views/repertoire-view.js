@@ -1,17 +1,15 @@
 // One repertoire: memory state, chapters and lines, PGN tools and the Stockfish audit.
 
-import { h, add, clear, levelBar, plural, toast, confirmDialog, downloadText, useFigurines, action, icon } from '../ui.js';
+import { h, add, clear, levelBar, plural, toast, confirmDialog, downloadText, useFigurines, action, icon, uciLineToSan, formatSanLine, lineTail } from '../ui.js';
 import { state, getRep, modelFor, putRep, dropRep } from '../store.js';
 import { refresh } from '../nav.js';
-import { repertoireStats, lineStatus, describeWait, MAX_LEVEL } from '../srs.js';
+import { repertoireStats, lineStatus, describeWait, isDue, MAX_LEVEL } from '../srs.js';
 import { formatSequence } from '../pgn.js';
 import { movesTo } from '../repertoire.js';
 import { api } from '../api.js';
 import { runAudit } from './audit.js';
 import { openMistakeFinder } from './finder.js';
 import { puzzleStats, puzzleList, puzzleState, formatShare, formatGames, describeReach } from '../puzzle-utils.js';
-import { uciLineToSan, formatSanLine, lineTail } from '../ui.js';
-import { isDue } from '../srs.js';
 
 export async function renderRepertoire(root, { id }) {
   const rep = await getRep(id, { fresh: true });

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  tokenize, parseComment, parsePgn, chapterName, moveNumber, formatSequence, toFigurine, nagGlyphs,
+  tokenize, parseComment, parsePgn, chapterName, moveNumber, moveLabel, formatSequence, toFigurine, nagGlyphs,
 } from '../public/js/pgn.js';
 import { START_FEN } from '../public/js/constants.js';
 import { buildRepertoire } from '../public/js/repertoire.js';
@@ -141,12 +141,12 @@ test('a sequence starting with Black’s move numbers it with dots, and can use 
   const e5 = g.root.children[0].children[0];
   const nodes = [e5, e5.children[0], e5.children[0].children[0], e5.children[0].children[0].children[0]];
   assert.equal(formatSequence(nodes), '1...e5 2.Nf3! Nc6 3.Bb5');
-  assert.equal(formatSequence(nodes, true), '1...e5 2.♘︎f3! ♘︎c6 3.♗︎b5');
+  assert.equal(formatSequence(nodes, true), '1...e5 2.♘\uFE0Ef3! ♘\uFE0Ec6 3.♗\uFE0Eb5');
 });
 
 test('figurines replace piece letters, promotions included', () => {
-  assert.equal(toFigurine('Qxf7#'), '♕︎xf7#');
-  assert.equal(toFigurine('e8=N+'), 'e8=♘︎+');
+  assert.equal(toFigurine('Qxf7#'), '♕\uFE0Exf7#');
+  assert.equal(toFigurine('e8=N+'), 'e8=♘\uFE0E+');
   assert.equal(toFigurine('e4'), 'e4');
   assert.equal(toFigurine(''), '');
   assert.equal(toFigurine(null), '');
@@ -155,4 +155,12 @@ test('figurines replace piece letters, promotions included', () => {
 test('NAG glyphs skip the ones without a symbol', () => {
   assert.equal(nagGlyphs([1, 99, 16]), '!±');
   assert.equal(nagGlyphs(undefined), '');
+});
+
+test('a move is labelled with its number, in letters or in figurines', () => {
+  const [g] = parsePgn('1. e4 e5 2. Nf3 Nc6 *');
+  const nf3 = g.root.children[0].children[0].children[0];
+  const nc6 = nf3.children[0];
+  assert.deepEqual([moveLabel(nf3), moveLabel(nc6)], ['2.Nf3', '2...Nc6']);
+  assert.deepEqual([moveLabel(nf3, true), moveLabel(nc6, true)], ['2.♘︎f3', '2...♘︎c6']);
 });

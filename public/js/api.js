@@ -21,6 +21,7 @@ export const api = {
   addLine: (id, pgn, gapKey) => call('POST', `/api/repertoires/${id}/lines`, { pgn, gapKey }),
   resetProgress: (id) => call('DELETE', `/api/repertoires/${id}/progress`),
   settings: () => call('GET', '/api/settings'),
+  settingsSchema: () => call('GET', '/api/settings/schema'),
   saveSettings: (s) => call('PUT', '/api/settings', s),
   samples: () => call('GET', '/api/samples'),
   engine: () => call('GET', '/api/engine'),

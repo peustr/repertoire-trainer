@@ -10,7 +10,7 @@ import { api } from '../api.js';
 const UNIT_HOURS = [['months', 720], ['weeks', 168], ['days', 24], ['hours', 1]];
 
 export async function renderSettings(root, { section: sectionParam }) {
-  const [meta] = await Promise.all([fetch('/api/settings/schema').then((r) => r.json()), loadLichess()]);
+  const [meta] = await Promise.all([api.settingsSchema(), loadLichess()]);
   const sections = meta.sections;
   const defaults = meta.defaults;
   let current = sections.find((s) => s.id === sectionParam) || sections[0];

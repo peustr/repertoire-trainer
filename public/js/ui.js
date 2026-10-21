@@ -1,7 +1,7 @@
 // Small DOM and formatting helpers shared by every view.
 
-import { Chess } from 'chess.js';
 import { toFigurine } from './pgn.js';
+import { playMove } from './moves.js';
 
 /** h('div.class#id', {attrs, on: {click}}, ...children) */
 export function h(tag, attrs, ...children) {
@@ -117,28 +117,21 @@ export function setFigurines(on) { figurines = !!on; }
 export function useFigurines() { return figurines; }
 export function fig(san) { return figurines ? toFigurine(san) : san; }
 
-const scratch = new Chess();
 /** Convert a list of UCI moves to SAN from a FEN. Stops at the first illegal move. */
 export function uciLineToSan(fen, ucis, max = 12) {
   const out = [];
-  try {
-    scratch.load(fen, { skipValidation: true });
-    for (const u of ucis.slice(0, max)) {
-      const before = scratch.fen().split(' ');
-      const mv = scratch.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
-      out.push({ san: mv.san, color: mv.color, number: +before[5] });
-    }
-  } catch (err) { /* stop at illegal move */ }
+  let at = fen;
+  for (const u of ucis.slice(0, max)) {
+    const mv = playMove(at, u);
+    if (!mv) break;
+    out.push({ san: mv.san, color: mv.color, number: +(at.split(/\s+/)[5] || 1) });
+    at = mv.fen;
+  }
   return out;
 }
 
 export function formatSanLine(moves) {
   return moves.map((m, i) => (m.color === 'w' ? `${m.number}.${fig(m.san)}` : i === 0 ? `${m.number}...${fig(m.san)}` : fig(m.san))).join(' ');
-}
-
-export function uciToSan(fen, uci) {
-  const [m] = uciLineToSan(fen, [uci], 1);
-  return m ? m.san : uci;
 }
 
 /** "4...h6 5.c3 Nxe4" — the last few moves of a line, ending at the move that matters. */
@@ -276,4 +269,9 @@ export function levelBar(histogram, { large = false } = {}) {
 
 export function plural(n, one, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
+}
+
+/** Centipawns as pawns: "1.5 pawns", "1.0 pawn". */
+export function pawns(cp) {
+  return `${(Math.abs(cp) / 100).toFixed(1)} ${Math.abs(cp) === 100 ? 'pawn' : 'pawns'}`;
 }

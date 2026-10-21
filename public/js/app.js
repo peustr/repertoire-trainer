@@ -3,6 +3,7 @@
 import { h, clear, toast } from './ui.js';
 import { loadSettings, flushProgress } from './store.js';
 import { setRenderer } from './nav.js';
+import { TEXT_STYLE } from './constants.js';
 import { onEngineStatus, engineReady } from './engine-client.js';
 import { renderLibrary } from './views/library.js';
 import { renderRepertoire } from './views/repertoire-view.js';
@@ -101,7 +102,7 @@ function header() {
   });
   return h('header.topbar',
     h('a.wordmark', { href: '#/', 'aria-label': 'Repertoire Trainer home' },
-      h('span.wordmark-mark', { 'aria-hidden': 'true' }, '♞︎'),
+      h('span.wordmark-mark', { 'aria-hidden': 'true' }, `♞${TEXT_STYLE}`),
       h('span.wordmark-text', 'Repertoire ', h('span', 'Trainer'))),
     h('nav.nav',
       h('a', { href: '#/' }, 'Library'),

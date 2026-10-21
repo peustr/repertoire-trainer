@@ -36,6 +36,8 @@ export default [
       'no-shadow-restricted-names': 'error',
       'prefer-const': ['error', { destructuring: 'all' }],
       eqeqeq: ['error', 'smart'],
+      // Invisible characters (a no-break space, a byte-order mark) are written as escapes, in strings too.
+      'no-irregular-whitespace': ['error', { skipStrings: false, skipTemplates: false, skipRegExps: false }],
     },
   },
   {

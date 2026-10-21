@@ -23,6 +23,17 @@ test('engine defaults are sized for a large computer', (t) => {
   assert.deepEqual(schema.engineDefaults(), { analysisThreads: 4, analysisHash: 256, taskThreads: 2, taskHash: 64 });
 });
 
+test('reading the settings does not rebuild the schema each time', (t) => {
+  const cpus = t.mock.method(os, 'cpus');
+  for (let i = 0; i < 3; i++) {
+    schema.validate(schema.defaults(), { reviewBatch: 30 });
+    schema.finderOptions(schema.defaults());
+  }
+  assert.equal(cpus.mock.callCount(), 0, 'the fields were built once, when the module loaded');
+  assert.equal(schema.buildSchema().length, 7, 'the Settings page still gets the whole schema');
+  assert.ok(cpus.mock.callCount() > 0, 'built afresh for it');
+});
+
 test('values that cannot be used keep the current setting', () => {
   const d = schema.defaults();
   const v = schema.validate(d, {

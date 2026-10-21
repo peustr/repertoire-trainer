@@ -159,8 +159,15 @@ function buildSchema() {
   ]);
 }
 
+let fields = null;
+
+/**
+ * Every field, built once. The schema depends only on this computer, which does not change
+ * while the app runs, and settings are validated on every request and every engine job.
+ */
 function allFields() {
-  return buildSchema().flatMap((s) => s.fields);
+  if (!fields) fields = buildSchema().flatMap((s) => s.fields);
+  return fields;
 }
 
 function defaults() {

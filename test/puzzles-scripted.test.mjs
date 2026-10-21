@@ -103,12 +103,10 @@ test('no puzzle when Stockfish has no line, or no longer sees enough', async () 
   assert.equal(await buildPuzzle(scriptedEngines({ lines: { [START]: [{ pv: ['e2e4'], score: null }] } }), START, 'w', opts), null);
 });
 
-test('a mate for Black is a puzzle, and the solving depth defaults to two more than the search', async () => {
+test('a mate for Black is a puzzle, worked out at the solving depth', async () => {
   const engines = scriptedEngines({ lines: { [AFTER_E4]: [{ pv: ['d8h4'], score: { mate: -3 } }] } });
-  const { solveDepth, maxLength, ...opts } = OPTIONS;
-  assert.ok(solveDepth && maxLength);
-  const p = await buildPuzzle(engines, AFTER_E4, 'b', opts);
-  assert.equal(engines.calls.lines[0].depth, OPTIONS.depth + 2);
+  const p = await buildPuzzle(engines, AFTER_E4, 'b', { ...OPTIONS, solveDepth: 12 });
+  assert.equal(engines.calls.lines[0].depth, 12);
   assert.equal(p.unique, true, 'no second line to compare');
   assert.equal(p.secondScore, null);
   assert.deepEqual(p.solution, ['d8h4']);
@@ -132,8 +130,8 @@ test('the solution goes on while each next move is clearly the only good one', a
       [afterNc6]: [{ pv: ['f1b5'], score: { mate: 5 } }, { pv: ['f1c4'], score: { cp: 9900 } }],
     },
   });
-  const p = await buildPuzzle(engines, START, 'w', { ...OPTIONS, maxLength: 3, solveDepth: undefined });
-  assert.deepEqual(engines.calls.lines.map((c) => c.depth), [10, 8, 8], 'without a solving depth: two deeper for the first move, then the search depth');
+  const p = await buildPuzzle(engines, START, 'w', { ...OPTIONS, maxLength: 3, solveDepth: 12 });
+  assert.deepEqual(engines.calls.lines.map((c) => c.depth), [12, 12, 12], 'every move is worked out at the solving depth');
   assert.deepEqual(p.solutionSan, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']);
   assert.deepEqual(p.score, { mate: 5 }, 'the score at the end of the solution');
   assert.deepEqual(p.firstScore, { cp: 300 });

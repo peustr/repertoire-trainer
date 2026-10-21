@@ -4,6 +4,9 @@
 /** The standard starting position. */
 export const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
+/** Put after a chess symbol (♘) so it shows as text in the page's font, not as an emoji. */
+export const TEXT_STYLE = '\uFE0E';
+
 /**
  * Normalise a FEN to the parts that define a position (drop the move counters).
  * Card keys and stored progress are built on this: changing it resets everyone's progress.

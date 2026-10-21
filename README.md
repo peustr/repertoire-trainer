@@ -165,6 +165,7 @@ public/
   index.html         App shell, import map
   css/app.css        All styles (Inter, the palette, light and dark)
   js/constants.js    Start position, position keys, scores, Lichess speeds and ratings
+  js/moves.js        Playing a move from a position (UCI or SAN), for every page and the server
   js/pgn.js          PGN tokenizer and move-tree builder
   js/repertoire.js   Lines and cards from a move tree
   js/srs.js          Spaced-repetition scheduler

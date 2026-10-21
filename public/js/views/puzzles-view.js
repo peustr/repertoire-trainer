@@ -5,7 +5,8 @@ import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLi
 import { state, getRep, putRep, saveCards } from '../store.js';
 import { describeWait, isDue } from '../srs.js';
 import { gradeCard } from '../session.js';
-import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci } from '../board.js';
+import { createBoard, createEvalBar, isPromotion, choosePromotion } from '../board.js';
+import { playMove } from '../moves.js';
 import { evaluate, analyse, formatScore, evalBarShare } from '../engine-client.js';
 import { api } from '../api.js';
 import { exploreTool, sparTool } from './tools.js';
@@ -39,7 +40,7 @@ export async function renderPuzzles(root, { id, ids }) {
       toolsSection));
   root.append(page);
 
-  const board = createBoard(boardHost, { orientation: rep.color, onMove });
+  const board = createBoard(boardHost, { orientation: rep.color, onMove: action(onMove) });
   const evalBar = createEvalBar(evalHost);
   evalBar.hide(true);
 
@@ -161,7 +162,7 @@ export async function renderPuzzles(root, { id, ids }) {
   }
 
   function play(uci, quiet = false) {
-    const res = applyUci(cur.fen, uci);
+    const res = playMove(cur.fen, uci);
     if (!res) return;
     cur.fenBefore = cur.fen;
     cur.fen = res.fen;

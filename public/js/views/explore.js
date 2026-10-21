@@ -1,11 +1,12 @@
 // Explore: walk the repertoire tree with Stockfish alongside, and wander off-book.
 
-import { h, clear, fig, uciLineToSan, formatSanLine, plural, action, kbd, panelSection, toolList } from '../ui.js';
+import { h, clear, fig, useFigurines, uciLineToSan, formatSanLine, plural, action, kbd, panelSection, toolList } from '../ui.js';
 import { state, getRep, modelFor, loadLichess } from '../store.js';
 import { cardKey, movesTo } from '../repertoire.js';
-import { nagGlyphs, moveNumber } from '../pgn.js';
+import { nagGlyphs, moveNumber, moveLabel } from '../pgn.js';
 import { positionKey } from '../constants.js';
-import { createBoard, createEvalBar, isPromotion, choosePromotion, applyUci, sanToUci } from '../board.js';
+import { createBoard, createEvalBar, isPromotion, choosePromotion } from '../board.js';
+import { playMove } from '../moves.js';
 import { analyse, formatScore, evalBarShare } from '../engine-client.js';
 import { api } from '../api.js';
 import { formatGames, formatShare, describeRatings, describeSpeeds } from '../puzzle-utils.js';
@@ -49,7 +50,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     const off = [];
     let f = best.n.fen;
     for (const u of ucis.slice(best.i)) {
-      const r = applyUci(f, u);
+      const r = playMove(f, u);
       if (!r) break;
       off.push(r);
       f = r.fen;
@@ -140,7 +141,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     else tree.querySelector('.current')?.scrollIntoView({ block: 'nearest' });
   }
 
-  const board = createBoard(boardHost, { orientation: rep.color, onMove });
+  const board = createBoard(boardHost, { orientation: rep.color, onMove: action(onMove) });
   const evalBar = createEvalBar(evalHost);
 
   function navBtn(glyph, label, fn) {
@@ -194,7 +195,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
       const child = pos.node.children.find((c) => c.uci === uci);
       if (child) { goTo(child); return; }
     }
-    const res = applyUci(currentFen(), uci);
+    const res = playMove(currentFen(), uci);
     if (!res) { update(); return; }
     pos.off.push(res);
     update(true, res.captured);
@@ -300,7 +301,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
     const prepared = new Set(pos.off.length ? [] : pos.node.children.map((c) => c.uci));
     const whiteToMove = fen.split(' ')[1] === 'w';
     const rows = data.moves.slice(0, 8).map((m) => {
-      const mv = sanToUci(fen, m.san);
+      const mv = playMove(fen, m.san);
       const uci = mv ? mv.uci : m.uci;
       const inRep = mine.has(uci) || prepared.has(uci);
       const t = m.total || 1;
@@ -326,8 +327,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   }
 
   function label(n) {
-    const num = moveNumber(n);
-    return n.color === 'w' ? `${num}.${fig(n.san)}` : `${num}...${fig(n.san)}`;
+    return moveLabel(n, useFigurines());
   }
 
   function moveEl(node, withNumber) {
