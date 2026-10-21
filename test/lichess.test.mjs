@@ -18,8 +18,8 @@ const client = (dir) => createLichessClient({ dataDir: dir, baseUrl: mock.url, e
 const lichess = client(dataDir);
 const TOKEN_FILE = path.join(dataDir, 'lichess.json');
 
-after(() => {
-  mock.stop();
+after(async () => {
+  await mock.stop();
   for (const dir of [dataDir, otherDir]) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 

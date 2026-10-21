@@ -20,7 +20,7 @@ before(async () => {
 });
 after(async () => {
   if (server) await server.stop();
-  if (mock) mock.stop();
+  if (mock) await mock.stop();
 });
 
 /**

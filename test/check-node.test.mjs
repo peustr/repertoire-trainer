@@ -28,11 +28,12 @@ test('a Node.js that is too old gets a plain message and nothing else', () => {
   assert.match(run.stderr, /Install the LTS version from https:\/\/nodejs\.org/);
 });
 
-test('package.json and the CI matrix agree on the minimum', () => {
-  const wanted = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).engines.node;
+test('CI tests exactly the oldest Node.js that package.json accepts', () => {
+  const wanted = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).engines.node.replace(/^>=\s*/, '');
   const ci = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const lowest = Math.min(...ci.match(/node: \[([^\]]+)\]/)[1].split(',').map(Number));
-  assert.equal(String(lowest), wanted.replace(/^>=\s*/, '').split('.')[0], 'test the oldest supported major in CI');
+  const versions = ci.match(/node: \[([^\]]+)\]/)[1].split(',').map((v) => v.trim().replace(/'/g, ''));
+  const lowest = versions.reduce((a, b) => (tooOld(b, `>=${a}`) ? b : a));
+  assert.equal(lowest, wanted, 'a bare major ("22") would test the newest 22.x, not the oldest one users may have');
 });
 
 test('the check is still CommonJS, so an old Node.js can run it', () => {

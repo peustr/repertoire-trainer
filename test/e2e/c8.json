@@ -1,0 +1,8 @@
+{
+  "all": true,
+  "include": ["public/js/**/*.js"],
+  "temp-directory": "coverage/e2e/raw",
+  "reports-dir": "coverage/e2e",
+  "reporter": ["text"],
+  "check-coverage": false
+}
