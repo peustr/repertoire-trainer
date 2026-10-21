@@ -228,7 +228,8 @@ test/*.test.mjs      Unit and integration tests (npm test): storage, the file fo
                      the Lichess client, the mistake search, PGN, moves, scheduling, the
                      training rules, opponents, the outbox, the start-up checks
 test/smoke-server.mjs Boots the server and checks the API and engine (npm run test:smoke)
-test/e2e/            Playwright browser tests (npm run test:e2e)
+test/e2e/            Playwright browser tests (npm run test:e2e; test:e2e:coverage adds
+                     a report of which lines of public/js they ran)
 test/mock-lichess.js Offline stand-in for the Lichess API
 test/helpers/, test/fixtures/  Server and mock Lichess launchers, fake Stockfish
 package.json         Dependencies, pinned exactly, and the npm scripts

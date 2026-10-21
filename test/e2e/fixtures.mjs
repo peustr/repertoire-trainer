@@ -5,17 +5,35 @@
 // `test.use({ lichess: true })` it also starts the mock Lichess (test/mock-lichess.js)
 // and connects the trainer to it. `playMove` moves a piece on the chessground board by
 // clicking its square and then the destination. `fakeEngine` stands in for Stockfish.
+// With E2E_COVERAGE_DIR set (npm run test:e2e:coverage), each test also saves which lines
+// of the app's own scripts it ran, for the report test/e2e/coverage.mjs prints.
 
 import { test as base, expect } from '@playwright/test';
 import { Chess } from 'chess.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startServer } from '../helpers/server.mjs';
 import { startMockLichess } from '../helpers/mock-lichess.mjs';
 import { REQUEST, REPLY } from '../../public/js/protocol.js';
 
-const SAMPLES = fileURLToPath(new URL('../../samples', import.meta.url));
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
+const SAMPLES = path.join(ROOT, 'samples');
+const COVERAGE_DIR = process.env.E2E_COVERAGE_DIR;
+
+/**
+ * Save the coverage of the app's own scripts (/js/...) in the form c8 reads, with each
+ * script's URL turned into its file under public/.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} base  the server's address
+ */
+async function saveCoverage(page, base) {
+  const result = (await page.coverage.stopJSCoverage())
+    .filter((script) => script.url.startsWith(`${base}/js/`))
+    .map(({ scriptId, url, functions }) => ({ scriptId, functions, url: pathToFileURL(path.join(ROOT, 'public', new URL(url).pathname)).href }));
+  fs.mkdirSync(COVERAGE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(COVERAGE_DIR, `coverage-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`), JSON.stringify({ result }));
+}
 
 /**
  * @typedef {Awaited<ReturnType<typeof startServer>> & {
@@ -33,8 +51,8 @@ export const test = base.extend({
   lichess: [false, { option: true }],
   app: async ({ page, lichess }, use) => {
     const mock = lichess ? await startMockLichess() : null;
-    const server = await startServer(mock ? { env: { LICHESS_URL: mock.url, LICHESS_EXPLORER_URL: mock.url } } : {}).catch((err) => {
-      if (mock) mock.stop();
+    const server = await startServer(mock ? { env: { LICHESS_URL: mock.url, LICHESS_EXPLORER_URL: mock.url } } : {}).catch(async (err) => {
+      if (mock) await mock.stop();
       throw err;
     });
     const api = async (method, url, body) => {
@@ -64,14 +82,17 @@ export const test = base.extend({
       /** Open a route of the app, e.g. '#/settings'. */
       open: (hash = '#/') => page.goto(`${server.base}/${hash}`),
     };
+    // Kept across reloads: some tests reload the page.
+    if (COVERAGE_DIR) await page.coverage.startJSCoverage({ resetOnNavigation: false });
     try {
       // Fast, quiet training: opponent moves play at once, no sounds or animation.
       await api('PUT', '/api/settings', { moveDelay: 0, knownDelay: 0, animation: 0, sounds: false });
       if (mock) await api('POST', '/api/lichess/token', { token: 'lip_mockPersonalToken' }); // gitleaks:allow (fake token for the mock)
       await use(app);
     } finally {
+      if (COVERAGE_DIR) await saveCoverage(page, server.base);
       await server.stop();
-      if (mock) mock.stop();
+      if (mock) await mock.stop();
     }
   },
 });

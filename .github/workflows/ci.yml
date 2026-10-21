@@ -21,9 +21,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22.12 is the minimum in package.json "engines"; Windows is the main platform users run on.
+        # The oldest Node.js that package.json "engines" accepts, exactly (22 alone would get the
+        # newest 22.x), then the current releases. Windows is the main platform users run on.
         os: [ubuntu-latest]
-        node: [22, 24, 26]
+        node: ['22.12', 24, 26]
         include:
           - os: windows-latest
             node: 24
@@ -64,9 +65,13 @@ jobs:
         run: npm run typecheck
 
   e2e:
-    name: Browser tests (Chromium)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    name: Browser tests (Chromium, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
 
@@ -80,14 +85,14 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Browser tests
-        run: npm run test:e2e
+      - name: Browser tests, then a coverage report of the browser code (no threshold)
+        run: npm run test:e2e:coverage
 
       - name: Keep the report and traces of a failed run
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.os }}
           path: |
             playwright-report/
             test-results/

@@ -20,8 +20,8 @@ await lichess.connectWithToken('lip_testToken123');
 /** The search, with this file's Lichess client. */
 const search = (args) => searchMistakes({ lichess, ...args });
 
-after(() => {
-  mock.stop();
+after(async () => {
+  await mock.stop();
   fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
