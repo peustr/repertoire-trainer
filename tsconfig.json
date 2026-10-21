@@ -1,9 +1,9 @@
 {
-  // Type-checks the plain JavaScript files that start with // @ts-check (npm run check). Nothing is compiled: what is in
-  // public/ is still exactly what the browser loads.
+  // Type-checks every JavaScript file (npm run check), with JSDoc for the types inference
+  // cannot see. Nothing is compiled: what is in public/ is still exactly what the browser loads.
   "compilerOptions": {
     "allowJs": true,
-    "checkJs": true, // every file; a few older ones still opt out with // @ts-nocheck
+    "checkJs": true, // every file, and none can opt out: lint refuses @ts-nocheck, @ts-ignore and @ts-expect-error
     "noEmit": true,
     "target": "ES2023",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
