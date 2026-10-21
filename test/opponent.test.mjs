@@ -8,6 +8,7 @@ import { buildRepertoire, cardKey } from '../public/js/repertoire.js';
 import { parsePgn } from '../public/js/pgn.js';
 import { START_FEN } from '../public/js/constants.js';
 import { checkChapter } from '../repertoire-format.js';
+import { must } from './helpers/must.mjs';
 import {
   pickByPopularity, bookMovesAt, opponentTurns, surpriseReplies, engineSurprises,
   surpriseFromGap, surpriseQueue, surpriseToPgn,
@@ -29,17 +30,17 @@ const AFTER_E6_C4 = fenAfter(['d4', 'e6', 'c4']);
 test('Lichess players pick a move as often as it is played', () => {
   const data = { total: 200, moves: [{ uci: 'e7e5', san: 'e5', total: 30 }, { uci: 'c7c5', san: 'c5', total: 70 }] };
   // The draw falls on the listed moves (100 games): 0–30 is e5, 30–100 is c5.
-  assert.equal(pickByPopularity(data, () => 0).uci, 'e7e5');
-  assert.equal(pickByPopularity(data, () => 0.29).uci, 'e7e5');
-  assert.equal(pickByPopularity(data, () => 0.31).uci, 'c7c5');
-  assert.equal(pickByPopularity(data, () => 0.9999).uci, 'c7c5');
-  assert.equal(pickByPopularity(data, () => 1).uci, 'c7c5', 'a draw of exactly 1 still picks a move');
-  assert.equal(pickByPopularity(data, () => 0).share, 30 / 200, 'share of all the position’s games');
+  assert.equal(must(pickByPopularity(data, () => 0)).uci, 'e7e5');
+  assert.equal(must(pickByPopularity(data, () => 0.29)).uci, 'e7e5');
+  assert.equal(must(pickByPopularity(data, () => 0.31)).uci, 'c7c5');
+  assert.equal(must(pickByPopularity(data, () => 0.9999)).uci, 'c7c5');
+  assert.equal(must(pickByPopularity(data, () => 1)).uci, 'c7c5', 'a draw of exactly 1 still picks a move');
+  assert.equal(must(pickByPopularity(data, () => 0)).share, 30 / 200, 'share of all the position’s games');
 
   const counts = { e7e5: 0, c7c5: 0 };
   let seed = 1;
   const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  for (let i = 0; i < 5000; i++) counts[pickByPopularity(data, rand).uci]++;
+  for (let i = 0; i < 5000; i++) counts[must(pickByPopularity(data, rand)).uci]++;
   assert.ok(Math.abs(counts.e7e5 / 5000 - 0.3) < 0.03, `about 30% e5, got ${counts.e7e5}`);
 });
 
@@ -47,7 +48,7 @@ test('a position without games gives no move, so Stockfish takes over', () => {
   assert.equal(pickByPopularity(null), null);
   assert.equal(pickByPopularity({ total: 0, moves: [] }), null);
   assert.equal(pickByPopularity({ total: 0, moves: [{ uci: 'e7e5', san: 'e5', total: 0 }] }), null);
-  assert.equal(pickByPopularity({ moves: [{ uci: 'e7e5', san: 'e5', total: 4 }] }).share, 1, 'without a total, the listed moves are all the games');
+  assert.equal(must(pickByPopularity({ moves: [{ uci: 'e7e5', san: 'e5', total: 4 }] })).share, 1, 'without a total, the listed moves are all the games');
 });
 
 test('your repertoire’s moves in a position, from every chapter', () => {
@@ -117,7 +118,7 @@ test('a saved gap becomes a surprise, unless your repertoire answers it now', ()
   assert.equal(surpriseFromGap(model, 'k', { ...GAP_B6, lineMoves: ['d2d4', 'e2e5', 'c2c4'] }), null, 'an illegal move on the way');
   assert.equal(surpriseFromGap(model, 'k', { lineMoves: [] }), null);
   assert.equal(surpriseFromGap(model, 'k', null), null);
-  const old = surpriseFromGap(model, 'k', { lineMoves: GAP_B6.lineMoves });
+  const old = must(surpriseFromGap(model, 'k', { lineMoves: GAP_B6.lineMoves }));
   assert.equal(old.startFen, START_FEN, 'a gap without a start is from the start position');
   assert.equal(old.share, null);
 });
@@ -131,7 +132,7 @@ test('a session works through the gaps first, most likely first, then the other 
 });
 
 test('an answer becomes a chapter the repertoire can read', () => {
-  const s = surpriseFromGap(model, 'k', GAP_B6);
+  const s = must(surpriseFromGap(model, 'k', GAP_B6));
   const pgn = surpriseToPgn(s, 'g1f3', { note: 'Played in 6% of games {at your level}.' });
   assert.equal(checkChapter(pgn), pgn.trim(), 'the server accepts it');
   assert.match(pgn, /\[ChapterName "Answer to 2\.\.\.b6"\]/);

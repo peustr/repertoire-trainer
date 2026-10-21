@@ -8,6 +8,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { must } from './must.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -24,7 +25,7 @@ export function freePort() {
 
 /**
  * Resolves to { port, base, dataDir, output(), stop() } once the server is listening.
- * @param {{ env?: Record<string, string>, settings?: Record<string, unknown>, timeout?: number }} [options]
+ * @param {{ env?: Record<string, string>, settings?: Record<string, unknown> | null, timeout?: number }} [options]
  *   settings: saved in the data folder before the server starts
  */
 export async function startServer({ env = {}, settings = null, timeout = 30000 } = {}) {
@@ -44,9 +45,10 @@ export async function startServer({ env = {}, settings = null, timeout = 30000 }
     },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'], // closing the IPC channel asks it to stop
   });
+  const stdout = must(proc.stdout, 'the server output pipe');
   let output = '';
-  proc.stdout.on('data', (d) => { output += d; });
-  proc.stderr.on('data', (d) => { output += d; });
+  stdout.on('data', (d) => { output += d; });
+  must(proc.stderr, 'the server error pipe').on('data', (d) => { output += d; });
 
   function kill() {
     // The server spawns Stockfish; on Windows kill() would orphan it.
@@ -73,11 +75,11 @@ export async function startServer({ env = {}, settings = null, timeout = 30000 }
   }
 
   try {
-    await new Promise((resolve, reject) => {
+    await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`Server did not start within ${timeout} ms`)), timeout);
-      proc.stdout.on('data', () => { if (output.includes('is running')) { clearTimeout(timer); resolve(); } });
+      stdout.on('data', () => { if (output.includes('is running')) { clearTimeout(timer); resolve(); } });
       proc.once('exit', (code) => { clearTimeout(timer); reject(new Error(`Server exited with code ${code}`)); });
-    });
+    }));
   } catch (err) {
     await stop();
     err.message += `\nServer output:\n${output}`;

@@ -97,7 +97,7 @@ export async function renderPuzzles(root, { id, ids }) {
       h('dl.puzzle-facts',
         h('dt', 'How often'), h('dd', `${formatShare(m.share)} of ${formatGames(m.positionGames)} games${m.averageRating ? `, average rating ${m.averageRating}` : ''}`),
         m.yourScore != null ? [h('dt', 'Results'), h('dd', `${yourSide} scores ${m.yourScore}% after it`)] : null,
-        p.reach ? [h('dt', 'Your odds'), h('dd', describeReach(p.reach).replace(/ from here$/, ' from where you searched'))] : null,
+        p.reach ? [h('dt', 'Your odds'), h('dd', /** @type {string} */ (describeReach(p.reach)).replace(/ from here$/, ' from where you searched'))] : null,
         h('dt', 'Players'), h('dd', `Lichess ${describeSpeeds(f.speeds)}, ${describeRatings(f.ratings)}`)));
   }
 

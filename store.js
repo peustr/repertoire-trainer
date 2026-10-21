@@ -176,7 +176,7 @@ function listRepertoires() {
         return null;
       }
     })
-    .filter(Boolean)
+    .filter((rep) => rep !== null)
     .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
 }
 

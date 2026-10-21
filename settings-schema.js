@@ -217,7 +217,7 @@ function clean(field, value) {
  * Saved settings from an older trainer, in today's terms: "Sparring opponent plays your
  * prepared lines first" (sparFollowBook) became the Sparring opponent choice. Off meant
  * Stockfish from the first move; on gets the new default.
- * @param {Record<string, any>} saved
+ * @param {Record<string, any> | null} saved  null when nothing is saved yet
  */
 function upgrade(saved) {
   if (!saved || saved.sparOpponent !== undefined || saved.sparFollowBook !== false) return saved;

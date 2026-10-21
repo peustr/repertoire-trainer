@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { startServer } from './helpers/server.mjs';
+import { must } from './helpers/must.mjs';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-format-'));
 process.env.TRAINER_DATA_DIR = dataDir;
@@ -40,7 +41,7 @@ test('a file from before format versions loads as version 1 and is saved as vers
   // As older versions of the trainer wrote it: no version, history, audit or notes.
   const old = { id: 'old-one', name: 'Old', color: 'black', pgn: PGN, createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-02T00:00:00.000Z', cards: { k: STATE } };
   writeRaw(old);
-  const rep = store.getRepertoire('old-one');
+  const rep = must(store.getRepertoire('old-one'));
   assert.equal(rep.schemaVersion, 1);
   assert.deepEqual(rep.cards, old.cards, 'progress is kept');
   assert.deepEqual(rep.history, []);
@@ -50,7 +51,7 @@ test('a file from before format versions loads as version 1 and is saved as vers
   assert.ok(store.listRepertoires().some((r) => r.id === 'old-one' && r.schemaVersion === 1));
 
   store.patchProgress('old-one', { cards: { k2: STATE } });
-  const saved = onDisk('old-one');
+  const saved = must(onDisk('old-one'));
   assert.equal(saved.schemaVersion, 1);
   assert.deepEqual(Object.keys(saved.cards).sort(), ['k', 'k2']);
 });
@@ -62,23 +63,23 @@ test('a file from a newer trainer is left alone, not half-read', (t) => {
   assert.throws(() => store.getRepertoire('from-later'), { status: 409, message: /newer version of the trainer/ });
   assert.throws(() => store.patchProgress('from-later', { cards: { k: STATE } }), { status: 409 });
   assert.ok(!store.listRepertoires().some((r) => r.id === 'from-later'), 'kept out of the library');
-  assert.match(String(warn.mock.calls.at(-1).arguments[0]), /from-later\.json.*newer version/);
+  assert.match(String(must(warn.mock.calls.at(-1)).arguments[0]), /from-later\.json.*newer version/);
   assert.equal(fs.readFileSync(file('from-later'), 'utf8'), before, 'the file is untouched');
 });
 
 test('what the browser sends is accepted', () => {
   const rep = store.createRepertoire({ name: 'Accepted', color: 'white', pgn: PGN, notes: 'My notes' });
-  assert.equal(store.updateRepertoire(rep.id, { name: 'Renamed', notes: '', audit: AUDIT }).audit.checked, 12);
-  assert.equal(store.updateRepertoire(rep.id, { audit: null }).audit, null);
-  const { updatedAt } = store.getRepertoire(rep.id);
-  assert.equal(store.updateRepertoire(rep.id, { name: 'Edited', color: 'black', pgn: PGN, baseUpdatedAt: updatedAt }).color, 'black', 'the edit form');
-  const saved = store.patchProgress(rep.id, {
+  assert.equal(must(store.updateRepertoire(rep.id, { name: 'Renamed', notes: '', audit: AUDIT })).audit?.checked, 12);
+  assert.equal(must(store.updateRepertoire(rep.id, { audit: null })).audit, null);
+  const { updatedAt } = must(store.getRepertoire(rep.id));
+  assert.equal(must(store.updateRepertoire(rep.id, { name: 'Edited', color: 'black', pgn: PGN, baseUpdatedAt: updatedAt })).color, 'black', 'the edit form');
+  const saved = must(store.patchProgress(rep.id, {
     cards: { a: STATE, 'pz|abc123': { level: 1, due: 0, reps: 1, lapses: 0, last: 0 }, b: null },
     tally: { date: '2026-10-18', correct: 2, wrong: 1, lines: 1 },
     saveId: crypto.randomUUID(),
-  });
+  }));
   assert.deepEqual(Object.keys(saved.cards).sort(), ['a', 'pz|abc123']);
-  assert.deepEqual(store.patchProgress(rep.id, { cards: {}, tally: { date: '2026-10-18', correct: 1 } }).history.at(-1), { date: '2026-10-18', correct: 3, wrong: 1, lines: 1 });
+  assert.deepEqual(must(store.patchProgress(rep.id, { cards: {}, tally: { date: '2026-10-18', correct: 1 } })).history.at(-1), { date: '2026-10-18', correct: 3, wrong: 1, lines: 1 });
 });
 
 test('a repertoire update with the wrong shape is refused and changes nothing', () => {
@@ -127,7 +128,7 @@ test('a line is added as a new chapter at the end, and answers its gap', () => {
   const rep = store.createRepertoire({ name: 'Growing', color: 'white', pgn: PGN });
   store.addGaps(rep.id, [{ fen: 'rnbqkbnr/ppp2ppp/3p4/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3', lineMoves: ['e2e4', 'e7e5', 'g1f3', 'd7d6'], share: 0.09 }]);
   const [gapKey] = Object.keys(onDisk(rep.id).gaps);
-  const saved = store.addLine(rep.id, { pgn: CHAPTER, gapKey });
+  const saved = must(store.addLine(rep.id, { pgn: CHAPTER, gapKey }));
   assert.equal(saved.pgn, `${PGN}\n\n${CHAPTER}`);
   assert.deepEqual(onDisk(rep.id).gaps, {}, 'the gap is answered now');
   assert.equal(onDisk(rep.id).pgn, saved.pgn);

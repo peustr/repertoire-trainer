@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createOutbox, applyCards, webStorage } from '../public/js/outbox.js';
+import { must } from './helpers/must.mjs';
 
 function memoryStorage(entries = []) {
   return { get: () => entries, set: (next) => { entries = next; } };
@@ -258,7 +259,7 @@ test('storage that has nothing yet reads as an empty queue', () => {
 });
 
 test('saves still get an id where the browser has no crypto.randomUUID (a page not served securely)', async (t) => {
-  const real = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const real = must(Object.getOwnPropertyDescriptor(globalThis, 'crypto'));
   Object.defineProperty(globalThis, 'crypto', { value: {}, configurable: true });
   t.after(() => Object.defineProperty(globalThis, 'crypto', real));
   const ids = [];

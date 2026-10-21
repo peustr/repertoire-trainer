@@ -10,6 +10,7 @@ import path from 'node:path';
 import { startMockLichess } from './helpers/mock-lichess.mjs';
 import { createLichessClient } from '../lichess.js';
 import { START_FEN as START } from '../public/js/constants.js';
+import { must } from './helpers/must.mjs';
 
 const mock = await startMockLichess({ delay: 80 }); // slow enough to see overlapping requests
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'trainer-lichess-'));
@@ -147,8 +148,8 @@ test('OAuth sign-in with PKCE, and sign-out revokes the token', async () => {
   assert.ok(start.searchParams.get('code_challenge'));
 
   const approval = await fetch(start, { redirect: 'manual' });
-  const back = new URL(approval.headers.get('location'));
-  const answer = { code: back.searchParams.get('code'), state: back.searchParams.get('state') };
+  const back = new URL(must(approval.headers.get('location')));
+  const answer = { code: must(back.searchParams.get('code')), state: must(back.searchParams.get('state')) };
   const st = await lichess.oauthCallback(answer);
   assert.equal(st.connected, true);
   assert.equal(st.via, 'oauth');

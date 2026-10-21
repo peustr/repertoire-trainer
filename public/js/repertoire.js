@@ -39,7 +39,7 @@ export function buildRepertoire(rep) {
   const errors = [];
 
   games.forEach((game, gi) => {
-    const chapter = { index: gi, name: chapterName(game, gi), root: game.root, headers: game.headers, lines: [] };
+    const chapter = { index: gi, name: chapterName(game, gi), root: game.root, headers: game.headers, lines: /** @type {any[]} */ ([]) };
     chapters.push(chapter);
     for (const e of game.errors) errors.push(`${chapter.name}: ${e}`);
 
@@ -69,7 +69,7 @@ export function buildRepertoire(rep) {
           startFen: game.root.fen,
           startComment: game.root.comment,
           nodes: path,
-          cardKeys: [],
+          cardKeys: /** @type {string[]} */ ([]),
         };
         for (const n of myMoves) {
           const k = cardKey(n.parent.fen, n.uci);

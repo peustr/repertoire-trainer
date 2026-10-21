@@ -12,6 +12,7 @@ import { Chess } from 'chess.js';
 import stockfish from 'stockfish';
 import { EngineManager, UciEngine, checkFen, engineSpec, isNetworkPath, parseInfo, toWhitePov, findNativeEngine } from '../engine.js';
 import { START_FEN } from '../public/js/constants.js';
+import { must } from './helpers/must.mjs';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-uci-engine.js', import.meta.url));
 const fake = (mode, ...flags) => ({ kind: 'wasm', cmd: process.execPath, args: [FAKE, mode, ...flags], label: 'fake', options: {}, warnings: [] });
@@ -253,7 +254,7 @@ test('engines on a network share are never run or even looked at', (t) => {
   t.mock.method(fs, 'existsSync', (p) => { checked.push(String(p)); return realExists(p); });
 
   for (const enginePath of ['\\\\attacker\\share\\sf.exe', '//attacker/share/sf.exe', '\\\\?\\UNC\\attacker\\share\\sf.exe']) {
-    const spec = engineSpec('tasks', { engineBuild: 'native', enginePath });
+    const spec = must(engineSpec('tasks', { engineBuild: 'native', enginePath }));
     assert.ok(!String(spec.cmd).includes('attacker'), enginePath);
     assert.match(spec.warnings.join(' '), /network share/);
   }
@@ -261,7 +262,7 @@ test('engines on a network share are never run or even looked at', (t) => {
 });
 
 test('local engine paths still work', () => {
-  const spec = engineSpec('tasks', { engineBuild: 'native', enginePath: process.execPath });
+  const spec = must(engineSpec('tasks', { engineBuild: 'native', enginePath: process.execPath }));
   assert.equal(spec.kind, 'native');
   assert.equal(spec.cmd, path.resolve(process.execPath));
   assert.deepEqual(spec.warnings, []);
@@ -291,7 +292,7 @@ test('an engine that dies mid-search fails its searches, and talking to it then 
 });
 
 test('an engine file that has gone fails its start, and the next job looks again', async (t) => {
-  const gone = { ...fake('ok'), cmd: path.join(os.tmpdir(), 'no-such-dir', 'stockfish.exe'), args: [] };
+  const gone = { ...fake('ok'), cmd: path.join(os.tmpdir(), 'no-such-dir', 'stockfish.exe'), args: /** @type {string[]} */ ([]) };
   let spec = gone;
   const engine = new UciEngine('tasks', () => ({}), { specFor: () => spec });
   t.after(() => engine.quit());
@@ -307,9 +308,10 @@ test('an engine that cannot even be launched fails its start, and warming up doe
   const bad = { ...fake('ok'), cmd: 'stock\u0000fish.exe', label: 'stockfish.exe' };
   const engine = new UciEngine('analysis', () => ({}), { specFor: () => bad });
   t.after(() => engine.quit());
+  /** @type {Promise<void> | undefined} */
   let start;
   assert.doesNotThrow(() => { start = engine.start(); });
-  await assert.rejects(start, { message: 'Could not start stockfish.exe (ERR_INVALID_ARG_VALUE). Check the engine path in Settings.' });
+  await assert.rejects(must(start), { message: 'Could not start stockfish.exe (ERR_INVALID_ARG_VALUE). Check the engine path in Settings.' });
   assert.equal(engine.proc, null);
   assert.equal(engine.info().file, 'stockfish.exe', 'looked for again, not remembered');
 
@@ -523,7 +525,7 @@ const dirent = (name, file = true) => ({ name, isFile: () => file });
 
 /** Run fn as if on this platform, with no STOCKFISH_PATH. */
 function asIf(t, platform) {
-  const real = Object.getOwnPropertyDescriptor(process, 'platform');
+  const real = must(Object.getOwnPropertyDescriptor(process, 'platform'));
   Object.defineProperty(process, 'platform', { ...real, value: platform });
   const saved = process.env.STOCKFISH_PATH;
   delete process.env.STOCKFISH_PATH;
@@ -549,11 +551,11 @@ test('without an engine folder or a native engine, the built-in one is used', (t
   const realExists = fs.existsSync;
   t.mock.method(fs, 'existsSync', (p) => (path.resolve(String(p)) === ENGINE_DIR ? false : realExists(p)));
   assert.equal(findNativeEngine(), null);
-  const spec = engineSpec('tasks');
+  const spec = must(engineSpec('tasks'));
   assert.equal(spec.kind, 'wasm');
   assert.deepEqual(spec.warnings, []);
-  assert.match(engineSpec('tasks', { engineBuild: 'native' }).warnings[0], /^No stockfish \.exe in the engine folder; using the built-in one\.$/);
-  assert.match(engineSpec('tasks', { engineBuild: 'native', enginePath: 'C:\\nowhere\\sf.exe' }).warnings[0], /^No engine found at C:\\nowhere\\sf\.exe; using the built-in one\.$/);
+  assert.match(must(engineSpec('tasks', { engineBuild: 'native' })).warnings[0], /^No stockfish \.exe in the engine folder; using the built-in one\.$/);
+  assert.match(must(engineSpec('tasks', { engineBuild: 'native', enginePath: 'C:\\nowhere\\sf.exe' })).warnings[0], /^No engine found at C:\\nowhere\\sf\.exe; using the built-in one\.$/);
 });
 
 test('the built-in engine: the lite build for tasks, a fallback build, a hash cap, and none at all', (t) => {
@@ -566,7 +568,7 @@ test('the built-in engine: the lite build for tasks, a fallback build, a hash ca
     if (flavour === 'lite-single') return '/engines/stockfish-lite-single.js';
     throw new Error(`no ${flavour} build`);
   });
-  const spec = engineSpec('analysis', { engineBuild: 'builtin-lite', analysisHash: 4096 });
+  const spec = must(engineSpec('analysis', { engineBuild: 'builtin-lite', analysisHash: 4096 }));
   assert.deepEqual(asked, ['lite', 'lite-single']);
   assert.equal(spec.label, 'stockfish-lite-single.js');
   assert.equal(spec.options.Hash, 512);

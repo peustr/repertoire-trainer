@@ -36,6 +36,8 @@ const uci = (m) => m.from + m.to + (m.promotion || '');
 /**
  * A scripted engine: at `blunderAt`, the second reply it is asked about leaves White
  * 4 pawns up; everything else is level. Scores are from White's side, as from engine.js.
+ * @param {string | null} blunderAt
+ * @param {{ bestScore?: { cp: number } | null }} [options]
  */
 function scriptedEngines(blunderAt, { bestScore = { cp: 0 } } = {}) {
   const seen = { blunder: null };

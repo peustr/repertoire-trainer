@@ -157,11 +157,12 @@ export function sanLabel(fen, uci) {
 
 let toastTimer = null;
 export function toast(message, kind = '') {
-  let el = document.querySelector('.toast');
-  if (!el) {
-    el = h('div.toast', { role: 'status', 'aria-live': 'polite' });
-    document.body.append(el);
+  let found = /** @type {HTMLElement | null} */ (document.querySelector('.toast'));
+  if (!found) {
+    found = /** @type {HTMLElement} */ (h('div.toast', { role: 'status', 'aria-live': 'polite' }));
+    document.body.append(found);
   }
+  const el = found;
   el.textContent = message;
   el.className = `toast show ${kind}`;
   clearTimeout(toastTimer);

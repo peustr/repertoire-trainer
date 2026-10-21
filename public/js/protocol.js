@@ -63,7 +63,7 @@ export const REPLY = Object.freeze({
  */
 /**
  * Progress of an analysis. Lines are scored from White's side.
- * @typedef {{ type: 'info', id: number, depth: number, lines: { multipv: number, depth: number, score: { cp?: number, mate?: number }, pv: string[] }[] }} InfoReply
+ * @typedef {{ type: 'info', id: number, depth: number, lines: { multipv: number, depth: number, score: import('./constants.js').Score, pv: string[] }[] }} InfoReply
  */
 /**
  * The end of an analysis.

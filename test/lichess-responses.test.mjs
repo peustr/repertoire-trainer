@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createLichessClient } from '../lichess.js';
 import { START_FEN as START } from '../public/js/constants.js';
+import { must } from './helpers/must.mjs';
 
 const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 const TOKEN = { token: 'lip_savedToken123', username: 'Me', via: 'personal' };
@@ -215,7 +216,7 @@ test('the studies list skips lines it cannot read; without an account there is n
 
 test('sign-in: cancelled, expired after 15 minutes, or refused by Lichess', async (t) => {
   const { client } = tempClient(t);
-  const stateOf = (url) => new URL(url).searchParams.get('state');
+  const stateOf = (url) => must(new URL(url).searchParams.get('state'));
   await assert.rejects(client.oauthCallback({ error: 'access_denied' }), { status: 400, message: 'Lichess sign-in was cancelled (access_denied).' });
 
   t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
@@ -241,7 +242,7 @@ test('sign-in: cancelled, expired after 15 minutes, or refused by Lichess', asyn
 test('sign-in that cannot reach Lichess says so, as every other call does', async (t) => {
   const { client } = tempClient(t);
   scriptFetch(t, () => { throw new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } }); });
-  const state = new URL(client.oauthStart('http://localhost:3210/auth/lichess/callback')).searchParams.get('state');
+  const state = must(new URL(client.oauthStart('http://localhost:3210/auth/lichess/callback')).searchParams.get('state'));
   await assert.rejects(client.oauthCallback({ code: 'c', state }), { status: 502, message: 'Could not reach Lichess (ENOTFOUND). Check your internet connection.' });
 });
 

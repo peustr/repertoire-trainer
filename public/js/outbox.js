@@ -22,7 +22,7 @@ function newId() {
  * and the stored saves it has since sent. Reads lay those over the stored queue, so saves
  * other tabs add or send still count, and the next write that succeeds stores the lot.
  * @param {() => { getItem(key: string): string | null, setItem(key: string, value: string): void,
- *   removeItem(key: string): void } | null} backend  a function, because merely touching localStorage can throw
+ *   removeItem(key: string): void }} backend  a function, because merely touching localStorage can throw
  * @param {string} key
  * @param {{ onUnstored?: () => void }} [options]  onUnstored hears when this tab starts
  *   holding saves that only it has, which a reload or closing the tab would lose

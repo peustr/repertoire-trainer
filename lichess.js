@@ -409,7 +409,7 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
     pendingAuth.delete(state);
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
-      code,
+      code: String(code),
       code_verifier: entry.verifier,
       redirect_uri: entry.redirectUri,
       client_id: CLIENT_ID,

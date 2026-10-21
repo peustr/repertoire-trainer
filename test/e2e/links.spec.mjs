@@ -2,6 +2,7 @@
 
 import { test, expect, playLine } from './fixtures.mjs';
 import { buildRepertoire } from '../../public/js/repertoire.js';
+import { must } from '../helpers/must.mjs';
 
 test('the Explore link after a trained line opens the same move after a reload', async ({ page, app }) => {
   // The library parses both repertoires, so the second one's moves are not the first parsed.
@@ -21,5 +22,5 @@ test('the Explore link after a trained line opens the same move after a reload',
   const atEndOfLine = await where.textContent();
 
   await page.reload();
-  await expect(where).toHaveText(atEndOfLine);
+  await expect(where).toHaveText(must(atEndOfLine));
 });

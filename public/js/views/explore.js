@@ -24,6 +24,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   const flags = (rep.audit && rep.audit.flags) || {};
 
   let chapter = model.chapters[0];
+  /** @type {{ node: any, off: import('../moves.js').PlayedMove[] }} */
   let pos = { node: chapter ? chapter.root : null, off: [] };
   let engineOn = true;
   let engineRun = null;
@@ -35,7 +36,8 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
   } else if (movesParam && chapter) {
     // Follow a move list through whichever chapter matches it furthest, then continue off-book.
     const ucis = movesParam.split(',').filter(Boolean);
-    let best = null;
+    /** @type {{ ch: any, n: any, i: number }} */
+    let best = /** @type {any} */ (null); // set by the first chapter: there is one (chapter is set)
     for (const ch of model.chapters) {
       let n = ch.root;
       let i = 0;
@@ -47,6 +49,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
       }
       if (!best || i > best.i) best = { ch, n, i };
     }
+    /** @type {import('../moves.js').PlayedMove[]} */
     const off = [];
     let f = best.n.fen;
     for (const u of ucis.slice(best.i)) {

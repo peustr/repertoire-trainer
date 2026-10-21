@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tooOld } from '../check-node.cjs';
+import { must } from './helpers/must.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -31,7 +32,7 @@ test('a Node.js that is too old gets a plain message and nothing else', () => {
 test('CI tests exactly the oldest Node.js that package.json accepts', () => {
   const wanted = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).engines.node.replace(/^>=\s*/, '');
   const ci = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const versions = ci.match(/node: \[([^\]]+)\]/)[1].split(',').map((v) => v.trim().replace(/'/g, ''));
+  const versions = must(ci.match(/node: \[([^\]]+)\]/))[1].split(',').map((v) => v.trim().replace(/'/g, ''));
   const lowest = versions.reduce((a, b) => (tooOld(b, `>=${a}`) ? b : a));
   assert.equal(lowest, wanted, 'a bare major ("22") would test the newest 22.x, not the oldest one users may have');
 });

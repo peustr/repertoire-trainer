@@ -6,8 +6,11 @@ import { setFigurines, setSounds, toast } from './ui.js';
 import { createOutbox, applyCards, webStorage } from './outbox.js';
 import { setBoardPrefs } from './board.js';
 
+/** @typedef {import('../../repertoire-format.js').RepertoireFile} RepertoireFile */
+
 export const state = {
-  settings: null,
+  // Null only until boot() has loaded them, which it does before any page is drawn.
+  settings: /** @type {Record<string, any>} */ (/** @type {unknown} */ (null)),
   lichess: /** @type {Partial<import('../../lichess.js').LichessStatus> & { error?: string }} */ ({ connected: false }),
   reps: /** @type {Map<string, import('../../repertoire-format.js').RepertoireFile>} */ (new Map()),
   models: new Map(), // id -> { sig, model }
@@ -54,12 +57,19 @@ export async function loadReps() {
   return list;
 }
 
+/**
+ * A repertoire, from this page's copy unless `fresh` or not loaded yet. The API answers 404
+ * (and this rejects) for one that does not exist.
+ * @param {string} id
+ * @param {{ fresh?: boolean }} [options]
+ * @returns {Promise<RepertoireFile>}
+ */
 export async function getRep(id, { fresh = false } = {}) {
   if (fresh || !state.reps.has(id)) {
     const rep = withUnsaved(await api.get(id));
     state.reps.set(id, rep);
   }
-  return state.reps.get(id);
+  return /** @type {RepertoireFile} */ (state.reps.get(id));
 }
 
 /** Keep a repertoire the server sent, with any answers it does not have yet laid on top. */

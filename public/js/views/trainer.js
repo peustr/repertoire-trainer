@@ -518,6 +518,10 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
     }));
   }
 
+  /**
+   * @param {string} fen
+   * @param {{ goal?: string | null }} [options]  goal 'hold': Play it out
+   */
   function sparLink(fen, { goal = null } = {}) {
     const back = encodeURIComponent(`#/rep/${rep.id}`);
     return `#/spar?fen=${encodeURIComponent(fen)}&color=${rep.color}&rep=${rep.id}&back=${back}${goal ? `&goal=${goal}` : ''}`;

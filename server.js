@@ -71,7 +71,7 @@ function packageDir(name) {
   // Some packages hide package.json behind an "exports" map, so look on disk, in the
   // node_modules folders Node itself would search.
   // (resolve.paths gives null only for Node's own modules.)
-  for (const base of createRequire(import.meta.url).resolve.paths(name)) {
+  for (const base of /** @type {string[]} */ (createRequire(import.meta.url).resolve.paths(name))) {
     const dir = path.join(base, ...name.split('/'));
     if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
   }
@@ -132,7 +132,7 @@ app.get('/api/samples', wrap(() => {
     .map((file) => {
       const pgn = fs.readFileSync(path.join(SAMPLES_DIR, file), 'utf8');
       const color = /\[Repertoire\s+"black"\]/i.test(pgn) ? 'black' : 'white';
-      const name = pgn.match(/\[RepertoireName\s+"([^"]+)"\]/)[1]; // every sample has one (test/server-api.test.mjs)
+      const name = /** @type {RegExpMatchArray} */ (pgn.match(/\[RepertoireName\s+"([^"]+)"\]/))[1]; // every sample has one (test/server-api.test.mjs)
       return { file, name, color, pgn };
     });
 }));

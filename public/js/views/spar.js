@@ -193,7 +193,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     } else if (last.source === 'book') {
       clear(sourceNote, `${label} is one of the replies you prepared for.`);
     } else if (opponent === 'lichess' && databaseEnded()) {
-      const ended = history.find((m) => m.dbEnd);
+      const ended = /** @type {(typeof history)[number]} */ (history.find((m) => m.dbEnd)); // databaseEnded() found one
       clear(sourceNote, ended.dbEnd === 'no-games'
         ? `Stockfish is playing at ${strength()}: Lichess players have no games from here.`
         : `Stockfish is playing at ${strength()}: Lichess could not be asked.`);
@@ -274,7 +274,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     }
     thinking = false;
     const res = move && move.uci ? playMove(fen, move.uci) : null;
-    if (!res) { render(); return; }
+    if (!move || !res) { render(); return; }
     if (move.source !== 'book') noteBookExit(fen, res, bookReplies(fen));
     history.push({ ...res, ...move, before: fen });
     board.setPosition(res.fen, { lastMove: res.uci, playSound: true, captured: res.captured });
@@ -320,14 +320,15 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
 
   /** Stockfish rates the starting position while you play. */
   function startPlayout() {
-    clear(goalBox, h('p.fb', `Play ${goal.moves} moves and keep the position. Stockfish is rating where you start…`));
+    const { moves } = /** @type {{ moves: number }} */ (goal); // a play-out has a goal
+    clear(goalBox, h('p.fb', `Play ${moves} moves and keep the position. Stockfish is rating where you start…`));
     const token = gameToken;
     startRating = rate(startFen);
     void startRating.then((cp) => {
       if (token !== gameToken || finished || !page.isConnected) return;
       clear(goalBox, h('p.fb', cp == null
-        ? `Play ${goal.moves} moves. Stockfish is not available right now, so the result cannot be judged.`
-        : `Play ${goal.moves} moves and keep the position: Stockfish rates it ${formatCp(cp)} for you.`));
+        ? `Play ${moves} moves. Stockfish is not available right now, so the result cannot be judged.`
+        : `Play ${moves} moves and keep the position: Stockfish rates it ${formatCp(cp)} for you.`));
     });
   }
 

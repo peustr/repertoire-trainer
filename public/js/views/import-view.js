@@ -91,7 +91,7 @@ export async function renderImport(root, { id }) {
         try {
           const payload = { name: name.value, color: color(), pgn: pgn.value };
           // An edit names the version it started from, so it cannot overwrite a chapter added meanwhile.
-          const saved = editing ? await api.update(id, { ...payload, baseUpdatedAt: rep.updatedAt }) : await api.create(payload);
+          const saved = rep ? await api.update(id, { ...payload, baseUpdatedAt: rep.updatedAt }) : await api.create(payload);
           putRep(saved);
           toast(editing ? 'Changes saved' : `Saved ${saved.name}`);
           location.hash = `#/rep/${saved.id}`;
@@ -112,7 +112,7 @@ export async function renderImport(root, { id }) {
     h('div.form-actions', saveBtn, h('a.btn.ghost', { href: editing ? `#/rep/${id}` : '#/' }, 'Cancel')));
 
   add(page,
-    h('a.backlink', { href: editing ? `#/rep/${id}` : '#/' }, editing ? rep.name : 'Library'),
+    h('a.backlink', { href: editing ? `#/rep/${id}` : '#/' }, rep ? rep.name : 'Library'),
     h('h1.page-title', editing ? 'Edit repertoire' : 'Add a repertoire'),
     editing ? null : h('p.lede', 'Each game in the PGN becomes a chapter. Variations become separate lines, and comments show up while you train. Lichess studies and ChessBase exports work as they are, arrows included.'),
     samplesRow,

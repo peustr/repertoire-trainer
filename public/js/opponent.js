@@ -90,8 +90,8 @@ function offBook(model, fen, uci, book) {
  * @returns {{ uci: string, san: string, games: number, share: number }[]}
  */
 export function surpriseReplies(model, fen, data, { minShare = 0.05 } = {}) {
-  const total = (data && data.total) || 0;
-  if (!total) return [];
+  if (!data || !data.total) return [];
+  const { total } = data;
   const book = bookMovesAt(model, fen);
   const out = [];
   for (const m of data.moves || []) {
@@ -108,12 +108,12 @@ export function surpriseReplies(model, fen, data, { minShare = 0.05 } = {}) {
  * move than Stockfish's best. Used when there are no Lichess numbers to go on.
  * @param {{ nodesByPosition: Map<string, any[]> }} model
  * @param {string} fen
- * @param {{ score?: { cp?: number, mate?: number }, pv?: string[] }[]} lines
+ * @param {({ score?: import('./constants.js').Score | null, pv?: string[] } | null)[] | null} lines
  * @param {{ maxLoss?: number }} [options]
  * @returns {{ uci: string, san: string, loss: number }[]}
  */
 export function engineSurprises(model, fen, lines, { maxLoss = 120 } = {}) {
-  const scored = (lines || []).filter((l) => l && l.score && l.pv && l.pv.length);
+  const scored = /** @type {{ score: import('./constants.js').Score, pv: string[] }[]} */ ((lines || []).filter((l) => l && l.score && l.pv && l.pv.length));
   if (!scored.length) return [];
   const pov = fen.split(' ')[1] === 'b' ? -1 : 1;
   const best = scoreToCp(scored[0].score) * pov;
@@ -134,7 +134,7 @@ export function engineSurprises(model, fen, lines, { maxLoss = 120 } = {}) {
  * @param {{ nodesByPosition: Map<string, any[]> }} model
  * @param {string} key
  * @param {any} gap
- * @returns {Surprise | null}
+ * @returns {(Surprise & { gapKey: string }) | null}
  */
 export function surpriseFromGap(model, key, gap) {
   if (!gap || !Array.isArray(gap.lineMoves) || !gap.lineMoves.length) return null;
@@ -159,10 +159,10 @@ export function surpriseFromGap(model, key, gap) {
  * @param {{ gaps?: Record<string, any> }} rep
  * @param {any} model
  * @param {{ rand?: () => number }} [options]
- * @returns {({ kind: 'gap', surprise: Surprise, reach: number } | { kind: 'turn', turn: OpponentTurn })[]}
+ * @returns {({ kind: 'gap', surprise: Surprise & { gapKey: string }, reach: number } | { kind: 'turn', turn: OpponentTurn })[]}
  */
 export function surpriseQueue(rep, model, { rand = Math.random } = {}) {
-  /** @type {{ kind: 'gap', surprise: Surprise, reach: number }[]} */
+  /** @type {{ kind: 'gap', surprise: Surprise & { gapKey: string }, reach: number }[]} */
   const gaps = [];
   for (const [key, gap] of Object.entries(rep.gaps || {})) {
     const surprise = surpriseFromGap(model, key, gap);
