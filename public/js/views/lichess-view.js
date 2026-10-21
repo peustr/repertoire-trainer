@@ -10,6 +10,8 @@ import { describeRatings, describeSpeeds } from '../puzzle-utils.js';
 const TOKEN_URL = 'https://lichess.org/account/oauth/token/create?description=Repertoire%20Trainer';
 
 export async function renderLichess(root, { connected, error }) {
+  // The sign-in's answer is shown once: left in the address, every refresh() would show it again.
+  if (connected || error) history.replaceState(null, '', '#/lichess');
   await loadLichess();
   const page = h('div.page.lichessview');
   root.append(page);

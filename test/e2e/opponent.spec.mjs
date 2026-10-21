@@ -37,6 +37,7 @@ test.describe('with Lichess connected', () => {
 
     // Twelve moves in, the database has no games: Stockfish takes over and says so.
     await app.open(`#/spar?color=white&fen=${encodeURIComponent('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 12')}`);
+    await expect(page.locator('.scoresheet .sheet-move')).toHaveCount(0); // the new game has replaced the old one
     await playMove(page, 'e2e4');
     await expect(page.locator('.source-note')).toHaveText('New position: Lichess players have no games from here, so Stockfish took over at 1800 Elo.');
     await expect(page.locator('.scoresheet .sheet-move')).toHaveCount(2);
@@ -57,6 +58,22 @@ test.describe('with Lichess connected', () => {
     await playMove(page, 'd2d4');
     await expect(page.locator('.feedback')).toContainText('2.d4: Stockfish’s choice too (+0.30).');
   });
+});
+
+test('Spar: the third time a position comes back, the game is drawn', async ({ page, app }) => {
+  await app.api('PUT', '/api/settings', { sparOpponent: 'book' });
+  const rep = await app.api('POST', '/api/repertoires', { name: 'Knights', color: 'white', pgn: '1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1 Ng8 *' });
+  await fakeEngine(page);
+  await app.open(`#/spar?color=white&rep=${rep.id}`);
+  const played = page.locator('.scoresheet .sheet-move');
+  const mine = ['g1f3', 'f3g1', 'g1f3', 'f3g1'];
+  for (let i = 0; i < mine.length; i++) {
+    await expect(played).toHaveCount(2 * i);
+    await playMove(page, mine[i]);
+    await expect(played).toHaveCount(2 * i + 2); // and the prepared reply
+  }
+  // The start position, after 2...Ng8 and after 4...Ng8: three times.
+  await expect(page.locator('.prompt')).toContainText('Threefold repetition — draw');
 });
 
 test('Spar without a Lichess account: Stockfish plays and the page says why', async ({ page, app }) => {
