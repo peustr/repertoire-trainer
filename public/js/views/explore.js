@@ -1,6 +1,6 @@
 // Explore: walk the repertoire tree with Stockfish alongside, and wander off-book.
 
-import { h, clear, fig, useFigurines, uciLineToSan, formatSanLine, plural, action, kbd, panelSection, toolList } from '../ui.js';
+import { h, clear, fig, useFigurines, uciLineToSan, formatSanLine, plural, action, kbd, pageShortcut, panelSection, toolList } from '../ui.js';
 import { state, getRep, modelFor, loadLichess } from '../store.js';
 import { cardKey, movesTo } from '../repertoire.js';
 import { nagGlyphs, moveNumber, moveLabel } from '../pgn.js';
@@ -413,7 +413,7 @@ export async function renderExplore(root, { id, line: lineParam, moves: movesPar
 
   // ---- keyboard ------------------------------------------------------------------------------
   function onKey(e) {
-    if (e.target.closest('input, textarea, select, dialog')) return;
+    if (!pageShortcut(e)) return;
     const flip = () => board.flip();
     const keys = { ArrowLeft: back, ArrowRight: forward, ArrowUp: () => sibling(-1), ArrowDown: () => sibling(1), Home: () => goTo(chapter.root), End: toEnd, f: flip, F: flip };
     if (keys[e.key]) { e.preventDefault(); keys[e.key](); }

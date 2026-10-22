@@ -1,8 +1,9 @@
-// Opponent-mistake puzzles: solving one and adding its line to the repertoire, and how
-// many the repertoire page offers for a session.
+// Opponent-mistake puzzles: solving one and adding its line to the repertoire, how many
+// the repertoire page offers for a session, and skipping one while Stockfish is busy.
 
-import { test, expect, playMove } from './fixtures.mjs';
+import { test, expect, playMove, fakeEngine } from './fixtures.mjs';
 import { START_FEN as START } from '../../public/js/constants.js';
+import { REQUEST } from '../../public/js/protocol.js';
 
 const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
 const AFTER_F6 = 'rnbqkbnr/ppppp1pp/5p2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
@@ -55,3 +56,33 @@ test('the repertoire page offers as many puzzles as a session holds', async ({ a
   await solve.click();
   await expect(page.locator('.mode-tag')).toHaveText('Puzzle · 1 of 2');
 });
+
+for (const [verdict, cp] of /** @type {const} */ ([['accepts', 240], ['refuses', -50]])) {
+  test(`Stockfish's verdict on a skipped puzzle (it ${verdict} the other move) leaves the next puzzle alone`, async ({ app, page }) => {
+    let answer = () => {};
+    const asked = await fakeEngine(page, {
+      // Stockfish answers only once the puzzle has been skipped.
+      evaluate: (msg) => new Promise((resolve) => {
+        answer = () => resolve({
+          best: { move: 'd1h5', score: { cp: 250 }, pv: ['d1h5'] },
+          moves: [{ move: 'd1h5', score: { cp: 250 }, pv: [] }, { move: msg.moves[1], score: { cp }, pv: [] }],
+        });
+      }),
+    });
+    const rep = await app.api('POST', '/api/repertoires', { name: 'Kings pawn', color: 'white', pgn: '1. e4 e5 2. Nf3 *' });
+    app.editRepertoire(rep.id, (r) => { r.puzzles = { a: { ...puzzle, id: 'a', reach: 0.5 }, b: { ...puzzle, id: 'b', reach: 0.1 } }; });
+
+    await app.open(`#/puzzles/${rep.id}`);
+    await expect(page.locator('.prompt')).toContainText('Punish it');
+    await playMove(page, 'd2d4'); // not the solution: Stockfish is asked whether it wins anyway
+    await expect.poll(() => asked.filter((m) => m.type === REQUEST.EVALUATE).length).toBe(1);
+    await page.getByRole('button', { name: 'Skip' }).click();
+    await expect(page.locator('.mode-tag')).toHaveText('Puzzle · 2 of 2');
+    answer();
+
+    await expect(page.locator('.prompt')).toContainText('Punish it'); // not solved for you
+    await playMove(page, 'd1h5');
+    await expect(page.locator('.prompt-title')).toHaveText('Solved'); // not "with help"
+    await expect.poll(async () => (await app.api('GET', `/api/repertoires/${rep.id}`)).cards).toEqual({ 'pz|b': expect.objectContaining({ level: 1, lapses: 0 }) });
+  });
+}

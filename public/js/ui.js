@@ -82,6 +82,17 @@ export function kbd(key) {
   return h('kbd', { 'aria-hidden': 'true' }, key);
 }
 
+/**
+ * Whether a key press is meant for the page's own shortcuts: not typed into a field or a
+ * dialog, and without Ctrl, Alt or Cmd, whose combinations belong to the browser
+ * (Ctrl+H opens the history, Ctrl+F finds, Alt+← goes back).
+ * @param {KeyboardEvent} e
+ */
+export function pageShortcut(e) {
+  if (e.ctrlKey || e.altKey || e.metaKey) return false;
+  return !(e.target instanceof Element && e.target.closest('input, textarea, select, dialog'));
+}
+
 /** Button content with its shortcut: the label sits in its own span so it can be relabelled. */
 export function keyed(label, key) {
   return [h('span.btn-label', label), kbd(key)];

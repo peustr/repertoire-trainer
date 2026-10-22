@@ -34,9 +34,14 @@ export function passPlan(line, cards, phase, { quizAllMoves = false } = {}, now 
   return { quiz: new Set(quiz), dueAtStart: new Set(st.dueKeys) };
 }
 
-/** The result for the right move, played after `tries` wrong attempts and `hints` hints. */
-export function resultForCorrectMove({ tries, hints }, { hintsCount = true } = {}) {
-  if (tries === 0 && hints === 0) return 'right';
+/**
+ * The result for the right move, played after `tries` wrong attempts and `hints` hints.
+ * The guided pass shows the move with an arrow anyway, so a hint there costs nothing.
+ * @param {{ tries: number, hints: number, phase?: string }} attempt
+ * @param {{ hintsCount?: boolean }} [settings]
+ */
+export function resultForCorrectMove({ tries, hints, phase }, { hintsCount = true } = {}) {
+  if (tries === 0 && (hints === 0 || phase === 'guided')) return 'right';
   // With "a hint counts as a mistake" off, a hinted move neither levels up nor drops.
   if (tries === 0 && !hintsCount) return 'hint';
   return 'wrong';

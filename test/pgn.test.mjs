@@ -109,6 +109,14 @@ test('annotations written apart from the move still count; nonsense ones, number
   assert.deepEqual(kinds('1. e4 ! d5 2. e5 f5 ?!? 3. exf6 e.p. 12 ?'), ['e4', '$1', 'd5', 'e5', 'f5', 'exf6', '$2']);
 });
 
+test('the dots of a black move can stand apart from its number', () => {
+  assert.deepEqual(kinds('1. e4 ... e5 2. Nf3 … Nc6'), ['e4', 'e5', 'Nf3', 'Nc6']);
+  const afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+  const [game] = parsePgn(`[FEN "${afterE4}"]\n\n1. ... e5 2. Nf3 *`);
+  assert.deepEqual(game.errors, []);
+  assert.equal(game.moves, 2);
+});
+
 test('arrows and squares in an unknown colour are drawn green', () => {
   assert.deepEqual(parseComment('[%cal Xe2e4] [%csl Zd5]').shapes, [
     { orig: 'e2', dest: 'e4', brush: 'green' },

@@ -87,7 +87,8 @@ export function tokenize(text) {
         if (SUFFIX_NAGS[word]) tokens.push({ t: 'nag', n: SUFFIX_NAGS[word] });
         continue;
       }
-      if (/^\d+$/.test(word) || /^e\.?p\.?$/i.test(word)) continue;
+      // A number, "e.p.", or the dots of "1. ... e5" written apart from the move number.
+      if (/^\d+$/.test(word) || /^e\.?p\.?$/i.test(word) || /^[.…]+$/.test(word)) continue;
       const suffix = (word.match(/[!?]+$/) || [''])[0];
       let san = word.slice(0, word.length - suffix.length);
       san = san.replace(/[♔♕♖♗♘♚♛♜♝♞]/g, (f) => FIGURINE_TO_LETTER[f]);

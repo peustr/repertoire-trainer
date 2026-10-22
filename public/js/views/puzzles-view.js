@@ -1,7 +1,7 @@
 // Personalised puzzles: punish the mistakes real opponents make in your lines.
 // Each puzzle is a spaced-repetition card like any move in your repertoire.
 
-import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, confirmDialog, action, keyed, panelSection, toolList } from '../ui.js';
+import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, confirmDialog, action, keyed, pageShortcut, panelSection, toolList } from '../ui.js';
 import { state, getRep, putRep, saveCards } from '../store.js';
 import { describeWait, isDue } from '../srs.js';
 import { gradeCard } from '../session.js';
@@ -123,6 +123,7 @@ export async function renderPuzzles(root, { id, ids }) {
     }
 
     // Not the main line: does it win anyway?
+    const asked = cur;
     cur.waiting = false;
     board.setPosition(cur.fen, { lastMove: lastUci() });
     setFeedback('neutral', `Checking ${sanLabel(cur.fen, uci)} with Stockfish…`);
@@ -138,7 +139,8 @@ export async function renderPuzzles(root, { id, ids }) {
         accepted = puzzleAltMargin > 0 && a >= puzzleAltMin && a >= b - puzzleAltMargin;
       }
     } catch (err) { /* engine unavailable: treat as a miss */ }
-    if (!cur || !page.isConnected) return;
+    // Skipped meanwhile: the verdict belongs to a puzzle no longer on the board.
+    if (cur !== asked || !page.isConnected) return;
 
     if (accepted) {
       cur.alt = true;
@@ -296,7 +298,7 @@ export async function renderPuzzles(root, { id, ids }) {
   }
 
   function onKey(e) {
-    if (e.target.closest('input, textarea, select, dialog')) return;
+    if (!pageShortcut(e)) return;
     if (e.key === 'h' || e.key === 'H') controls.querySelector('[data-key="h"]')?.click();
     else if (e.key === 'Enter') {
       const btn = controls.querySelector('[data-key="Enter"]');

@@ -57,6 +57,16 @@ test('a saved setting the trainer does not know is ignored, and dropped at the n
   assert.equal('noSuchSetting' in saved, false);
 });
 
+test('a settings file that holds no settings object gives the defaults, and the next save repairs it', () => {
+  for (const text of ['"dark"', '42', 'true']) {
+    fs.writeFileSync(SETTINGS, text);
+    assert.equal(store.getSettings().reviewBatch, 20, `${text}: the defaults`);
+  }
+  store.saveSettings({ reviewBatch: 30 });
+  assert.equal(readFile(SETTINGS).reviewBatch, 30);
+  assert.equal(readFile(SETTINGS).learnBatch, 5);
+});
+
 test('without a backup, a damaged settings file is kept rather than overwritten', (t) => {
   t.mock.method(console, 'warn', () => {});
   fs.rmSync(`${SETTINGS}.bak`);
