@@ -120,6 +120,31 @@ test('Play it out: keep the position after a line, then see your biggest slip', 
   await expect(page.getByRole('button', { name: 'Take back' })).toBeVisible();
 });
 
+test('Play it out: playing on before the verdict leaves the game’s prompt alone', async ({ page, app }) => {
+  await app.api('PUT', '/api/settings', { figurines: false, playOutMoves: 2, sparOpponent: 'engine' });
+  let release = () => {};
+  const verdict = new Promise((resolve) => { release = () => resolve(undefined); });
+  await fakeEngine(page, {
+    evaluate: async (msg) => {
+      await verdict; // Stockfish judges only once the game has gone on
+      return { best: { move: 'g1f3', score: { cp: 30 }, pv: [] }, moves: msg.moves.map((m) => ({ move: m, score: { cp: 30 }, pv: [] })) };
+    },
+  });
+  await app.open('#/spar?color=white&goal=hold');
+  await expect(page.locator('.mode-tag')).toHaveText('Play it out · 0 of 2');
+  await playMove(page, 'e2e4');
+  await expect(page.locator('.scoresheet .sheet-move')).toHaveCount(2);
+  await playMove(page, 'g1f3');
+  await page.getByRole('button', { name: 'Keep playing' }).click();
+  await expect(page.locator('.mode-tag')).toHaveText('Spar');
+  await expect(page.locator('.prompt')).toContainText('Your move');
+
+  release();
+  await expect(page.locator('.goal-box .fb')).toHaveText('You kept the position: +0.30 → +0.30.');
+  await expect(page.locator('.goal-box .verdict')).toHaveText('None of your moves gave away more than half a pawn.');
+  await expect(page.locator('.prompt')).toContainText('Your move');
+});
+
 const AFTER_D6 = fenAfter(['e4', 'e5', 'Nf3', 'd6']);
 const GAP = { fen: AFTER_D6, lineMoves: ['e2e4', 'e7e5', 'g1f3', 'd7d6'], startFen: START_FEN, san: 'd6', share: 0.09, games: 900, reach: 0.05 };
 
@@ -172,6 +197,41 @@ test('Surprise: after a miss, Stockfish’s answer can be shown and added', asyn
   await page.getByRole('button', { name: 'Add Stockfish’s answer' }).click();
   await expect(page.getByRole('button', { name: 'In your repertoire' })).toBeDisabled();
   expect((await app.api('GET', `/api/repertoires/${rep.id}`)).pgn).toContain('3. d4 *');
+});
+
+test('Surprise: moving on while an answer is being added leaves the next surprise free to add', async ({ page, app }) => {
+  await app.api('PUT', '/api/settings', { figurines: false, surpriseBatch: 2 });
+  const rep = await app.api('POST', '/api/repertoires', { name: 'Ruy Lopez', color: 'white', pgn: '1. e4 e5 2. Nf3 Nc6 3. Bb5 *' });
+  const afterF6 = fenAfter(['e4', 'e5', 'Nf3', 'f6']);
+  app.editRepertoire(rep.id, (r) => {
+    r.gaps = {
+      [positionKey(AFTER_D6)]: GAP,
+      [positionKey(afterF6)]: { ...GAP, fen: afterF6, lineMoves: ['e2e4', 'e7e5', 'g1f3', 'f7f6'], san: 'f6', reach: 0.01 },
+    };
+  });
+  await fakeEngine(page, { evaluate: scored('d2d4', { d2d4: 60, b1c3: 40 }) });
+  let held = () => {};
+  const holding = new Promise((resolve) => { held = () => resolve(undefined); });
+  let release = () => {};
+  const released = new Promise((resolve) => { release = () => resolve(undefined); });
+  await page.route('**/lines', async (route) => { held(); await released; await route.continue(); });
+
+  await app.open(`#/surprise/${rep.id}`);
+  await expect(page.locator('.prompt')).toHaveText(/2\.\.\.d6 is not in your repertoire/);
+  await playMove(page, 'b1c3');
+  await page.getByRole('button', { name: 'Add my answer to the repertoire' }).click();
+  await holding; // the line is on its way to the server
+  await page.getByRole('button', { name: 'Next reply' }).click();
+  await expect(page.locator('.prompt')).toHaveText(/2\.\.\.f6 is not in your repertoire/);
+  release();
+  await expect(page.locator('.toast')).toContainText('Added 3.Nc3 as a new chapter');
+
+  await playMove(page, 'b1c3');
+  await page.getByRole('button', { name: 'Add my answer to the repertoire' }).click();
+  await expect(page.getByRole('button', { name: 'In your repertoire' })).toBeDisabled();
+  const saved = await app.api('GET', `/api/repertoires/${rep.id}`);
+  expect(saved.pgn).toContain('[ChapterName "Answer to 2...d6"]');
+  expect(saved.pgn).toContain('[ChapterName "Answer to 2...f6"]');
 });
 
 test('Surprise without Lichess: Stockfish finds a sound sideline your repertoire skips', async ({ page, app }) => {

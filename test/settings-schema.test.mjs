@@ -111,8 +111,9 @@ test('text is trimmed and kept to 500 characters', () => {
   assert.equal(schema.validate(schema.defaults(), { enginePath: 'x'.repeat(600) }).enginePath.length, 500);
 });
 
-test('no patch leaves the settings as they are', () => {
+test('no patch, or one that is not an object, leaves the settings as they are', () => {
   const d = schema.defaults();
-  assert.deepEqual(schema.validate(d, null), d);
-  assert.deepEqual(schema.validate(d, undefined), d);
+  for (const patch of [null, undefined, 'reviewBatch', 42, true, []]) {
+    assert.deepEqual(schema.validate(d, patch), d, JSON.stringify(patch));
+  }
 });

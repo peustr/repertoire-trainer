@@ -109,6 +109,16 @@ test('explorer answers with parts missing count as zero, and the query follows t
   assert.equal(new URL(urls[2]).searchParams.get('since'), '2024-03', 'the Lichess database takes the month');
 });
 
+test('castling that gives check or mate is written e1c1 like any other castling', async (t) => {
+  const { client } = tempClient(t, { auth: TOKEN });
+  scriptFetch(t, () => json({ white: 2, black: 2, moves: [
+    { uci: 'e1a1', san: 'O-O-O+', white: 2, draws: 0, black: 0 },
+    { uci: 'e8h8', san: 'O-O#', white: 0, draws: 0, black: 2 },
+  ] }));
+  const res = await client.explorer({ fen: START });
+  assert.deepEqual(res.moves.map((m) => [m.san, m.uci]), [['O-O-O+', 'e1c1'], ['O-O#', 'e8g8']]);
+});
+
 test('the explorer’s filters keep the time controls and rating groups it knows, or fall back to the defaults', () => {
   assert.deepEqual(cleanRatings(''), [1600, 1800, 2000]);
   assert.deepEqual(cleanRatings('0,1000'), [0, 1000]);

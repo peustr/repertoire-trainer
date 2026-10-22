@@ -36,13 +36,15 @@ test('which moves a pass asks for', () => {
 });
 
 test('grading the right move', () => {
-  /** @type {Array<[{ tries: number, hints: number }, { hintsCount?: boolean }, string]>} */
+  /** @type {Array<[{ tries: number, hints: number, phase?: string }, { hintsCount?: boolean }, string]>} */
   const cases = [
     [{ tries: 0, hints: 0 }, {}, 'right'],
     [{ tries: 1, hints: 0 }, {}, 'wrong'],
     [{ tries: 0, hints: 1 }, { hintsCount: true }, 'wrong'],
     [{ tries: 0, hints: 2 }, { hintsCount: false }, 'hint'],
     [{ tries: 1, hints: 1 }, { hintsCount: false }, 'wrong'],
+    [{ tries: 0, hints: 1, phase: 'guided' }, { hintsCount: true }, 'right'], // the arrow showed the move anyway
+    [{ tries: 0, hints: 1, phase: 'recall' }, { hintsCount: true }, 'wrong'],
   ];
   for (const [attempt, settings, expected] of cases) {
     assert.equal(resultForCorrectMove(attempt, settings), expected, JSON.stringify({ attempt, settings }));

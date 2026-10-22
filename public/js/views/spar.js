@@ -339,6 +339,7 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     const fen = fenNow();
     const st = gameNow();
     const result = st.over ? (st.winner ? (st.winner === mine ? 'win' : 'loss') : 'draw') : null;
+    const played = myMoves(); // the play-out's moves, not those of a game kept going meanwhile
     setStatus('Play-out over', 'Stockfish is judging the position…');
     clear(goalControls,
       h('button.btn.primary', { type: 'button', on: { click: restart } }, 'Try again'),
@@ -346,17 +347,22 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     const startCp = await startRating;
     const endCp = result === 'win' ? 10000 : result === 'loss' ? -10000 : result === 'draw' ? 0 : await rate(fen);
     if (token !== gameToken || !page.isConnected) return;
+    // After "Keep playing" the verdict still arrives in the goal box, but the game's own
+    // prompt stays, and no sound plays in the middle of it.
+    const showing = finished;
     if (startCp == null || endCp == null) {
-      setStatus('Play-out over', '');
+      if (showing) setStatus('Play-out over', '');
       clear(goalBox, h('p.fb', 'Stockfish is not available right now, so this play-out could not be judged.'));
       return;
     }
     const grade = gradePlayout({ startCp, endCp, result }, settings);
-    if (grade.pass) sound.done(); else sound.wrong();
-    setStatus(grade.pass ? 'Position kept' : 'The position slipped', '');
+    if (showing) {
+      if (grade.pass) sound.done(); else sound.wrong();
+      setStatus(grade.pass ? 'Position kept' : 'The position slipped', '');
+    }
     const review = h('p.verdict.muted', 'Checking your moves…');
     clear(goalBox, h(`p.fb.${grade.pass ? 'fb-good' : 'fb-bad'}`, playoutText(grade, startCp, endCp)), review);
-    await reviewMoves(review, token);
+    await reviewMoves(review, token, played);
   }
 
   function playoutText({ verdict, drop }, startCp, endCp) {
@@ -371,9 +377,14 @@ export async function renderSpar(root, { fen, color, id, back, goal: goalParam }
     }
   }
 
-  /** Stockfish checks each of your moves; the biggest slip is marked on the scoresheet. */
-  async function reviewMoves(el, token) {
-    const list = myMoves();
+  /**
+   * Stockfish checks each of your moves in the play-out; the biggest slip is marked on the
+   * scoresheet while the play-out's end is shown.
+   * @param {HTMLElement} el
+   * @param {number} token
+   * @param {typeof history} list
+   */
+  async function reviewMoves(el, token, list) {
     for (let i = 0; i < list.length; i++) {
       const m = list[i];
       el.textContent = `Checking your moves: ${i + 1} of ${list.length}…`;

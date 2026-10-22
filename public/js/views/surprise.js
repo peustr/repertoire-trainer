@@ -7,7 +7,7 @@
 // at your level reply in your lines, or, without a Lichess account, from sound
 // sidelines Stockfish finds.
 
-import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, action, keyed, panelSection, toolList, pawns } from '../ui.js';
+import { h, clear, sound, toast, sanLabel, plainLabel, uciLineToSan, formatSanLine, plural, action, keyed, pageShortcut, panelSection, toolList, pawns } from '../ui.js';
 import { state, getRep, putRep, modelFor, loadLichess } from '../store.js';
 import { api } from '../api.js';
 import { createBoard, isPromotion, choosePromotion } from '../board.js';
@@ -285,7 +285,8 @@ export async function renderSurprise(root, { id }) {
         click: action(async (e) => {
           const btn = e.currentTarget;
           if (!cur || cur.added) return;
-          const s = cur.s;
+          const shown = cur; // the next surprise may be on the board by the time the line is saved
+          const s = shown.s;
           const note = s.share != null
             ? `Played in ${formatShare(s.share)} of Lichess games here (${describeRatings(settings.lichessRatings)}).`
             : 'A sideline Stockfish rates as sound.';
@@ -293,11 +294,13 @@ export async function renderSurprise(root, { id }) {
           const updated = await api.addLine(rep.id, pgn, s.gapKey);
           rep = putRep(updated);
           model = modelFor(rep);
-          cur.added = true;
-          for (const b of controls.querySelectorAll('button[data-add]')) if (b !== btn) b.remove();
-          // A new button: action() re-enables the one that was clicked once this returns.
-          btn.replaceWith(h('button.btn', { type: 'button', disabled: true }, 'In your repertoire'));
-          toast(`Added ${plainLabel(cur.after, uci)} as a new chapter. It will show up in Learn.`);
+          shown.added = true;
+          if (cur === shown) {
+            for (const b of controls.querySelectorAll('button[data-add]')) if (b !== btn) b.remove();
+            // A new button: action() re-enables the one that was clicked once this returns.
+            btn.replaceWith(h('button.btn', { type: 'button', disabled: true }, 'In your repertoire'));
+          }
+          toast(`Added ${plainLabel(shown.after, uci)} as a new chapter. It will show up in Learn.`);
         }),
       },
     }, text);
@@ -333,7 +336,7 @@ export async function renderSurprise(root, { id }) {
   }
 
   function onKey(e) {
-    if (e.target.closest('input, textarea, select, dialog')) return;
+    if (!pageShortcut(e)) return;
     if (e.key === 'Enter') {
       const btn = controls.querySelector('[data-key="Enter"]');
       if (btn && document.activeElement !== btn) { e.preventDefault(); btn.click(); }

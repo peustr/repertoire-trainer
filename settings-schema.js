@@ -211,11 +211,15 @@ function clean(field, value) {
   }
 }
 
-/** Merge a patch into current settings, keeping only valid values. */
+/**
+ * Merge a patch into current settings, keeping only valid values. A patch that is not an
+ * object (a settings file edited into a bare string or number) changes nothing.
+ */
 function validate(current, patch) {
   const next = { ...current };
+  if (!patch || typeof patch !== 'object') return next;
   for (const f of allFields()) {
-    if (!(f.key in (patch || {}))) continue;
+    if (!(f.key in patch)) continue;
     const v = clean(f, patch[f.key]);
     if (v !== undefined) next[f.key] = v;
   }

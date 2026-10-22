@@ -6,7 +6,7 @@
 //           moves you already know play themselves.
 // Practise: every move, no effect on the schedule.
 
-import { h, clear, sound, fig, useFigurines, sanLabel, uciLineToSan, formatSanLine, plural, action, keyed, panelSection, toolList } from '../ui.js';
+import { h, clear, sound, fig, useFigurines, sanLabel, uciLineToSan, formatSanLine, plural, action, keyed, pageShortcut, panelSection, toolList } from '../ui.js';
 import { refresh } from '../nav.js';
 import { state, getRep, modelFor, saveCards } from '../store.js';
 import { cardKey } from '../repertoire.js';
@@ -192,7 +192,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
 
     if (uci === node.uci) {
       run.waiting = false;
-      const outcome = resultForCorrectMove({ tries: run.tries, hints: run.hint }, settings);
+      const outcome = resultForCorrectMove({ tries: run.tries, hints: run.hint, phase: run.phase }, settings);
       const clean = outcome === 'right';
       run.results.set(key, firstResult(run.results.get(key), outcome));
       if (clean && run.phase !== 'guided') sound.right();
@@ -478,7 +478,9 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
           renderDots();
           if (run.hint === 1) {
             board.setShapes([{ orig: node.uci.slice(0, 2), brush: 'bark' }]);
-            setFeedback('neutral', settings.hintsCount ? 'Hint: move the highlighted piece. This move will come back sooner.' : 'Hint: move the highlighted piece.');
+            // Only a hint that counts against the schedule brings the move back sooner.
+            const sooner = result === 'wrong' && run.phase !== 'practice';
+            setFeedback('neutral', sooner ? 'Hint: move the highlighted piece. This move will come back sooner.' : 'Hint: move the highlighted piece.');
           } else {
             board.setShapes([{ orig: node.uci.slice(0, 2), dest: node.uci.slice(2, 4), brush: 'bark' }]);
             setFeedback('neutral', `The move is ${moveText(node)}.`);
@@ -529,7 +531,7 @@ export async function renderTrainer(root, { id, mode, target, chapter }) {
 
   // ---- keyboard ------------------------------------------------------------------------
   function onKey(e) {
-    if (e.target.closest('input, textarea, select, dialog')) return;
+    if (!pageShortcut(e)) return;
     if (e.key === 'h' || e.key === 'H') controls.querySelector('[data-key="h"]')?.click();
     else if (e.key === 'Enter') {
       const btn = controls.querySelector('[data-key="Enter"]');

@@ -47,9 +47,12 @@ function cleanRatings(ratings) {
   return list.length ? [...new Set(list)].sort((a, b) => a - b) : DEFAULT_RATINGS.split(',').map(Number);
 }
 
-/** The explorer writes castling as king-takes-rook (e1h1); chess.js and our trees use e1g1. */
+/**
+ * The explorer writes castling as king-takes-rook (e1h1); chess.js and our trees use e1g1.
+ * Its SAN carries a check or mate sign like any other move (O-O-O+).
+ */
 function normaliseCastling(uci, san) {
-  if (san === 'O-O' || san === 'O-O-O') {
+  if (/^O-O/.test(san)) {
     const map = { e1h1: 'e1g1', e1a1: 'e1c1', e8h8: 'e8g8', e8a8: 'e8c8' };
     return map[uci] || uci;
   }

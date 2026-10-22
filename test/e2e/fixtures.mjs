@@ -122,11 +122,12 @@ export async function playMove(page, uci, orientation = 'white') {
 
 /**
  * Replace the engine WebSocket with a fake that answers the page's requests: bestmove
- * with the first legal move, evaluate and analyse as the test says, and the mistake
- * search with the events and result `search` gives (no events and an empty result by
- * default). Nothing waits on a real search. Returns every request the page sent.
+ * with the first legal move, evaluate and analyse as the test says (evaluate may answer
+ * later, with a promise), and the mistake search with the events and result `search`
+ * gives (no events and an empty result by default). Nothing waits on a real search.
+ * Returns every request the page sent.
  * @param {import('@playwright/test').Page} page
- * @param {{ evaluate?: (msg: any) => object, analyse?: (msg: any) => object[],
+ * @param {{ evaluate?: (msg: any) => object | Promise<object>, analyse?: (msg: any) => object[],
  *   search?: (msg: any) => { events?: object[], result?: object } }} [script]
  */
 export async function fakeEngine(page, {
@@ -145,7 +146,7 @@ export async function fakeEngine(page, {
         const [first] = new Chess(msg.fen).moves({ verbose: true });
         reply({ type: REPLY.RESULT, move: first.from + first.to + (first.promotion || ''), score: { cp: 0 } });
       } else if (msg.type === REQUEST.EVALUATE) {
-        reply({ type: REPLY.RESULT, fen: msg.fen, depth: msg.depth, ...evaluate(msg) });
+        void Promise.resolve(evaluate(msg)).then((body) => reply({ type: REPLY.RESULT, fen: msg.fen, depth: msg.depth, ...body }));
       } else if (msg.type === REQUEST.ANALYSE) {
         const lines = analyse(msg);
         reply({ type: REPLY.DONE, depth: 12, lines, bestmove: lines.length ? lines[0].pv[0] : null });
