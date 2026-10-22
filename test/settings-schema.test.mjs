@@ -1,6 +1,6 @@
 // The settings schema (settings-schema.js): every field's label and default, defaults
 // sized for the computer, how each kind of field cleans what the Settings page sends,
-// settings saved by an older trainer, and the mistake finder's options.
+// which fields restart Stockfish, and the mistake finder's options.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -41,17 +41,10 @@ test('the Settings page names each rating group', () => {
   assert.deepEqual(ratingField.options[4], ['1600', '1600–1799']);
 });
 
-test('settings from before the sparring opponent choice keep their meaning', () => {
-  const upgraded = (saved) => schema.validate(schema.defaults(), schema.upgrade(saved)).sparOpponent;
-  assert.equal(upgraded({ sparFollowBook: false }), 'engine', 'it never followed the book: Stockfish from the first move');
-  assert.equal(upgraded({ sparFollowBook: true }), 'lichess', 'it did: the new default');
-  assert.equal(upgraded({ sparFollowBook: false, sparOpponent: 'book' }), 'book', 'a choice already made wins');
-  assert.equal(upgraded({}), 'lichess');
-  assert.equal(schema.upgrade(null), null);
-  assert.equal(schema.validate(schema.defaults(), { sparFollowBook: false }).sparFollowBook, undefined, 'the old setting is gone');
+test('sparring and drill settings take effect without restarting Stockfish', () => {
   const sparring = schema.buildSchema().find((s) => s.id === 'sparring');
   assert.deepEqual(sparring.fields.map((f) => f.key), ['sparOpponent', 'sparElo', 'sparMoveTime', 'playOutMoves', 'playOutTolerance', 'surpriseBatch', 'surpriseMinShare', 'surpriseTolerance']);
-  assert.ok(!sparring.fields.some((f) => f.restart), 'changing them does not restart Stockfish');
+  assert.ok(!sparring.fields.some((f) => f.restart));
 });
 
 test("the mistake finder's options come from the settings", () => {

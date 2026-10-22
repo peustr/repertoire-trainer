@@ -376,7 +376,7 @@ function deleteRepertoire(id) {
 
 /** Saved settings on top of the defaults; anything stale or invalid falls back to the default. */
 function getSettings() {
-  return schema.validate(schema.defaults(), schema.upgrade(readJson(SETTINGS_FILE, {})));
+  return schema.validate(schema.defaults(), readJson(SETTINGS_FILE, {}));
 }
 
 function saveSettings(patch) {
