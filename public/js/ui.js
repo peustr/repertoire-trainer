@@ -227,7 +227,7 @@ export function action(fn) {
 
 // --- modal -------------------------------------------------------------------------
 
-export function modal(title, body, actions = []) {
+function modal(title, body, actions = []) {
   const close = () => { dialog.close(); dialog.remove(); };
   const dialog = h('dialog.modal',
     h('form.modal-inner', { method: 'dialog' },

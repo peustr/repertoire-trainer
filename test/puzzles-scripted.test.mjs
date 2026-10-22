@@ -91,6 +91,7 @@ test('a puzzle is themed by what it wins, from either side', () => {
   assert.equal(won('w', 'p3k3/8/8/8/8/8/8/4K3', bare), 'Wins a pawn');
   assert.equal(won('w', bare, bare), 'Decisive advantage');
   assert.equal(won('b', '4k3/8/8/8/8/8/8/Q3K3', bare), 'Wins the queen');
+  assert.equal(theme({ mate: 3 }, 'w', START, START).label, 'Mate in 3');
   assert.equal(theme({ mate: -2 }, 'b', START, START).label, 'Mate in 2', 'a negative mate is Black mating');
   assert.equal(theme({ mate: 2 }, 'b', START, START).label, 'Decisive advantage', 'White mating is no theme for Black');
 });

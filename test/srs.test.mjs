@@ -1,5 +1,6 @@
-// The scheduler's summaries: repertoire statistics, which line to review next, and wait labels.
-// The rules for grading answers are in session.test.mjs.
+// The scheduler (public/js/srs.js): how a card climbs and drops the levels, with the default
+// or a custom schedule, and its summaries: repertoire statistics, which line to review next,
+// and wait labels. The rules for grading answers are in session.test.mjs.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,6 +15,31 @@ const sched = srs.DEFAULT_SCHEDULE;
 const model = buildRepertoire({ pgn: '1. e4 e5 2. Nf3 (2. Bc4) *\n\n1. d4 d5 2. c4 *', color: 'white' });
 const key = (san) => [...model.cards.values()].find((c) => c.san === san).key;
 const line = (lastSan) => model.lines.find((l) => l.nodes[l.nodes.length - 1].san === lastSan);
+
+test('a card climbs one level per promotion, up to the top, and a mistake drops it', () => {
+  let s = srs.learned(sched, now);
+  assert.equal(s.level, 1);
+  assert.equal(s.due, now + 4 * HOUR);
+  s = srs.promote(sched, s, s.due);
+  assert.equal(s.level, 2);
+  s = srs.promote(sched, srs.promote(sched, s, now), now);
+  assert.equal(s.level, 4);
+  assert.equal(srs.demote(sched, s, now).level, 1);
+  assert.equal(srs.demote(sched, s, now, 'stepback').level, 2);
+  for (let i = 0; i < 20; i++) s = srs.promote(sched, s, now);
+  assert.equal(s.level, srs.MAX_LEVEL);
+});
+
+test('the scheduler follows custom intervals and step-back size', () => {
+  const custom = { intervals: [1, 2, 3, 4, 5, 6, 7, 8], stepbackLevels: 3 };
+  assert.equal(srs.promote(custom, { level: 4, due: 0 }, 0).due, 5 * HOUR);
+  assert.equal(srs.demote(custom, { level: 6, due: 0 }, 0, 'stepback').level, 3);
+  // Unusable parts fall back to the defaults.
+  assert.equal(srs.intervalFor({ intervals: [1, 2, 3] }, 1), 4 * HOUR);
+  assert.equal(srs.intervalFor({ intervals: [0, 2, 3, 4, 5, 6, 7, 8] }, 2), 24 * HOUR);
+  assert.equal(srs.demote({ stepbackLevels: 99 }, { level: 8, due: 0 }, 0, 'stepback').level, 1, 'at most seven levels');
+  assert.equal(srs.demote({}, { level: 6, due: 0 }, 0, 'stepback').level, 4);
+});
 
 test('a card saved without a level or count is promoted from the start', () => {
   const s = srs.promote(sched, { due: 0 }, now);

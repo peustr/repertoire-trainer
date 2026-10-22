@@ -101,6 +101,7 @@ function engineSpec(role, cfg = {}) {
 // Parsing UCI output
 // ---------------------------------------------------------------------------
 
+/** The fields of an info line the trainer uses: depth, line number, score and moves. */
 function parseInfo(line) {
   const t = line.trim().split(/\s+/);
   if (t[0] !== 'info') return null;
@@ -108,13 +109,7 @@ function parseInfo(line) {
   for (let i = 1; i < t.length; i++) {
     switch (t[i]) {
       case 'depth': info.depth = +t[++i]; break;
-      case 'seldepth': info.seldepth = +t[++i]; break;
       case 'multipv': info.multipv = +t[++i]; break;
-      case 'nodes': info.nodes = +t[++i]; break;
-      case 'nps': info.nps = +t[++i]; break;
-      case 'time': info.time = +t[++i]; break;
-      case 'hashfull': info.hashfull = +t[++i]; break;
-      case 'tbhits': info.tbhits = +t[++i]; break;
       case 'score': {
         const kind = t[++i];
         const value = +t[++i];
@@ -122,10 +117,9 @@ function parseInfo(line) {
         if (t[i + 1] === 'lowerbound' || t[i + 1] === 'upperbound') info.bound = t[++i];
         break;
       }
-      case 'wdl': info.wdl = [+t[++i], +t[++i], +t[++i]]; break;
       case 'pv': info.pv = t.slice(i + 1); i = t.length; break;
       case 'string': return null; // free text from the engine, not search info
-      default: break;
+      default: break; // other fields, and their values
     }
   }
   return info;
@@ -359,10 +353,6 @@ class UciEngine extends EventEmitter {
         const entry = {
           multipv: mpv,
           depth: info.depth,
-          seldepth: info.seldepth,
-          nodes: info.nodes,
-          nps: info.nps,
-          time: info.time,
           bound: info.bound || null,
           score: toWhitePov(info.score, job.fen),
           pv: info.pv,
@@ -376,7 +366,6 @@ class UciEngine extends EventEmitter {
       const parts = line.split(/\s+/);
       const result = this._snapshot(job);
       result.bestmove = parts[1] && parts[1] !== '(none)' ? parts[1] : null;
-      result.ponder = parts[3] || null;
       result.cancelled = job.cancelled;
       this.current = null;
       clearTimeout(job.watchdog);
@@ -572,7 +561,6 @@ class UciEngine extends EventEmitter {
 
 class EngineManager {
   constructor(getConfig = () => ({})) {
-    this.getConfig = getConfig;
     this.analysis = new UciEngine('analysis', getConfig);
     this.tasks = new UciEngine('tasks', getConfig);
   }

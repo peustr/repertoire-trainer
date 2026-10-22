@@ -231,12 +231,13 @@ test/smoke-server.mjs Boots the server and checks the API and engine (npm run te
 test/e2e/            Playwright browser tests (npm run test:e2e; test:e2e:coverage adds
                      a report of which lines of public/js they ran)
 test/mock-lichess.js Offline stand-in for the Lichess API
-test/helpers/, test/fixtures/  Server and mock Lichess launchers, fake Stockfish
+test/helpers/        Server and mock Lichess launchers, and must() for a value a test expects
+test/fixtures/       A fake Stockfish, and a fake old Node.js for the start-up check
 package.json         Dependencies, pinned exactly, and the npm scripts
 eslint.config.mjs, tsconfig.json  Lint and type check (npm run check)
 .c8rc.json           npm test's coverage thresholds: 100%
 playwright.config.mjs  Browser test settings
-.github/             CI (tests, lint, browser tests, secrets scan) and Dependabot
+.github/             CI (tests, lint, browser tests, secrets scan, dependency audit) and Dependabot
 ```
 
 ## Credits

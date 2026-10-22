@@ -183,7 +183,7 @@ function opponentsPanel(rep, model, pz) {
         h('h3.section-title', `${plural(pz.total, 'opponent mistake')} to punish`),
         h('p.muted', `${pz.due} due for review, ${pz.fresh} not tried yet.`)),
       h('div.tools-row',
-        pz.ready ? h('a.btn.primary', { href: `#/puzzles/${rep.id}` }, `Solve ${Math.min(pz.ready, 12)}`) : null,
+        pz.ready ? h('a.btn.primary', { href: `#/puzzles/${rep.id}` }, `Solve ${Math.min(pz.ready, state.settings.puzzleBatch)}`) : null,
         start ? h('button.btn', { type: 'button', on: { click: searchAll } }, 'Search again') : null)),
     list.length ? h('ul.puzzle-list', list.slice(0, 10).map((p) => {
       const st = puzzleState(rep, p);

@@ -8,6 +8,8 @@ import {
   describeSpeeds, describeReach, cpFor, puzzleToPgn,
 } from '../public/js/puzzle-utils.js';
 import { parsePgn } from '../public/js/pgn.js';
+import { buildRepertoire } from '../public/js/repertoire.js';
+import { START_FEN } from '../public/js/constants.js';
 
 const now = 1_000_000_000_000;
 
@@ -16,6 +18,14 @@ test('a repertoire without puzzles or progress has none to show', () => {
   assert.equal(puzzleState({}, { id: 'a' }), null);
   assert.deepEqual(puzzleQueue({}), []);
   assert.deepEqual(puzzleStats({}), { total: 0, due: 0, fresh: 0, ready: 0 });
+});
+
+test('the queue holds due puzzles first, then new ones by likelihood', () => {
+  const rep = {
+    puzzles: { a: { id: 'a', reach: 0.1 }, b: { id: 'b', reach: 0.5 }, c: { id: 'c', reach: 0.9 }, d: { id: 'd', reach: 0.9 } },
+    cards: { 'pz|a': { level: 2, due: now - 10 }, 'pz|c': { level: 1, due: now + 1000 } },
+  };
+  assert.deepEqual(puzzleQueue(rep, { now }).map((p) => p.id), ['a', 'd', 'b']);
 });
 
 test('the queue can be limited to chosen puzzles, and puzzles without a reach come last', () => {
@@ -113,4 +123,26 @@ test('a puzzle from a set-up position keeps it, and stops at a move that is not 
   assert.match(pgn, /Better was Bc5\. }/);
   assert.match(pgn, /\n3\. Bc4 Nf6 \$2 .* 4\. Ng5 \$1 \{ Wins material\. \} \*/);
   assert.doesNotMatch(pgn, /d3/, 'nothing after the illegal move');
+});
+
+test('a puzzle’s chapter reads back with its comments and glyphs', () => {
+  const p = {
+    startFen: START_FEN,
+    lineMoves: ['e2e4', 'e7e5', 'g1f3', 'd7d6', 'f1c4', 'c8g4', 'b1c3', 'g7g6'],
+    solution: ['f3e5', 'g4d1', 'c4f7', 'e8e7', 'c3d5'],
+    pathSan: ['e4', 'e5', 'Nf3', 'd6', 'Bc4', 'Bg4', 'Nc3', 'g6'],
+    mistake: { san: 'g6', share: 0.12, positionGames: 5400, bestMoveBeforeSan: 'Nf6' },
+    filters: { ratings: [1600, 1800] },
+    theme: { label: 'Mate in 2' },
+  };
+  const pgn = puzzleToPgn(p, { title: 'Punishing 4...g6' });
+  const model = buildRepertoire({ pgn, color: 'white' });
+  assert.deepEqual(model.errors, []);
+  assert.equal(model.lines.length, 1);
+  const nodes = model.lines[0].nodes;
+  assert.equal(nodes.length, 13);
+  assert.ok(nodes[7].nags.includes(2), 'mistake marked ?');
+  assert.ok(nodes[8].nags.includes(1), 'answer marked !');
+  assert.match(nodes[7].comment, /12% of 5.4k/);
+  assert.equal(model.chapters[0].name, 'Punishing 4...g6');
 });

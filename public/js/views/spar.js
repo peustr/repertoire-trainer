@@ -20,7 +20,7 @@ import { describeRatings, describeSpeeds, formatShare, formatGames, cpFor } from
 
 const OPPONENTS = [['lichess', 'Lichess players at your rating'], ['book', 'Your prepared lines'], ['engine', 'Stockfish only']];
 
-/** "+0.45", "−1.20", or "winning" / "losing" for a mate. */
+/** "+0.45", "−1.20", or "a forced mate for you" / "against you" for a mate. */
 function formatCp(cp) {
   if (cp >= 9000) return 'a forced mate for you';
   if (cp <= -9000) return 'a forced mate against you';

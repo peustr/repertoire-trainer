@@ -68,8 +68,6 @@ export function serveEngineSocket(wss, { engines, store, lichess }) {
         } else if (msg.type === REQUEST.BESTMOVE) {
           const res = await engines.bestmove(msg);
           send({ type: REPLY.RESULT, ...res, id });
-        } else if (msg.type === REQUEST.STATUS) {
-          send({ type: REPLY.RESULT, id, engine: engines.info() });
         } else if (msg.type === REQUEST.PUZZLE_SEARCH) {
           const rep = store.getRepertoire(msg.repId);
           if (!rep) throw Object.assign(new Error('Repertoire not found'), { status: 404 });

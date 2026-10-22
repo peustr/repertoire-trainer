@@ -68,10 +68,8 @@ test('a page is greeted with the engine information; what it cannot read is igno
   assert.equal(ws.sent.length, 1, 'no answer to something that is not a request');
 
   ws.request({ type: 'resign', id: 1 });
-  ws.request({ type: REQUEST.STATUS, id: 2 });
   await settle();
   assert.deepEqual(ws.replies(1), [{ type: REPLY.ERROR, id: 1, message: 'The server does not understand "resign" requests. Reload the page.' }]);
-  assert.equal(ws.replies(2)[0].engine.analysis.kind, 'fake');
 });
 
 test('analysis progress goes out at most every 120 ms, and a new analysis replaces the old', async (t) => {

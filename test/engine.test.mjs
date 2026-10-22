@@ -67,7 +67,7 @@ test('a missing engine is looked for again on the next job', async () => {
   engine.quit();
 });
 
-// --- stuck and slow searches (#3) ----------------------------------------------------
+// --- stuck and slow searches ---------------------------------------------------------
 
 test('a stuck search is abandoned and the queue carries on with a fresh engine', async () => {
   let spawns = 0;
@@ -110,7 +110,7 @@ test('a long search that keeps reporting progress is left alone', async () => {
   engine.quit();
 });
 
-// --- settings restarts (#12) ---------------------------------------------------------
+// --- settings restarts --------------------------------------------------------------
 
 test('a restart lets the running search finish and moves queued ones to a fresh engine', async () => {
   let move = 'e2e4';
@@ -325,12 +325,12 @@ test('an engine that cannot even be launched fails its start, and warming up doe
 
 // --- what the engine says ------------------------------------------------------------
 
-test('UCI info lines are read field by field', () => {
+test('UCI info lines give their depth, line number, score and moves, and the rest is skipped', () => {
   assert.equal(parseInfo('bestmove e2e4'), null);
   assert.equal(parseInfo('info string NNUE evaluation using nn-1111.nnue'), null, 'free text');
   assert.deepEqual(
     parseInfo('info depth 20 seldepth 28 multipv 2 score mate -3 upperbound nodes 1000 nps 500 hashfull 12 tbhits 0 time 2000 wdl 10 20 970 currmove e2e4 pv e7e5 g1f3'),
-    { depth: 20, seldepth: 28, multipv: 2, score: { mate: -3 }, bound: 'upperbound', nodes: 1000, nps: 500, hashfull: 12, tbhits: 0, time: 2000, wdl: [10, 20, 970], pv: ['e7e5', 'g1f3'] },
+    { depth: 20, multipv: 2, score: { mate: -3 }, bound: 'upperbound', pv: ['e7e5', 'g1f3'] },
   );
   assert.deepEqual(parseInfo('info depth 5 score cp 31 lowerbound pv e2e4'), { depth: 5, score: { cp: 31 }, bound: 'lowerbound', pv: ['e2e4'] });
 });

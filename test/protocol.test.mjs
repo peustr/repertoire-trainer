@@ -39,15 +39,6 @@ test('the server greets each page with the engines it runs', async () => {
   ws.close();
 });
 
-test('a status request is answered with a result for its id', async () => {
-  const { ws, next, send } = await connect();
-  send({ type: REQUEST.STATUS, id: 7 });
-  const res = await next((m) => m.id === 7, 'status result');
-  assert.equal(res.type, REPLY.RESULT);
-  assert.ok(res.engine);
-  ws.close();
-});
-
 test('a request the server does not know is answered with an error, not silence', async () => {
   const { ws, next, send } = await connect();
   send({ type: 'analyze', id: 8 }); // misspelt
@@ -70,9 +61,8 @@ test('a message that is not a request object is ignored, and the server keeps go
   for (const raw of ['null', '5', '"analyse"', '[]', 'not json']) junk.ws.send(raw);
   await new Promise((r) => setTimeout(r, 500)); // long enough for a crash to happen
   junk.ws.close();
-  const { ws, next, send } = await connect();
-  send({ type: REQUEST.STATUS, id: 9 });
-  assert.equal((await next((m) => m.id === 9, 'status result after the junk')).type, REPLY.RESULT);
+  const { ws, next } = await connect();
+  assert.ok((await next((m) => m.type === REPLY.HELLO, 'greeting after the junk')).engine);
   ws.close();
 });
 

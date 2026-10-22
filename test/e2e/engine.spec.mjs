@@ -1,4 +1,4 @@
-// #11: when the engine never answers, or the connection drops, the page says so
+// When the engine never answers, or the connection drops, the page says so
 // instead of showing "Thinking…" forever.
 
 import { test, expect } from './fixtures.mjs';

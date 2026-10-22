@@ -15,7 +15,7 @@ updates:
         dependency-type: development
     ignore:
       # TypeScript 7 is the native rewrite, and typescript-eslint (the type-aware lint
-      # rules) supports only TypeScript below 6.1 so far, so npm ci fails with it.
+      # rules) supports only TypeScript below 6.1, so npm ci fails with it.
       # Remove this once typescript-eslint's peer range includes 7.
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
