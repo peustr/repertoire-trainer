@@ -90,7 +90,7 @@ jobs:
 
       - name: Keep the report and traces of a failed run
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ matrix.os }}
           path: |
