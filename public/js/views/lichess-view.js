@@ -1,5 +1,5 @@
-// Lichess: connect an account, pick who your opponents are, tune the mistake
-// search, and import studies.
+// Lichess: connect an account, see which Lichess games the explorer and the mistake
+// finder count (they are set in Settings), and import studies.
 
 import { h, add, clear, toast, action } from '../ui.js';
 import { refresh } from '../nav.js';
@@ -46,14 +46,12 @@ export async function renderLichess(root, { connected, error }) {
         h('p.muted', h('a', { href: TOKEN_URL, target: '_blank', rel: 'noopener' }, 'Create a token on Lichess'), ' with no scopes ticked (tick “Read private studies” if you want to import those), then paste it here.'),
         h('form.token-row', {
           on: {
-            submit: async (e) => {
+            submit: action(async (e) => {
               e.preventDefault();
-              try {
-                const st = await api.lichess.connect(tokenInput.value);
-                toast(`Connected as ${st.username}`);
-                refresh();
-              } catch (err) { toast(err.message, 'bad'); }
-            },
+              const st = await api.lichess.connect(tokenInput.value);
+              toast(`Connected as ${st.username}`);
+              refresh();
+            }),
           },
         }, tokenInput, h('button.btn', { type: 'submit' }, 'Save token'))));
   }

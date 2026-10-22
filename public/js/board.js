@@ -40,7 +40,7 @@ export function createBoard(container, { orientation = 'white', onMove } = {}) {
   const el = wrap.firstChild;
   container.append(wrap);
   const chess = new Chess();
-  let current = { fen: chess.fen(), movable: false };
+  let currentFen = chess.fen();
 
   const cg = Chessground(el, {
     orientation,
@@ -73,7 +73,7 @@ export function createBoard(container, { orientation = 'white', onMove } = {}) {
    */
   function setPosition(fen, { lastMove, movable = false, check, playSound = false, captured = false } = {}) {
     chess.load(fen, { skipValidation: true });
-    current = { fen, movable };
+    currentFen = fen;
     const color = turnColor(fen);
     cg.set({
       fen: fen.split(' ')[0],
@@ -88,20 +88,15 @@ export function createBoard(container, { orientation = 'white', onMove } = {}) {
   }
 
   const controller = {
-    cg,
-    el: wrap,
     setPosition,
     applyPrefs() {
       cg.set({ coordinates: prefs.coordinates, animation: { enabled: prefs.animation > 0, duration: prefs.animation }, movable: { showDests: prefs.showDests } });
       cg.redrawAll();
     },
     setOrientation: (o) => cg.set({ orientation: o }),
-    orientation: () => cg.state.orientation,
     flip: () => cg.toggleOrientation(),
-    fen: () => current.fen,
+    fen: () => currentFen,
     setShapes: (shapes) => cg.setAutoShapes(shapes || []),
-    clearUserShapes: () => cg.setShapes([]),
-    setMovable(on) { setPosition(current.fen, { movable: on, lastMove: cg.state.lastMove ? cg.state.lastMove.join('') : undefined }); },
     flash(square, kind = 'wrong') {
       cg.set({ highlight: { custom: new Map([[square, kind]]) } });
       setTimeout(() => cg.set({ highlight: { custom: new Map() } }), 650);
@@ -161,14 +156,17 @@ export function gameStatus(startFen, moves = []) {
   return { over: false };
 }
 
-/** A vertical eval bar. update(score) with a White-POV score. */
+/**
+ * A vertical eval bar. update(share, text, flipped): White's share of the bar (0–1, as
+ * evalBarShare() gives it), the score to print, and whether White's end is at the top
+ * (for a board seen from Black's side).
+ */
 export function createEvalBar(container) {
   const fill = h('div.evalbar-fill');
   const label = h('div.evalbar-label', '');
   const bar = h('div.evalbar', { role: 'meter', 'aria-label': 'Engine evaluation', 'aria-valuemin': 0, 'aria-valuemax': 100 }, fill, label);
   container.append(bar);
   return {
-    el: bar,
     update(share, text, flipped) {
       const pct = Math.round(share * 1000) / 10;
       fill.style.height = `${pct}%`; // White's share, anchored at White's end of the bar

@@ -75,7 +75,7 @@ function buildSchema() {
     {
       id: 'engine',
       title: 'Stockfish',
-      intro: `Stockfish always runs the latest version bundled with the app, or your own native .exe. This computer has ${cores} logical cores and about ${memGB} GB of memory; the defaults below are sized for it. Changes here restart Stockfish.`,
+      intro: `Stockfish always runs the version bundled with the app, or your own native .exe. This computer has ${cores} logical cores and about ${memGB} GB of memory; the defaults below are sized for it. Changes here restart Stockfish.`,
       fields: [
         { key: 'engineBuild', group: 'Engine and hardware', type: 'select', default: 'auto', restart: true, label: 'Which Stockfish to run', help: 'A native .exe is several times faster than the built-in WebAssembly engine. Download one from stockfishchess.org and put it in the app’s engine folder.', options: [['auto', 'Automatic: native .exe if found, otherwise built-in'], ['builtin', 'Built-in, full strength'], ['builtin-lite', 'Built-in, lite (loads faster, uses less memory)'], ['native', 'Native .exe (path below)']] },
         { key: 'enginePath', group: 'Engine and hardware', type: 'text', default: '', restart: true, label: 'Path to stockfish.exe', placeholder: 'C:\\Chess\\stockfish-windows-x86-64-avx2.exe', help: 'Only needed when the .exe is not in the app’s engine folder.' },
@@ -208,20 +208,7 @@ function clean(field, value) {
       if (hours.some((h) => !Number.isFinite(h) || h <= 0)) return undefined;
       return hours.map((h) => Math.max(0.05, Math.min(24 * 3650, Math.round(h * 100) / 100)));
     }
-    default:
-      return undefined;
   }
-}
-
-/**
- * Saved settings from an older trainer, in today's terms: "Sparring opponent plays your
- * prepared lines first" (sparFollowBook) became the Sparring opponent choice. Off meant
- * Stockfish from the first move; on gets the new default.
- * @param {Record<string, any> | null} saved  null when nothing is saved yet
- */
-function upgrade(saved) {
-  if (!saved || saved.sparOpponent !== undefined || saved.sparFollowBook !== false) return saved;
-  return { ...saved, sparOpponent: 'engine' };
 }
 
 /** Merge a patch into current settings, keeping only valid values. */
@@ -250,4 +237,4 @@ function finderOptions(settings) {
   return out;
 }
 
-export { buildSchema, defaults, validate, upgrade, clean, machine, engineDefaults, finderOptions, ENGINE_KEYS, WASM_HASH_MAX };
+export { buildSchema, defaults, validate, machine, engineDefaults, finderOptions, ENGINE_KEYS, WASM_HASH_MAX };

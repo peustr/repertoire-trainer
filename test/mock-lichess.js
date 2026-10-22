@@ -26,7 +26,7 @@ const SHARES = [0.42, 0.21, 0.13, 0.09, 0.07, 0.05, 0.02, 0.01];
 
 // Popular book moves get a boost so the mock follows real openings for a while.
 const BOOK = new Set(['e4', 'd4', 'e5', 'c6', 'd5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'Nf6', 'c3', 'd3', 'd6', 'O-O', 'a6', 'a4', 'h3',
-  'Be7', 'e6', 'Bf5', 'e5', 'Nc3', 'dxe4', 'Nxe4', 'Ng3', 'Bg6', 'h4', 'h6', 'Nd7', 'exd5', 'cxd5', 'Bd3', 'c5', 'Be2', 'Be3']);
+  'Be7', 'e6', 'Bf5', 'Nc3', 'dxe4', 'Nxe4', 'Ng3', 'Bg6', 'h4', 'h6', 'Nd7', 'exd5', 'cxd5', 'Bd3', 'c5', 'Be2', 'Be3']);
 
 function weight(s) {
   return crypto.createHash('md5').update(s).digest().readUInt32BE(0);

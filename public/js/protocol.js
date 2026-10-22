@@ -9,7 +9,6 @@ export const REQUEST = Object.freeze({
   STOP: 'stop',
   EVALUATE: 'evaluate',
   BESTMOVE: 'bestmove',
-  STATUS: 'status',
   PUZZLE_SEARCH: 'puzzle-search',
 });
 
@@ -44,16 +43,12 @@ export const REPLY = Object.freeze({
  * @typedef {{ type: 'bestmove', id: number, fen: string, elo?: number, movetime?: number, newGame?: boolean }} BestmoveRequest
  */
 /**
- * The engines' details. Answered by RESULT { engine }.
- * @typedef {{ type: 'status', id: number }} StatusRequest
- */
-/**
  * The opponent-mistake search from a position, with the options in the user's settings.
  * Answered by SEARCH_EVENT messages as it goes, then RESULT { puzzles: [id], gaps, stats, ... }.
  * @typedef {{ type: 'puzzle-search', id: number, repId: string, fen: string,
  *   prefix?: { startFen?: string, moves?: string[] } }} PuzzleSearchRequest
  */
-/** @typedef {AnalyseRequest | StopRequest | EvaluateRequest | BestmoveRequest | StatusRequest | PuzzleSearchRequest} Request */
+/** @typedef {AnalyseRequest | StopRequest | EvaluateRequest | BestmoveRequest | PuzzleSearchRequest} Request */
 
 // --- server → browser ---------------------------------------------------------------
 
@@ -70,7 +65,7 @@ export const REPLY = Object.freeze({
  * @typedef {{ type: 'done', id: number, depth: number, lines: object[], bestmove: string | null }} DoneReply
  */
 /**
- * The answer to evaluate, bestmove, status or puzzle-search; its fields depend on the request.
+ * The answer to evaluate, bestmove or puzzle-search; its fields depend on the request.
  * @typedef {{ type: 'result', id: number } & Record<string, any>} ResultReply
  */
 /**

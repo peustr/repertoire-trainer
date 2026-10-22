@@ -1,4 +1,4 @@
-// #10 and #23: an action that fails must say so, and no error may vanish silently.
+// An action that fails must say so, and no error may vanish silently.
 
 import { test, expect } from './fixtures.mjs';
 import { START_FEN as START } from '../../public/js/constants.js';

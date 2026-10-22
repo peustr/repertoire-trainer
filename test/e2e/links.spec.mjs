@@ -1,4 +1,4 @@
-// #6: links into Explore must survive a reload or a bookmark.
+// Links into Explore must survive a reload or a bookmark.
 
 import { test, expect, playLine } from './fixtures.mjs';
 import { buildRepertoire } from '../../public/js/repertoire.js';

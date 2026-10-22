@@ -1,9 +1,29 @@
-// How a repertoire's PGN becomes lines and cards (public/js/repertoire.js): the cases
-// that leave a line out, and the moves that link to a position.
+// How a repertoire's PGN becomes lines and cards (public/js/repertoire.js): the samples,
+// cards shared by transpositions, the cases that leave a line out, and the moves that
+// link to a position.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { buildRepertoire, movesTo } from '../public/js/repertoire.js';
+
+const sample = (file) => fs.readFileSync(new URL(`../samples/${file}`, import.meta.url), 'utf8');
+
+for (const file of ['italian-game-white.pgn', 'caro-kann-black.pgn']) {
+  test(`sample ${file} parses cleanly`, () => {
+    const color = /black/.test(file) ? 'black' : 'white';
+    const model = buildRepertoire({ pgn: sample(file), color });
+    assert.deepEqual(model.errors, []);
+    assert.ok(model.lines.length >= 4, `only ${model.lines.length} lines`);
+  });
+}
+
+test('transpositions share cards', () => {
+  const model = buildRepertoire({ pgn: sample('italian-game-white.pgn'), color: 'white' });
+  // 3...Bc5 4.c3 Nf6 5.d3 and 3...Nf6 4.d3 Bc5 5.c3 reach the same position; White's next move there is one card.
+  const shared = [...model.cards.values()].filter((c) => c.lines.length > 1 && c.lines.some((l) => l.chapter.index === 0) && c.lines.some((l) => l.chapter.index === 1));
+  assert.ok(shared.length >= 3, 'expected shared cards across chapters');
+});
 
 test('reading problems are collected with the chapter they are in', () => {
   const model = buildRepertoire({ color: 'white', pgn: '[Event "Main"]\n\n1. e4 e5 2. Kf3 *' });

@@ -1,13 +1,66 @@
-// The settings schema (settings-schema.js): defaults sized for the computer, and how each
-// kind of field cleans what the Settings page sends. The basics are in core.test.mjs.
+// The settings schema (settings-schema.js): every field's label and default, defaults
+// sized for the computer, how each kind of field cleans what the Settings page sends,
+// which fields restart Stockfish, and the mistake finder's options.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import * as schema from '../settings-schema.js';
+import * as puzzles from '../puzzles.js';
 
 const GB = 2 ** 30;
 const cpus = (n) => Array.from({ length: n }, () => /** @type {os.CpuInfo} */ ({}));
+
+test('defaults, clamping and bad values; every field has a label and a default', () => {
+  const d = schema.defaults();
+  assert.equal(d.reviewBatch, 20);
+  assert.equal(d.srsIntervals.length, 8);
+  const v = schema.validate(d, {
+    reviewBatch: '999', theme: 'purple', lichessRatings: '1600,abc,2500', lichessSince: '2024-13',
+    srsIntervals: [1, 2, 3], puzzleMinShare: 2.5, engineBuild: 'native', analysisHash: 4, unknownKey: 1,
+  });
+  assert.equal(v.reviewBatch, 200);
+  assert.equal(v.theme, 'light');
+  assert.equal(v.lichessRatings, '1600,2500');
+  assert.equal(v.lichessSince, '');
+  assert.deepEqual(v.srsIntervals, d.srsIntervals);
+  assert.equal(v.puzzleMinShare, 2.5);
+  assert.equal(v.engineBuild, 'native');
+  assert.equal(v.analysisHash, 16);
+  assert.equal(v.unknownKey, undefined);
+  const sections = schema.buildSchema();
+  for (const sec of sections) for (const f of sec.fields) {
+    assert.ok(f.label && f.label.length > 3, `${f.key} needs a label`);
+    assert.ok(f.default !== undefined, `${f.key} needs a default`);
+  }
+  assert.ok(schema.ENGINE_KEYS.includes('analysisHash'));
+});
+
+test('the Settings page names each rating group', () => {
+  const ratingField = schema.buildSchema().flatMap((s) => s.fields).find((f) => f.key === 'lichessRatings');
+  assert.deepEqual(ratingField.options[4], ['1600', '1600–1799']);
+});
+
+test('sparring and drill settings take effect without restarting Stockfish', () => {
+  const sparring = schema.buildSchema().find((s) => s.id === 'sparring');
+  assert.deepEqual(sparring.fields.map((f) => f.key), ['sparOpponent', 'sparElo', 'sparMoveTime', 'playOutMoves', 'playOutTolerance', 'surpriseBatch', 'surpriseMinShare', 'surpriseTolerance']);
+  assert.ok(!sparring.fields.some((f) => f.restart));
+});
+
+test("the mistake finder's options come from the settings", () => {
+  const options = schema.finderOptions(schema.defaults());
+  assert.deepEqual(Object.keys(options).sort(), [
+    'beyondBook', 'cacheDays', 'candidates', 'depth', 'gapShare', 'maxLength', 'maxOppDepth', 'maxPositions', 'maxPuzzles',
+    'minAdvantage', 'minGames', 'minShare', 'ratings', 'since', 'solveDepth', 'speeds', 'threshold', 'uniqueGap',
+  ]);
+  assert.equal(options.minShare, 0.05, 'percentages become fractions');
+  assert.equal(options.gapShare, 0.1);
+  assert.equal(options.threshold, 150);
+  assert.deepEqual(puzzles.DEFAULTS, options);
+  const custom = schema.finderOptions(schema.validate(schema.defaults(), { puzzleThreshold: 220, lichessSince: '2024-01' }));
+  assert.equal(custom.threshold, 220);
+  assert.equal(custom.since, '2024-01');
+});
 
 test('engine defaults are sized for a small computer', (t) => {
   t.mock.method(os, 'cpus', () => []);
@@ -56,10 +109,6 @@ test('chips can be sent as a list, and repeats count once', () => {
 test('text is trimmed and kept to 500 characters', () => {
   assert.equal(schema.validate(schema.defaults(), { enginePath: '  C:\\stockfish.exe  ' }).enginePath, 'C:\\stockfish.exe');
   assert.equal(schema.validate(schema.defaults(), { enginePath: 'x'.repeat(600) }).enginePath.length, 500);
-});
-
-test('a field of a type the schema does not know is never saved', () => {
-  assert.equal(schema.clean({ type: 'colour' }, '#fff'), undefined);
 });
 
 test('no patch leaves the settings as they are', () => {

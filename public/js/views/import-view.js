@@ -1,6 +1,6 @@
 // Add or edit a repertoire: name, side, PGN — with a live preview of what the trainer will see.
 
-import { h, add, clear, toast, plural } from '../ui.js';
+import { h, add, clear, toast, plural, action } from '../ui.js';
 import { getRep, putRep } from '../store.js';
 import { buildRepertoire } from '../repertoire.js';
 import { api } from '../api.js';
@@ -30,9 +30,8 @@ export async function renderImport(root, { id }) {
   const samplesRow = h('div.samples');
   const studyUrl = h('input', { type: 'url', placeholder: 'https://lichess.org/study/…', 'aria-label': 'Lichess study link' });
   const studyBtn = h('button.btn.small', { type: 'button' }, 'Fetch study');
-  studyBtn.addEventListener('click', async () => {
+  studyBtn.addEventListener('click', action(async () => {
     if (!studyUrl.value.trim()) { studyUrl.focus(); return; }
-    studyBtn.disabled = true;
     studyBtn.textContent = 'Fetching…';
     try {
       const st = await api.lichess.study(studyUrl.value);
@@ -41,12 +40,10 @@ export async function renderImport(root, { id }) {
       if (st.orientation) (st.orientation === 'black' ? sideBlack : sideWhite).checked = true;
       refresh();
       toast('Study loaded. Check the preview, then save.');
-    } catch (err) {
-      toast(err.message, 'bad');
+    } finally {
+      studyBtn.textContent = 'Fetch study';
     }
-    studyBtn.disabled = false;
-    studyBtn.textContent = 'Fetch study';
-  });
+  }));
   const studyRow = h('div.study-row', h('span.muted', 'From a Lichess study: '), studyUrl, studyBtn);
   const saveBtn = h('button.btn.primary', { type: 'submit' }, editing ? 'Save changes' : 'Save repertoire');
 
@@ -83,10 +80,11 @@ export async function renderImport(root, { id }) {
 
   const form = h('form.import-form', {
     on: {
-      submit: async (e) => {
+      submit: action(async (e) => {
         e.preventDefault();
         const model = buildRepertoire({ pgn: pgn.value, color: color() });
         if (!model.lines.length) { toast('There are no moves for your side in this PGN yet.', 'bad'); return; }
+        // Stays disabled after a save, while the page moves on to the repertoire.
         saveBtn.disabled = true;
         try {
           const payload = { name: name.value, color: color(), pgn: pgn.value };
@@ -96,10 +94,10 @@ export async function renderImport(root, { id }) {
           toast(editing ? 'Changes saved' : `Saved ${saved.name}`);
           location.hash = `#/rep/${saved.id}`;
         } catch (err) {
-          toast(err.message, 'bad');
           saveBtn.disabled = false;
+          throw err;
         }
-      },
+      }),
     },
   },
     h('label.field', h('span.field-label', 'Name'), name),

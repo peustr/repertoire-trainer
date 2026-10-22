@@ -350,4 +350,4 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
   return { puzzles: found, gaps, stats, exhausted: frontier.length === 0, cancelled: cancelled() };
 }
 
-export { searchMistakes, buildPuzzle, DEFAULTS, material, theme };
+export { searchMistakes, buildPuzzle, DEFAULTS, theme };

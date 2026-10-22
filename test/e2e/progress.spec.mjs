@@ -1,4 +1,4 @@
-// #9: answers given while the server cannot be reached are kept in the browser
+// Answers given while the server cannot be reached are kept in the browser
 // and saved once it answers again, even across a reload.
 
 import { test, expect, playLine } from './fixtures.mjs';

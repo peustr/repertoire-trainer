@@ -8,6 +8,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import * as schema from './settings-schema.js';
 import { SCHEMA_VERSION, migrate, checkRepertoireInput, checkProgress, checkChapter } from './repertoire-format.js';
+import { positionKey } from './public/js/constants.js';
 
 /** @typedef {import('./repertoire-format.js').RepertoireFile} RepertoireFile */
 
@@ -274,14 +275,12 @@ function addPuzzles(id, puzzles) {
   const rep = getRepertoire(id);
   if (!rep) return null;
   rep.puzzles = rep.puzzles || {};
-  let added = 0;
   for (const p of puzzles || []) {
     if (!p || !p.id) continue;
-    if (!rep.puzzles[p.id]) added++;
     rep.puzzles[p.id] = { ...(rep.puzzles[p.id] || {}), ...p };
   }
   writeJsonAtomic(repFile(id), rep);
-  return { rep, added };
+  return rep;
 }
 
 /**
@@ -328,7 +327,7 @@ function addGaps(id, gaps) {
   rep.gaps = rep.gaps || {};
   for (const g of gaps || []) {
     if (!g || !g.fen) continue;
-    const key = g.fen.split(' ').slice(0, 4).join(' ');
+    const key = positionKey(g.fen);
     rep.gaps[key] = { ...(rep.gaps[key] || {}), ...g, seenAt: new Date().toISOString() };
   }
   writeJsonAtomic(repFile(id), rep);
@@ -377,7 +376,7 @@ function deleteRepertoire(id) {
 
 /** Saved settings on top of the defaults; anything stale or invalid falls back to the default. */
 function getSettings() {
-  return schema.validate(schema.defaults(), schema.upgrade(readJson(SETTINGS_FILE, {})));
+  return schema.validate(schema.defaults(), readJson(SETTINGS_FILE, {}));
 }
 
 function saveSettings(patch) {

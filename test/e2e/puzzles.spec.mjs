@@ -1,4 +1,5 @@
-// Opponent-mistake puzzles: solving one and adding its line to the repertoire.
+// Opponent-mistake puzzles: solving one and adding its line to the repertoire, and how
+// many the repertoire page offers for a session.
 
 import { test, expect, playMove } from './fixtures.mjs';
 import { START_FEN as START } from '../../public/js/constants.js';
@@ -41,4 +42,16 @@ test('adding a solved puzzle to the repertoire saves it once, in one request', a
   expect(saved.pgn).toContain('1. e4 e5 2. Nf3 *');
   expect(saved.puzzles[puzzle.id].addedAt).toBeTruthy();
   expect(writes.filter((w) => !w.endsWith('/progress'))).toEqual([`POST /api/repertoires/${rep.id}/puzzles/${puzzle.id}/add-line`]);
+});
+
+test('the repertoire page offers as many puzzles as a session holds', async ({ app, page }) => {
+  await app.api('PUT', '/api/settings', { puzzleBatch: 2 });
+  const rep = await app.api('POST', '/api/repertoires', { name: 'Kings pawn', color: 'white', pgn: '1. e4 e5 2. Nf3 *' });
+  app.editRepertoire(rep.id, (r) => { r.puzzles = Object.fromEntries(['a', 'b', 'c'].map((id) => [id, { ...puzzle, id }])); });
+
+  await app.open(`#/rep/${rep.id}`);
+  const solve = page.getByRole('link', { name: 'Solve 2', exact: true });
+  await expect(solve).toBeVisible();
+  await solve.click();
+  await expect(page.locator('.mode-tag')).toHaveText('Puzzle · 1 of 2');
 });

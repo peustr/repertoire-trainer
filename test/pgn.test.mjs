@@ -1,6 +1,6 @@
-// The PGN reader's less common input (public/js/pgn.js): escape lines, stray brackets,
+// The PGN reader (public/js/pgn.js): moves, variations, comments and their arrows, start
+// positions, games and node ids, then the less common input: escape lines, stray brackets,
 // annotations on their own, broken start positions and variations, and chapter names.
-// The everyday cases are in core.test.mjs.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +11,81 @@ import { START_FEN } from '../public/js/constants.js';
 import { buildRepertoire } from '../public/js/repertoire.js';
 
 const kinds = (text) => tokenize(text).map((t) => (t.t === 'san' ? t.text : t.t === 'nag' ? `$${t.n}` : t.t));
+
+test('tokenizer handles numbers, NAGs, castling with zeros and results', () => {
+  const t = tokenize('1.e4!? e5 2. Nf3 $1 Nc6 3... 0-0 {x} ; rest\n 1/2-1/2');
+  assert.deepEqual(t.map((x) => x.t), ['san', 'nag', 'san', 'san', 'nag', 'san', 'san', 'comment', 'comment', 'result']);
+  assert.equal(t[6].text, 'O-O');
+});
+
+test('variations branch from the move before them', () => {
+  const [g] = parsePgn('1. e4 e5 (1... c5 2. Nf3) (1... e6) 2. Nf3 *');
+  assert.equal(g.errors.length, 0);
+  const e4 = g.root.children[0];
+  assert.deepEqual(e4.children.map((c) => c.san), ['e5', 'c5', 'e6']);
+  assert.equal(e4.children[1].children[0].san, 'Nf3');
+});
+
+test('nested variations and pre-comments', () => {
+  const [g] = parsePgn('1. e4 e5 2. Nf3 (2. Bc4 Nf6 (2... Bc5 {classical}) 3. d3) ({pre} 2. f4 exf4) 2... Nc6 *');
+  assert.equal(g.errors.length, 0);
+  const e5 = g.root.children[0].children[0];
+  assert.deepEqual(e5.children.map((c) => c.san), ['Nf3', 'Bc4', 'f4']);
+  const bc4 = e5.children[1];
+  assert.deepEqual(bc4.children.map((c) => c.san), ['Nf6', 'Bc5']);
+  assert.equal(bc4.children[1].comment, 'classical');
+  assert.equal(e5.children[2].preComment, 'pre');
+});
+
+test('illegal moves skip only their own variation', () => {
+  const [g] = parsePgn('1. e4 e5 (1... Ke5 2. d4) 2. Nf3 *');
+  assert.equal(g.errors.length, 1);
+  assert.equal(g.root.children[0].children.map((c) => c.san).join(), 'e5');
+  assert.equal(g.root.children[0].children[0].children[0].san, 'Nf3');
+});
+
+test('an unclosed comment is reported, not silently swallowed', () => {
+  const [g] = parsePgn('1. e4 e5 2. Nf3 {a note with no end 2... Nc6 3. Bb5 a6 *');
+  assert.equal(g.errors.length, 1);
+  assert.match(g.errors[0], /after 1\.e4 1\.\.\.e5 2\.Nf3 is never closed/);
+  assert.equal(g.moves, 3, 'moves before the comment are kept');
+  const [start] = parsePgn('{ never closed 1. e4 e5 *');
+  assert.match(start.errors[0], /at the start is never closed/);
+  const [ok] = parsePgn('1. e4 {fine} e5 *');
+  assert.deepEqual(ok.errors, []);
+});
+
+test('arrow and square markup becomes shapes', () => {
+  const c = parseComment('Look here [%cal Ge2e4,Rd7d5] [%csl Yf7] [%clk 0:01:00]');
+  assert.equal(c.text, 'Look here');
+  assert.equal(c.shapes.length, 3);
+  assert.deepEqual(c.shapes[0], { orig: 'e2', dest: 'e4', brush: 'green' });
+});
+
+test('FEN start positions', () => {
+  const [g] = parsePgn('[SetUp "1"]\n[FEN "4k3/8/8/8/8/8/4P3/4K3 w - - 0 40"]\n\n40. e4 Kd7 41. e5 *');
+  assert.equal(g.errors.length, 0);
+  assert.equal(formatSequence([g.root.children[0], g.root.children[0].children[0]]), '40.e4 Kd7');
+});
+
+test('multi-game files become chapters', () => {
+  const games = parsePgn('[Event "A"]\n1. e4 e5 *\n\n[Event "B"]\n1. d4 d5 *\n');
+  assert.equal(games.length, 2);
+});
+
+test('node ids number one parse: the same PGN gives the same ids, unique across its chapters', () => {
+  const pgn = '[Event "A"]\n\n1. e4 e5 (1... c5 2. Nf3) 2. Nf3 *\n\n[Event "B"]\n\n1. d4 d5 *';
+  const ids = (games) => games.flatMap((g) => {
+    const out = [];
+    const walk = (n) => { out.push(n.id); n.children.forEach(walk); };
+    walk(g.root);
+    return out;
+  });
+  const first = ids(parsePgn(pgn));
+  parsePgn('1. c4 e5 2. Nc3 *'); // another repertoire parsed in between
+  assert.deepEqual(ids(parsePgn(pgn)), first);
+  assert.equal(new Set(first).size, first.length, 'no two nodes share an id');
+});
 
 test('a line starting with % is skipped, to the end of the line or the text', () => {
   assert.deepEqual(kinds('% exported by some tool\n1. e4\n% the end'), ['e4']);

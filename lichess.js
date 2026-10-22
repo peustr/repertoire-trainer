@@ -1,6 +1,6 @@
 // Lichess API client.
 //
-// - Opening explorer (explorer.lichess.org) — needs a token since 2025, no scopes.
+// - Opening explorer (explorer.lichess.org) — needs a token, but no scopes.
 // - Study PGN export, account info.
 // - OAuth 2 with PKCE for local apps (no client registration needed), or a
 //   pasted personal access token.
@@ -279,7 +279,7 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
   /**
    * Opening explorer lookup.
    * source: 'lichess' (rated Lichess games, filtered) or 'masters' (OTB master games).
-   * Returns { white, draws, black, total, opening, moves: [{uci, san, white, draws, black, total, averageRating}], cached }.
+   * Returns { source, white, draws, black, total, opening, moves: [{uci, san, white, draws, black, total, averageRating}], cached }.
    * speeds and ratings fall back to the settings' defaults; cacheDays to 30.
    * @param {{ fen: string, source?: 'lichess' | 'masters', speeds?: string, ratings?: string, since?: string,
    *   moves?: number, cacheDays?: number }} query
@@ -352,7 +352,10 @@ function createLichessClient({ dataDir, baseUrl = 'https://lichess.org', explore
     return status();
   }
 
-  /** Accepts a study URL or id (optionally with a chapter). Returns { pgn, name }. */
+  /**
+   * Accepts a study URL or id (optionally with a chapter). Returns { pgn, name, orientation,
+   * studyId, chapterId }: orientation is the side the study is shown from, or null.
+   */
   async function studyPgn(input) {
     const m = String(input || '').trim().match(/(?:study\/)?([A-Za-z0-9]{8})(?:\/([A-Za-z0-9]{8}))?(?:[/?#].*)?$/);
     if (!m) throw new LichessError('Paste a Lichess study link, like https://lichess.org/study/abcd1234', 400);

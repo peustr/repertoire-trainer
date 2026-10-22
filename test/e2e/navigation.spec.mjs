@@ -1,4 +1,4 @@
-// #5: a page whose data arrives late must not render on top of the page the
+// A page whose data arrives late must not render on top of the page the
 // user has already moved on to, or leave its keyboard handlers behind.
 
 import { test, expect, trackKeyHandlers } from './fixtures.mjs';

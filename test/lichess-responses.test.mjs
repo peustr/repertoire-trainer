@@ -1,14 +1,14 @@
 // How the Lichess client (lichess.js) handles each kind of answer: network failures,
-// repeated rate limits, refusals and errors, explorer data with parts missing, the cache
-// on disk, study links and the OAuth sign-in. fetch is scripted per test; lichess.test.mjs
-// runs the client against the mock Lichess.
+// repeated rate limits, refusals and errors, explorer data with parts missing, the
+// explorer's filters, the cache on disk, study links and the OAuth sign-in. fetch is
+// scripted per test; lichess.test.mjs runs the client against the mock Lichess.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createLichessClient } from '../lichess.js';
+import { createLichessClient, cleanRatings, cleanSpeeds } from '../lichess.js';
 import { START_FEN as START } from '../public/js/constants.js';
 import { must } from './helpers/must.mjs';
 
@@ -107,6 +107,13 @@ test('explorer answers with parts missing count as zero, and the query follows t
   assert.equal(new URL(urls[1]).searchParams.get('since'), null, 'a malformed month is left out');
   await client.explorer({ fen: AFTER_E4, since: '2024-03' });
   assert.equal(new URL(urls[2]).searchParams.get('since'), '2024-03', 'the Lichess database takes the month');
+});
+
+test('the explorer’s filters keep the time controls and rating groups it knows, or fall back to the defaults', () => {
+  assert.deepEqual(cleanRatings(''), [1600, 1800, 2000]);
+  assert.deepEqual(cleanRatings('0,1000'), [0, 1000]);
+  assert.deepEqual(cleanSpeeds('blitz,nonsense'), ['blitz']);
+  assert.deepEqual(cleanSpeeds(''), ['blitz', 'rapid', 'classical']);
 });
 
 test('cached answers come from disk for a new client, are asked again once too old, and memory stays small', async (t) => {

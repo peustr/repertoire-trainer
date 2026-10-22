@@ -20,7 +20,7 @@ import { lineStatus, learned, promote, demote, isDue } from './srs.js';
  * @param {{ srsIntervals?: number[], stepbackLevels?: number }} settings
  * @returns {import('./srs.js').Schedule}
  */
-export function scheduleOf({ srsIntervals, stepbackLevels }) {
+function scheduleOf({ srsIntervals, stepbackLevels }) {
   return { intervals: srsIntervals, stepbackLevels };
 }
 

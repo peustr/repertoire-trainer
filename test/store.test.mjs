@@ -46,14 +46,15 @@ test('a damaged settings file is set aside and the previous version restored', (
   assert.equal(readFile(SETTINGS).reviewBatch, 77, 'an unrelated save keeps the restored values');
 });
 
-test('settings saved by an older trainer are read in today’s terms and saved that way', () => {
-  fs.writeFileSync(SETTINGS, JSON.stringify({ reviewBatch: 33, sparFollowBook: false }));
-  assert.equal(store.getSettings().sparOpponent, 'engine');
+test('a saved setting the trainer does not know is ignored, and dropped at the next save', () => {
+  fs.writeFileSync(SETTINGS, JSON.stringify({ reviewBatch: 33, noSuchSetting: true }));
+  const read = store.getSettings();
+  assert.equal(read.reviewBatch, 33);
+  assert.equal('noSuchSetting' in read, false);
   store.saveSettings({ theme: 'dark' });
   const saved = readFile(SETTINGS);
-  assert.equal(saved.sparOpponent, 'engine');
   assert.equal(saved.reviewBatch, 33);
-  assert.equal('sparFollowBook' in saved, false);
+  assert.equal('noSuchSetting' in saved, false);
 });
 
 test('without a backup, a damaged settings file is kept rather than overwritten', (t) => {
@@ -360,10 +361,9 @@ test('a tally that arrives late, for an earlier day, is kept in date order', () 
 
 test('puzzles and gaps without an id or position are skipped', () => {
   const rep = store.createRepertoire({ name: 'Sparse', color: 'white', pgn: PGN });
-  assert.equal(must(store.addPuzzles(rep.id, undefined)).added, 0);
+  assert.deepEqual(must(store.addPuzzles(rep.id, undefined)).puzzles, {});
   const out = must(store.addPuzzles(rep.id, [null, { fen: 'x' }, { id: 'p1', fen: 'x' }]));
-  assert.equal(out.added, 1);
-  assert.deepEqual(Object.keys(must(out.rep.puzzles)), ['p1']);
+  assert.deepEqual(Object.keys(must(out.puzzles)), ['p1']);
 
   assert.deepEqual(must(store.addGaps(rep.id, undefined)).gaps, {});
   const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
