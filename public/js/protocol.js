@@ -44,7 +44,8 @@ export const REPLY = Object.freeze({
  */
 /**
  * The opponent-mistake search from a position, with the options in the user's settings.
- * Answered by SEARCH_EVENT messages as it goes, then RESULT { puzzles: [id], gaps, stats, ... }.
+ * Answered by SEARCH_EVENT messages as it goes, then RESULT { puzzles: [id], gaps, stats, ended },
+ * where ended says why the search stopped (searchMistakes() in puzzles.js lists the reasons).
  * @typedef {{ type: 'puzzle-search', id: number, repId: string, fen: string,
  *   prefix?: { startFen?: string, moves?: string[] } }} PuzzleSearchRequest
  */

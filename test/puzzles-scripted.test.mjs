@@ -184,7 +184,7 @@ test('the likeliest position is searched first; failed and thin explorer answers
   assert.deepEqual(res.asked, [AFTER_E4, viaE5, viaC5].map(positionKey), 'e5 (60%) before c5 (20%)');
   assert.equal(res.stats.skipped, 1);
   assert.equal(res.stats.positions, 2, 'the failed lookup does not count');
-  assert.equal(res.exhausted, true);
+  assert.equal(res.ended, 'searched');
 });
 
 test('replies that cannot be played are ignored, only the most popular are scored, and gaps note what to play', async () => {
@@ -293,7 +293,7 @@ test('the search can be stopped while it scores a position’s replies', async (
     rep: white, model, fen: START, engines, cancelled: () => ++checks >= 4,
     answers: { [AFTER_E4]: { total: 1000, moves: [move('f7f6', 'f6', 600), move('e7e5', 'e5', 400)] } },
   });
-  assert.equal(res.cancelled, true);
+  assert.equal(res.ended, 'stopped');
   assert.deepEqual(engines.calls.lines, [], 'stopped before working out the puzzle');
 });
 
@@ -332,4 +332,49 @@ test('a mistake reached again by another road is worked out once', async () => {
   assert.equal(engines.calls.lines.length, 1);
   assert.equal(res.puzzles[0].startFen, castling, 'a prefix without a start begins at the search root');
   assert.deepEqual(res.puzzles[0].lineMoves, ['e2e4', 'h8g8']);
+});
+
+/** After 1.e4, Black's popular replies: e5 (your book), and two mistakes, f6 and g5. */
+function twoMistakes() {
+  return {
+    model: buildRepertoire({ color: 'white', pgn: '1. e4 e5 2. Nf3 *' }),
+    answers: { [AFTER_E4]: { total: 1000, moves: [move('e7e5', 'e5', 500), move('f7f6', 'f6', 300), move('g7g5', 'g5', 200)] } },
+    engines: scriptedEngines({
+      evals: { [AFTER_E4]: { moves: { f7f6: { score: { cp: 400 } }, g7g5: { score: { cp: 500 } } } } },
+      lines: { [fenAfter(['e4', 'f6'])]: [{ pv: ['d1h5'], score: { cp: 400 } }], [fenAfter(['e4', 'g5'])]: [{ pv: ['d2d4'], score: { cp: 500 } }] },
+    }),
+  };
+}
+
+test('the puzzle limit holds within a position, and the search says why it ended', async () => {
+  const limited = await search({ rep: white, fen: START, ...twoMistakes(), options: { maxPuzzles: 1 } });
+  assert.deepEqual(limited.puzzles.map((p) => p.mistake.san), ['f6']);
+  assert.equal(limited.engines.calls.lines.length, 1, 'the second mistake is not worked out');
+  assert.equal(limited.ended, 'puzzles');
+
+  const budget = await search({ rep: white, fen: START, ...twoMistakes(), options: { maxPositions: 1 } });
+  assert.deepEqual(budget.puzzles.map((p) => p.mistake.san), ['f6', 'g5']);
+  assert.equal(budget.ended, 'budget', 'after 1...e5 there was more to look up');
+});
+
+test('puzzles and gaps you removed are passed over by a new search', async () => {
+  const model = buildRepertoire({ color: 'white', pgn: '1. e4 e5 2. Nf3 *' });
+  const answers = { [AFTER_E4]: { total: 1000, moves: [move('e7e5', 'e5', 500), move('c7c5', 'c5', 300), move('f7f6', 'f6', 200)] } };
+  const engines = () => scriptedEngines({
+    evals: { [AFTER_E4]: { moves: { f7f6: { score: { cp: 400 } } } } },
+    lines: { [fenAfter(['e4', 'f6'])]: [{ pv: ['d1h5'], score: { cp: 400 } }] },
+  });
+  const puzzles = { [positionKey(fenAfter(['e4', 'f6']))]: '2026-10-24T10:00:00.000Z' };
+  const gaps = { [positionKey(fenAfter(['e4', 'c5']))]: '2026-10-24T10:00:00.000Z' };
+  const run = (dismissed) => search({ rep: { ...white, dismissed }, model, fen: START, answers, engines: engines() });
+
+  const none = await run(undefined);
+  assert.deepEqual([none.puzzles.map((p) => p.mistake.san), none.gaps.map((g) => g.san)], [['f6'], ['c5']], 'nothing removed yet');
+  const both = await run({ puzzles, gaps });
+  assert.deepEqual([both.puzzles, both.gaps], [[], []]);
+  assert.equal(both.engines.calls.lines.length, 0, 'the removed puzzle is not worked out again');
+  const onlyPuzzle = await run({ puzzles });
+  assert.deepEqual([onlyPuzzle.puzzles, onlyPuzzle.gaps.map((g) => g.san)], [[], ['c5']]);
+  const onlyGap = await run({ gaps });
+  assert.deepEqual([onlyGap.puzzles.map((p) => p.mistake.san), onlyGap.gaps], [['f6'], []]);
 });

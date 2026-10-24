@@ -250,7 +250,7 @@ test('a puzzle search stops when the page asks, or when the page goes away', asy
   ws.request({ type: REQUEST.STOP, id: 1 });
   release();
   for (let i = 0; i < 50 && !ws.replies(1).some((m) => m.type === REPLY.RESULT); i++) await settle();
-  assert.equal(ws.replies(1).at(-1).cancelled, true, 'stopped by the page');
+  assert.equal(ws.replies(1).at(-1).ended, 'stopped', 'stopped by the page');
 
   release = null;
   ws.request({ type: REQUEST.PUZZLE_SEARCH, id: 2, repId: 'rep', fen: START_FEN });

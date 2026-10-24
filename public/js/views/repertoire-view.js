@@ -10,6 +10,7 @@ import { api } from '../api.js';
 import { runAudit } from './audit.js';
 import { openMistakeFinder } from './finder.js';
 import { puzzleStats, puzzleList, puzzleState, formatShare, formatGames, describeReach } from '../puzzle-utils.js';
+import { openGaps } from '../opponent.js';
 
 export async function renderRepertoire(root, { id }) {
   const rep = await getRep(id, { fresh: true });
@@ -22,6 +23,7 @@ export async function renderRepertoire(root, { id }) {
   const side = rep.color === 'black' ? 'Black' : 'White';
   const auditBox = h('div.audit', { 'aria-live': 'polite' });
   const pz = puzzleStats(rep, now);
+  const gaps = openGaps(rep, model).map(({ key, gap }) => ({ key, ...gap }));
 
   add(page,
     h('a.backlink', { href: '#/' }, 'Library'),
@@ -33,9 +35,9 @@ export async function renderRepertoire(root, { id }) {
       h('h2.section-title', 'Some moves could not be read'),
       h('ul', model.errors.slice(0, 8).map((e) => h('li', e))),
       model.errors.length > 8 ? h('p', `…and ${model.errors.length - 8} more.`) : null) : null,
-    h('section.rep-section', h('h2.caption', 'Train'), modeCards(rep, stats, pz)),
+    h('section.rep-section', h('h2.caption', 'Train'), modeCards(rep, stats, pz, gaps.length)),
     h('section.rep-section', h('h2.caption', 'Memory'), memoryPanel(rep, stats)),
-    h('section.rep-section', h('h2.caption', 'Opponent mistakes and gaps'), opponentsPanel(rep, model, pz)),
+    h('section.rep-section', h('h2.caption', 'Opponent mistakes and gaps'), opponentsPanel(rep, model, pz, gaps)),
     h('section.rep-section', h('h2.caption', 'Stockfish audit'), auditBox),
     h('section.rep-section', h('h2.caption', 'Chapters and lines'), h('div.chapters', model.chapters.map((ch) => chapterBlock(rep, model, ch, now)))),
     toolsPanel(rep));
@@ -45,10 +47,9 @@ export async function renderRepertoire(root, { id }) {
 }
 
 /** Every way to train this repertoire, each saying what it does and what is waiting. */
-function modeCards(rep, stats, pz) {
+function modeCards(rep, stats, pz, gaps) {
   const id = rep.id;
   const wait = isFinite(stats.nextDue) ? describeWait(stats.nextDue - Date.now()) : null;
-  const gaps = Object.keys(rep.gaps || {}).length;
   const batch = Math.min(stats.newLines, state.settings.learnBatch);
   const modes = [
     {
@@ -163,9 +164,9 @@ function findInChapter(rep, chapter) {
   });
 }
 
-function opponentsPanel(rep, model, pz) {
+/** @param {{ key: string, [field: string]: any }[]} gaps  the saved gaps still unanswered, likeliest first */
+function opponentsPanel(rep, model, pz, gaps) {
   const list = puzzleList(rep).sort((a, b) => (b.reach || 0) - (a.reach || 0));
-  const gaps = Object.entries(rep.gaps || {}).map(([key, g]) => ({ key, ...g })).sort((a, b) => (b.reach || 0) - (a.reach || 0));
   const start = model.chapters[0];
   const searchAll = action(() => openMistakeFinder({ rep, fen: start.root.fen, prefix: { startFen: start.root.fen, moves: [] }, where: 'Whole repertoire', onSaved: refresh }));
   if (!list.length && !gaps.length) {
@@ -209,7 +210,7 @@ function opponentsPanel(rep, model, pz) {
           h('a.btn.small.ghost', { href: `#/explore/${rep.id}?moves=${encodeURIComponent(g.lineMoves.join(','))}` }, 'Explore'),
           h('button.btn.small.ghost', {
             type: 'button',
-            title: 'Dismiss',
+            title: 'Dismiss: new searches leave it out',
             'aria-label': 'Dismiss',
             on: {
               click: action(async (e) => {

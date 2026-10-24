@@ -105,7 +105,7 @@ test('the search stays within its budget, and stops when asked', async () => {
     onEvent: (ev) => { if (ev.kind === 'progress') progress++; },
     cancelled: () => progress > 0,
   });
-  assert.equal(stopped.cancelled, true);
+  assert.equal(stopped.ended, 'stopped');
   assert.equal(stopped.stats.positions, 1);
 });
 

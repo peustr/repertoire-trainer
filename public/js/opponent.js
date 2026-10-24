@@ -153,6 +153,23 @@ export function surpriseFromGap(model, key, gap) {
 }
 
 /**
+ * The saved gaps your repertoire still has no answer for, most likely to meet first.
+ * A gap answered since (by any chapter) or damaged is left out, not deleted: it comes
+ * back if the answer is removed again.
+ * @param {{ gaps?: Record<string, any> }} rep
+ * @param {{ nodesByPosition: Map<string, any[]> }} model
+ * @returns {{ key: string, gap: any, surprise: Surprise & { gapKey: string }, reach: number }[]}
+ */
+export function openGaps(rep, model) {
+  const out = [];
+  for (const [key, gap] of Object.entries(rep.gaps || {})) {
+    const surprise = surpriseFromGap(model, key, gap);
+    if (surprise) out.push({ key, gap, surprise, reach: gap.reach || 0 });
+  }
+  return out.sort((a, b) => b.reach - a.reach);
+}
+
+/**
  * What a Surprise session works through: saved gaps first (most likely to meet first),
  * then every opponent turn in the repertoire in random order. Turns still need a
  * surprise looked up for them (Lichess or Stockfish).
@@ -162,13 +179,7 @@ export function surpriseFromGap(model, key, gap) {
  * @returns {({ kind: 'gap', surprise: Surprise & { gapKey: string }, reach: number } | { kind: 'turn', turn: OpponentTurn })[]}
  */
 export function surpriseQueue(rep, model, { rand = Math.random } = {}) {
-  /** @type {{ kind: 'gap', surprise: Surprise & { gapKey: string }, reach: number }[]} */
-  const gaps = [];
-  for (const [key, gap] of Object.entries(rep.gaps || {})) {
-    const surprise = surpriseFromGap(model, key, gap);
-    if (surprise) gaps.push({ kind: 'gap', surprise, reach: gap.reach || 0 });
-  }
-  gaps.sort((a, b) => b.reach - a.reach);
+  const gaps = openGaps(rep, model).map(({ surprise, reach }) => ({ kind: /** @type {const} */ ('gap'), surprise, reach }));
   const turns = opponentTurns(model);
   for (let i = turns.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));

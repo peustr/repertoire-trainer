@@ -16,6 +16,8 @@ export function puzzleState(rep, puzzle) {
 
 /**
  * Due puzzles first (most overdue first), then new ones (most likely to come up first).
+ * Puzzles chosen by id come even when they are not due yet, after the others, soonest
+ * due first: you asked for them.
  * @param {any} rep
  * @param {{ limit?: number, now?: number, only?: string[] | null }} [options]  only: these puzzle ids
  */
@@ -24,14 +26,18 @@ export function puzzleQueue(rep, { limit = 12, now = Date.now(), only = null } =
   if (only) list = list.filter((p) => only.includes(p.id));
   const due = [];
   const fresh = [];
+  const later = [];
   for (const p of list) {
     const s = puzzleState(rep, p);
     if (!s) fresh.push(p);
     else if (isDue(s, now)) due.push(p);
+    else if (only) later.push(p);
   }
-  due.sort((a, b) => puzzleState(rep, a).due - puzzleState(rep, b).due);
+  const byDue = (a, b) => puzzleState(rep, a).due - puzzleState(rep, b).due;
+  due.sort(byDue);
   fresh.sort((a, b) => (b.reach || 0) - (a.reach || 0));
-  return [...due, ...fresh].slice(0, limit);
+  later.sort(byDue);
+  return [...due, ...fresh, ...later].slice(0, limit);
 }
 
 export function puzzleStats(rep, now = Date.now()) {
