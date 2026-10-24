@@ -1,5 +1,6 @@
 // Opponent-mistake puzzles: solving one and adding its line to the repertoire, how many
-// the repertoire page offers for a session, and skipping one while Stockfish is busy.
+// the repertoire page offers for a session, opening one chosen from the list, the gaps
+// it lists, a move Stockfish cannot check, and skipping one while Stockfish is busy.
 
 import { test, expect, playMove, fakeEngine } from './fixtures.mjs';
 import { START_FEN as START } from '../../public/js/constants.js';
@@ -56,6 +57,61 @@ test('the repertoire page offers as many puzzles as a session holds', async ({ a
   await solve.click();
   await expect(page.locator('.mode-tag')).toHaveText('Puzzle · 1 of 2');
 });
+
+test('a puzzle chosen from the list opens even before it is due', async ({ app, page }) => {
+  const rep = await app.api('POST', '/api/repertoires', { name: 'Kings pawn', color: 'white', pgn: '1. e4 e5 2. Nf3 *' });
+  app.editRepertoire(rep.id, (r) => {
+    r.puzzles = { [puzzle.id]: puzzle };
+    r.cards = { [`pz|${puzzle.id}`]: { level: 2, due: Date.now() + 3 * 86400000, reps: 2, lapses: 0 } };
+  });
+
+  await app.open(`#/rep/${rep.id}`);
+  await page.locator('.puzzle-list li').getByRole('link', { name: 'Solve' }).click();
+  await expect(page.locator('.prompt')).toContainText('Punish it');
+  await expect(page.locator('.line-sub')).toContainText('Level 2 · next in');
+  await playMove(page, 'd1h5');
+  await expect(page.locator('.prompt-sub')).toHaveText('Not due yet, so the schedule is unchanged.');
+});
+
+test('the repertoire page lists only the gaps your repertoire does not answer yet', async ({ app, page }) => {
+  const rep = await app.seedSample('italian-game-white.pgn', 'Italian');
+  const AFTER_NF3 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2';
+  const gap = (uci, san, fen) => ({ fen, beforeFen: AFTER_NF3, startFen: START, lineMoves: ['e2e4', 'e7e5', 'g1f3', uci], san, share: 0.2, games: 1000, reach: 0.2 });
+  app.editRepertoire(rep.id, (r) => {
+    r.gaps = {
+      d6: gap('d7d6', 'd6', 'rnbqkbnr/ppp2ppp/3p4/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3'),
+      nc6: gap('b8c6', 'Nc6', 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3'), // your main line by now
+    };
+  });
+
+  await app.open(`#/rep/${rep.id}`);
+  await expect(page.locator('.gaps li')).toHaveCount(1);
+  await expect(page.locator('.gaps li')).toContainText('d6');
+  await expect(page.locator('.mode', { hasText: 'Surprise drills' })).toContainText('1 saved gap');
+});
+
+for (const [why, evaluate] of /** @type {const} */ ([
+  ['Stockfish fails', () => Promise.reject(new Error('Lost connection to the engine'))],
+  ['Stockfish gives no scores', () => ({ best: { move: null, score: null, pv: [] }, moves: [] })],
+])) {
+  test(`a move Stockfish could not check is not a miss (${why})`, async ({ app, page }) => {
+    await fakeEngine(page, { evaluate });
+    const rep = await app.api('POST', '/api/repertoires', { name: 'Kings pawn', color: 'white', pgn: '1. e4 e5 2. Nf3 *' });
+    app.editRepertoire(rep.id, (r) => { r.puzzles = { [puzzle.id]: puzzle }; });
+
+    await app.open(`#/puzzles/${rep.id}`);
+    await expect(page.locator('.prompt')).toContainText('Punish it');
+    await playMove(page, 'd2d4');
+    const feedback = page.locator('.feedback');
+    await expect(feedback).toContainText('Stockfish could not check 2.d4, so it does not count against you.');
+    if (why === 'Stockfish fails') await expect(feedback).toContainText('Lost connection to the engine');
+    await expect(feedback).not.toContainText('The punishment is'); // the answer is not given away
+
+    await playMove(page, 'd1h5');
+    await expect(page.locator('.prompt-title')).toHaveText('Solved'); // not "with help"
+    await expect.poll(async () => (await app.api('GET', `/api/repertoires/${rep.id}`)).cards).toEqual({ [`pz|${puzzle.id}`]: expect.objectContaining({ level: 1, lapses: 0 }) });
+  });
+}
 
 for (const [verdict, cp] of /** @type {const} */ ([['accepts', 240], ['refuses', -50]])) {
   test(`Stockfish's verdict on a skipped puzzle (it ${verdict} the other move) leaves the next puzzle alone`, async ({ app, page }) => {

@@ -52,6 +52,8 @@ export const SCHEMA_VERSION = 1;
  * @property {Audit | null} audit
  * @property {Record<string, object>} [puzzles]  found by the mistake search (puzzles.js), keyed by puzzle id
  * @property {Record<string, object>} [gaps]     popular replies the repertoire does not answer, keyed by position
+ * @property {{ puzzles?: Record<string, string>, gaps?: Record<string, string> }} [dismissed]
+ *   positions whose puzzle or gap you removed, with when, so a new search leaves them out
  * @property {string[]} [appliedSaves]           ids of the last 200 progress saves, so a retried save counts once
  */
 

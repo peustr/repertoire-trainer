@@ -381,20 +381,34 @@ test('puzzles and gaps without an id or position are skipped', () => {
   assert.deepEqual(Object.keys(gaps), [positionOf(fen)]);
 });
 
-test('a gap or puzzle can be dismissed, and progress reset', () => {
+test('a gap or puzzle can be dismissed for good, and progress reset', () => {
   const rep = store.createRepertoire({ name: 'Tidy', color: 'white', pgn: PGN });
   assert.equal(must(store.deleteGap(rep.id, 'nothing yet')).gaps, undefined, 'no gaps to remove from');
   assert.equal(must(store.deletePuzzle(rep.id, 'nothing yet')).puzzles, undefined);
+  assert.equal(must(store.getRepertoire(rep.id)).dismissed, undefined, 'nothing removed, nothing to remember');
 
   const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+  const afterF6 = 'rnbqkbnr/ppppp1pp/5p2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
   store.addGaps(rep.id, [{ fen }]);
-  store.addPuzzles(rep.id, [{ id: 'p1' }, { id: 'p2' }]);
+  store.addPuzzles(rep.id, [{ id: 'p1', fen: afterF6 }, { id: 'p2' }, { id: 'p3' }]);
   store.patchProgress(rep.id, { cards: { 'pz|p1': { level: 1, due: 0 }, k: { level: 2, due: 0 } }, tally: { date: '2026-10-18', correct: 1 } });
 
   assert.deepEqual(must(store.deleteGap(rep.id, positionOf(fen))).gaps, {});
   const after = must(store.deletePuzzle(rep.id, 'p1'));
-  assert.deepEqual(Object.keys(must(after.puzzles)), ['p2']);
+  assert.deepEqual(Object.keys(must(after.puzzles)), ['p2', 'p3']);
   assert.deepEqual(after.cards, { k: { level: 2, due: 0 } }, "the puzzle's progress goes with it");
+
+  // Remembered by position, so the next search leaves them out (puzzles.js).
+  const remembered = () => {
+    const { dismissed } = must(store.getRepertoire(rep.id));
+    return [Object.keys(must(must(dismissed).gaps)), Object.keys(must(must(dismissed).puzzles))];
+  };
+  assert.deepEqual(remembered(), [[positionOf(fen)], [positionOf(afterF6)]]);
+  assert.match(Object.values(must(must(store.getRepertoire(rep.id)).dismissed?.gaps))[0], /^\d{4}-\d\d-\d\dT/, 'with when');
+  store.deleteGap(rep.id, 'no such gap');
+  store.deletePuzzle(rep.id, 'p3'); // a puzzle without a position
+  assert.deepEqual(remembered(), [[positionOf(fen)], [positionOf(afterF6)]], 'nothing new to remember');
+  assert.deepEqual(Object.keys(must(must(store.getRepertoire(rep.id)).puzzles)), ['p2']);
 
   const reset = must(store.resetProgress(rep.id));
   assert.deepEqual([reset.cards, reset.history], [{}, []]);

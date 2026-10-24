@@ -85,4 +85,20 @@ test.describe('with Lichess connected', () => {
     await findAndClose(page);
     await expect(opponents).toContainText('1 opponent mistake to punish');
   });
+
+  for (const [ended, says] of [
+    ['puzzles', 'Stopped at 1 puzzle, the limit set under “Stop after finding” in Search settings.'],
+    ['budget', 'Search budget used up.'],
+    ['searched', 'Searched every popular line within reach.'],
+  ]) {
+    test(`a search that ended with "${ended}" says why it stopped`, async ({ page, app }) => {
+      const rep = await app.seedSample('italian-game-white.pgn', 'Italian');
+      const finds = findsPuzzle(app, rep.id);
+      await fakeEngine(page, { search: () => { const { events, result } = finds(); return { events, result: { ...result, ended } }; } });
+
+      await app.open(`#/rep/${rep.id}`);
+      await page.getByRole('button', { name: /Find opponent mistakes/ }).first().click();
+      await expect(page.locator('dialog.finder .finder-looking')).toContainText(says);
+    });
+  }
 });

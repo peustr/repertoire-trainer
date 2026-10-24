@@ -154,8 +154,10 @@ function puzzleId(fen, uci) {
 }
 
 /**
- * Run the search.
- *   rep:     stored repertoire (for colour)
+ * Run the search. Resolves to { puzzles, gaps, stats, ended }, where ended says why it
+ * stopped: 'stopped' (cancelled), 'puzzles' (found maxPuzzles), 'searched' (no popular
+ * line within reach is left) or 'budget' (maxPositions looked up).
+ *   rep:     stored repertoire (for colour, and the puzzles and gaps you removed)
  *   model:   parsed repertoire (myMovesAt: positionKey -> Set(uci))
  *   fen:     position to search from
  *   prefix:  { startFen, moves[] } — how that position is reached from the chapter start
@@ -178,6 +180,10 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
   const visited = new Set();
   const stats = { positions: 0, lookups: 0, cached: 0, evaluations: 0, rootGames: null, skipped: 0 };
   const gaps = [];
+  // What you removed stays removed: its position is passed over (store.js records it).
+  const dismissed = rep.dismissed || {};
+  const removedPuzzles = new Set(Object.keys(dismissed.puzzles || {}));
+  const removedGaps = new Set(Object.keys(dismissed.gaps || {}));
   const inTree = (f) => model.nodesByPosition.has(positionKey(f));
   /** @type {{ fen: string, path: string[], reach: number, oppDepth: number, hint: string | null, offBook: number }[]} */
   const frontier = [{ fen, path: [], reach: 1, oppDepth: 0, hint: null, offBook: 0 }];
@@ -271,9 +277,10 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
 
       if (mistake) {
         const pid = puzzleId(c.after, c.uci);
-        if (seenPuzzle.has(pid)) continue;
+        if (seenPuzzle.has(pid) || removedPuzzles.has(positionKey(c.after))) continue;
         seenPuzzle.add(pid);
-        if (cancelled()) break;
+        // One position can hold several mistakes: the limit holds within it too.
+        if (cancelled() || found.length >= opts.maxPuzzles) break;
         const built = await buildPuzzle(engines, c.after, side, opts);
         stats.evaluations++;
         if (!built) continue;
@@ -312,7 +319,7 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
         const covered = inTree(c.after);
         if (prepared && !covered) {
           // A sound reply you have no line for: worth knowing, not worth searching.
-          if (c.share >= opts.gapShare && !gaps.some((g) => g.fen === c.after)) {
+          if (c.share >= opts.gapShare && !gaps.some((g) => g.fen === c.after) && !removedGaps.has(positionKey(c.after))) {
             const gap = {
               fen: c.after,
               beforeFen: node.fen,
@@ -347,7 +354,8 @@ async function searchMistakes({ rep, model, fen, prefix, options = {}, engines, 
     }
   }
 
-  return { puzzles: found, gaps, stats, exhausted: frontier.length === 0, cancelled: cancelled() };
+  const ended = cancelled() ? 'stopped' : found.length >= opts.maxPuzzles ? 'puzzles' : frontier.length === 0 ? 'searched' : 'budget';
+  return { puzzles: found, gaps, stats, ended };
 }
 
 export { searchMistakes, buildPuzzle, DEFAULTS, theme };

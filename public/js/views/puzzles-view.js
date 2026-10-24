@@ -128,6 +128,8 @@ export async function renderPuzzles(root, { id, ids }) {
     board.setPosition(cur.fen, { lastMove: lastUci() });
     setFeedback('neutral', `Checking ${sanLabel(cur.fen, uci)} with Stockfish…`);
     let accepted = false;
+    /** @type {string | null} why Stockfish could not compare the two moves, if it could not */
+    let unchecked = null;
     try {
       const res = await evaluate(cur.fen, [expected, uci], state.settings.verdictDepth);
       const mine = res.moves.find((m) => m.move === uci);
@@ -137,10 +139,23 @@ export async function renderPuzzles(root, { id, ids }) {
         const b = cpFor(main.score, side);
         const { puzzleAltMin, puzzleAltMargin } = state.settings;
         accepted = puzzleAltMargin > 0 && a >= puzzleAltMin && a >= b - puzzleAltMargin;
+      } else {
+        unchecked = '';
       }
-    } catch (err) { /* engine unavailable: treat as a miss */ }
+    } catch (err) {
+      unchecked = err.message;
+    }
     // Skipped meanwhile: the verdict belongs to a puzzle no longer on the board.
     if (cur !== asked || !page.isConnected) return;
+
+    if (unchecked !== null) {
+      // The move may well win: without a verdict it is not counted as a miss.
+      board.setPosition(cur.fen, { lastMove: lastUci(), movable: true });
+      setFeedback('neutral', `Stockfish could not check ${sanLabel(cur.fen, uci)}, so it does not count against you. Try again, or take a hint.`);
+      if (unchecked) feedback.append(h('p.muted', unchecked));
+      cur.waiting = true;
+      return;
+    }
 
     if (accepted) {
       cur.alt = true;
@@ -237,7 +252,7 @@ export async function renderPuzzles(root, { id, ids }) {
   }
 
   async function removePuzzle(p) {
-    if (!(await confirmDialog('Remove this puzzle?', 'It will not come back unless a new search finds it again.', 'Remove', true))) return;
+    if (!(await confirmDialog('Remove this puzzle?', 'Its progress goes with it, and new searches leave this position out.', 'Remove', true))) return;
     await api.deletePuzzle(rep.id, p.id);
     toast('Puzzle removed');
     queue.splice(index, 1);

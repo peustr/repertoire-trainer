@@ -334,10 +334,25 @@ function addGaps(id, gaps) {
   return rep;
 }
 
+/**
+ * Remember a removed puzzle or gap by its position, so the mistake search leaves it out
+ * from now on (puzzles.js).
+ * @param {RepertoireFile} rep
+ * @param {'puzzles' | 'gaps'} kind
+ * @param {string} fen  or a position key
+ */
+function dismiss(rep, kind, fen) {
+  rep.dismissed = rep.dismissed || {};
+  rep.dismissed[kind] = { ...rep.dismissed[kind], [positionKey(fen)]: new Date().toISOString() };
+}
+
 function deleteGap(id, key) {
   const rep = getRepertoire(id);
   if (!rep) return null;
-  if (rep.gaps) delete rep.gaps[key];
+  if (rep.gaps && Object.hasOwn(rep.gaps, key)) {
+    delete rep.gaps[key];
+    dismiss(rep, 'gaps', key);
+  }
   writeJsonAtomic(repFile(id), rep);
   return rep;
 }
@@ -345,7 +360,12 @@ function deleteGap(id, key) {
 function deletePuzzle(id, pid) {
   const rep = getRepertoire(id);
   if (!rep) return null;
-  if (rep.puzzles) delete rep.puzzles[pid];
+  const puzzles = rep.puzzles || {};
+  const puzzle = Object.hasOwn(puzzles, pid) ? puzzles[pid] : null;
+  if (puzzle) {
+    delete puzzles[pid];
+    if (typeof puzzle.fen === 'string') dismiss(rep, 'puzzles', puzzle.fen);
+  }
   if (rep.cards) delete rep.cards[`pz|${pid}`];
   writeJsonAtomic(repFile(id), rep);
   return rep;

@@ -34,6 +34,16 @@ test('the queue can be limited to chosen puzzles, and puzzles without a reach co
   assert.deepEqual(puzzleQueue(rep, { limit: 2 }).map((p) => p.id), ['d', 'b']);
 });
 
+test('chosen puzzles come even before they are due, after the due and new ones', () => {
+  const rep = {
+    puzzles: { a: { id: 'a' }, b: { id: 'b' }, c: { id: 'c' }, d: { id: 'd' }, e: { id: 'e' } },
+    cards: { 'pz|a': { level: 3, due: now + 5000 }, 'pz|b': { level: 1, due: now - 1 }, 'pz|c': { level: 2, due: now + 1000 }, 'pz|e': { level: 2, due: now + 10 } },
+  };
+  assert.deepEqual(puzzleQueue(rep, { now, only: ['a', 'b', 'c', 'd'] }).map((p) => p.id), ['b', 'd', 'c', 'a'], 'soonest due first');
+  assert.deepEqual(puzzleQueue(rep, { now, only: ['c'] }).map((p) => p.id), ['c'], 'a single puzzle chosen from the list');
+  assert.deepEqual(puzzleQueue(rep, { now }).map((p) => p.id), ['b', 'd'], 'a session of its own waits until they are due');
+});
+
 test('puzzle counts: new, due, and ready (both together)', () => {
   const rep = {
     puzzles: { a: { id: 'a' }, b: { id: 'b' }, c: { id: 'c' }, d: { id: 'd' } },

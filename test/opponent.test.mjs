@@ -11,7 +11,7 @@ import { checkChapter } from '../repertoire-format.js';
 import { must } from './helpers/must.mjs';
 import {
   pickByPopularity, bookMovesAt, opponentTurns, surpriseReplies, engineSurprises,
-  surpriseFromGap, surpriseQueue, surpriseToPgn,
+  surpriseFromGap, surpriseQueue, surpriseToPgn, openGaps,
 } from '../public/js/opponent.js';
 
 /** The FEN after these SAN moves from the start (or from `from`). */
@@ -121,6 +121,14 @@ test('a saved gap becomes a surprise, unless your repertoire answers it now', ()
   const old = must(surpriseFromGap(model, 'k', { lineMoves: GAP_B6.lineMoves }));
   assert.equal(old.startFen, START_FEN, 'a gap without a start is from the start position');
   assert.equal(old.share, null);
+});
+
+test('the open gaps are the saved ones still unanswered, likeliest first', () => {
+  const answered = { ...GAP_B6, lineMoves: ['d2d4', 'e7e6', 'c2c4', 'g8f6'] };
+  const open = openGaps({ gaps: { b6: GAP_B6, c6: GAP_C6, answered, damaged: { share: 0.5 } } }, model);
+  assert.deepEqual(open.map((g) => [g.key, g.reach, g.surprise.san]), [['c6', 0.05, 'c6'], ['b6', 0.01, 'b6']]);
+  assert.equal(open[0].gap, GAP_C6, 'with the gap as saved');
+  assert.deepEqual(openGaps({}, model), []);
 });
 
 test('a session works through the gaps first, most likely first, then the other turns', () => {

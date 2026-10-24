@@ -101,7 +101,11 @@ export async function openMistakeFinder({ rep, fen, prefix, where, onSaved = () 
   try {
     const res = await search.promise;
     progressLabel.textContent = `${res.stats.positions} positions checked${res.stats.lookups ? `, ${res.stats.lookups} from Lichess` : ''}`;
-    looking.textContent = res.cancelled ? 'Stopped.' : res.exhausted ? 'Searched every popular line within reach.' : 'Search budget used up. Run it again from a deeper position to go further.';
+    looking.textContent = {
+      stopped: 'Stopped.',
+      puzzles: `Stopped at ${plural(res.puzzles.length, 'puzzle')}, the limit set under “Stop after finding” in Search settings.`,
+      searched: 'Searched every popular line within reach.',
+    }[res.ended] || 'Search budget used up. Run it again from a deeper position to go further.';
     if (!found.length) empty.textContent = 'No clear mistakes among the popular replies here. Opponents mostly play this line well; a lower rating band may find more.';
   } catch (err) {
     notice.hidden = false;
